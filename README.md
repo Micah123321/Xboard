@@ -44,6 +44,8 @@ docker compose up -d
 
 ### Development Guides
 - [Plugin Development Guide](./docs/en/development/plugin-development-guide.md) - Complete guide for developing XBoard plugins
+- [Developer Guide (ZH-CN)](./docs/development-guide.zh-CN.md) - Local development, testing, running and build guide
+- [V2bX Integration Guide (ZH-CN)](./docs/v2bx-integration.zh-CN.md) - Full Xboard ↔ V2bX integration guide
 
 ### Deployment Guides
 - [Deploy with 1Panel](./docs/en/installation/1panel.md)
