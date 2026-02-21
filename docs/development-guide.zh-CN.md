@@ -40,7 +40,7 @@
 ## 3.1 初始化
 
 ```bash
-git clone -b compose --depth 1 https://github.com/cedar2025/Xboard
+git clone -b compose --depth 1 https://github.com/Micah123321/Xboard
 cd Xboard
 cp compose.sample.yaml compose.yaml
 ```
@@ -203,7 +203,7 @@ CI 使用 `.github/workflows/docker-publish.yml` 进行多架构构建并推送�
 ```bash
 docker build \
   --build-arg CACHEBUST=$(date +%s) \
-  --build-arg REPO_URL=https://github.com/cedar2025/Xboard \
+  --build-arg REPO_URL=https://github.com/Micah123321/Xboard \
   --build-arg BRANCH_NAME=master \
   -t xboard:dev .
 ```
