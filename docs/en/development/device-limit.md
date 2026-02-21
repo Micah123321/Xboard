@@ -1,31 +1,31 @@
-# Online Device Limit Design
+# 在线设备限制设计
 
-## Overview
+## 概述
 
-This document describes the design and implementation of the online device limit feature in Xboard.
+本文说明 Xboard 在线设备限制功能的设计与实现方案。
 
-## Design Goals
+## 设计目标
 
-1. Accurate Control
-   - Precise counting of online devices
-   - Real-time monitoring of device status
-   - Accurate device identification
+1. 精准控制
+   - 精确统计在线设备数量
+   - 实时监控设备状态
+   - 准确识别设备身份
 
-2. Performance Optimization
-   - Minimal impact on system performance
-   - Efficient device tracking
-   - Optimized resource usage
+2. 性能优化
+   - 对系统性能影响最小化
+   - 高效追踪设备在线情况
+   - 优化资源使用
 
-3. User Experience
-   - Smooth connection experience
-   - Clear error messages
-   - Graceful handling of limit exceeded cases
+3. 用户体验
+   - 保持连接过程平滑
+   - 提供清晰错误提示
+   - 在超限场景下优雅处理
 
-## Implementation Details
+## 实现细节
 
-### 1. Device Identification
+### 1. 设备识别
 
-#### Device ID Generation
+#### 设备 ID 生成
 ```php
 public function generateDeviceId($user, $request) {
     return md5(
@@ -36,7 +36,7 @@ public function generateDeviceId($user, $request) {
 }
 ```
 
-#### Device Information Storage
+#### 设备信息存储
 ```php
 [
     'device_id' => 'unique_device_hash',
@@ -47,9 +47,9 @@ public function generateDeviceId($user, $request) {
 ]
 ```
 
-### 2. Connection Management
+### 2. 连接管理
 
-#### Connection Check
+#### 连接校验
 ```php
 public function checkDeviceLimit($user, $deviceId) {
     $onlineDevices = $this->getOnlineDevices($user->id);
@@ -64,7 +64,7 @@ public function checkDeviceLimit($user, $deviceId) {
 }
 ```
 
-#### Device Status Update
+#### 设备状态更新
 ```php
 public function updateDeviceStatus($userId, $deviceId) {
     Redis::hset(
@@ -78,9 +78,9 @@ public function updateDeviceStatus($userId, $deviceId) {
 }
 ```
 
-### 3. Cleanup Mechanism
+### 3. 清理机制
 
-#### Inactive Device Cleanup
+#### 非活跃设备清理
 ```php
 public function cleanupInactiveDevices() {
     $inactiveThreshold = now()->subMinutes(30);
@@ -97,10 +97,10 @@ public function cleanupInactiveDevices() {
 }
 ```
 
-## Error Handling
+## 错误处理
 
-### Error Types
-1. Device Limit Exceeded
+### 错误类型
+1. 设备数超限
    ```php
    class DeviceLimitExceededException extends Exception {
        protected $message = 'Device limit exceeded';
@@ -108,7 +108,7 @@ public function cleanupInactiveDevices() {
    }
    ```
 
-2. Invalid Device
+2. 无效设备
    ```php
    class InvalidDeviceException extends Exception {
        protected $message = 'Invalid device';
@@ -116,7 +116,7 @@ public function cleanupInactiveDevices() {
    }
    ```
 
-### Error Messages
+### 错误消息
 ```php
 return [
     'device_limit_exceeded' => 'Maximum number of devices reached',
@@ -125,52 +125,52 @@ return [
 ];
 ```
 
-## Performance Considerations
+## 性能考虑
 
-1. Cache Strategy
-   - Use Redis for device tracking
-   - Implement cache expiration
-   - Optimize cache structure
+1. 缓存策略
+   - 使用 Redis 追踪设备状态
+   - 设置缓存过期机制
+   - 优化缓存结构
 
-2. Database Operations
-   - Minimize database queries
-   - Use batch operations
-   - Implement query optimization
+2. 数据库操作
+   - 减少数据库查询次数
+   - 使用批量操作
+   - 实施查询优化
 
-3. Memory Management
-   - Efficient data structure
-   - Regular cleanup of expired data
-   - Memory usage monitoring
+3. 内存管理
+   - 采用高效数据结构
+   - 定期清理过期数据
+   - 持续监控内存使用
 
-## Security Measures
+## 安全措施
 
-1. Device Verification
-   - Validate device information
-   - Check for suspicious patterns
-   - Implement rate limiting
+1. 设备校验
+   - 校验设备信息合法性
+   - 检测可疑行为模式
+   - 实施限流策略
 
-2. Data Protection
-   - Encrypt sensitive information
-   - Implement access control
-   - Regular security audits
+2. 数据保护
+   - 加密敏感信息
+   - 实施访问控制
+   - 定期安全审计
 
-## Future Improvements
+## 后续优化方向
 
-1. Enhanced Features
-   - Device management interface
-   - Device activity history
-   - Custom device names
+1. 功能增强
+   - 设备管理界面
+   - 设备活动历史
+   - 自定义设备名称
 
-2. Performance Optimization
-   - Improved caching strategy
-   - Better cleanup mechanism
-   - Reduced memory usage
+2. 性能优化
+   - 改进缓存策略
+   - 优化清理机制
+   - 降低内存占用
 
-3. Security Enhancements
-   - Advanced device fingerprinting
-   - Fraud detection
-   - Improved encryption
+3. 安全增强
+   - 更高级的设备指纹识别
+   - 欺诈检测
+   - 更完善的加密机制
 
-## Conclusion
+## 总结
 
-This design provides a robust and efficient solution for managing online device limits while maintaining good performance and user experience. Regular monitoring and updates will ensure the system remains effective and secure. 
+该设计在保证性能和用户体验的同时，为在线设备数管理提供了稳健且高效的方案。通过持续监控和迭代优化，可长期保持系统的有效性与安全性。

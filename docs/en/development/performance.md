@@ -1,100 +1,100 @@
-# Performance Comparison Report
+# 性能对比报告
 
-## Test Environment
+## 测试环境
 
-### Hardware Configuration
+### 硬件配置
 - CPU: AMD EPYC 7K62 48-Core Processor
-- Memory: 4GB
-- Disk: NVMe SSD
-- Network: 1Gbps
+- 内存: 4GB
+- 磁盘: NVMe SSD
+- 网络: 1Gbps
 
-### Software Environment
-- OS: Ubuntu 22.04 LTS
+### 软件环境
+- 操作系统: Ubuntu 22.04 LTS
 - PHP: 8.2
 - MySQL: 5.7
 - Redis: 7.0
-- Docker: Latest stable version
+- Docker: 最新稳定版
 
-## Test Scenarios
+## 测试场景
 
-### 1. User Login Performance
-- Concurrent users: 100
-- Test duration: 60 seconds
-- Request type: POST
-- Target endpoint: `/api/v1/passport/auth/login`
+### 1. 用户登录性能
+- 并发用户数: 100
+- 测试时长: 60 秒
+- 请求类型: POST
+- 目标接口: `/api/v1/passport/auth/login`
 
-Results:
-- Average response time: 156ms
-- 95th percentile: 245ms
-- Maximum response time: 412ms
-- Requests per second: 642
+测试结果:
+- 平均响应时间: 156ms
+- 95 分位响应时间: 245ms
+- 最大响应时间: 412ms
+- 每秒请求数: 642
 
-### 2. User Dashboard Loading
-- Concurrent users: 100
-- Test duration: 60 seconds
-- Request type: GET
-- Target endpoint: `/api/v1/user/dashboard`
+### 2. 用户仪表盘加载
+- 并发用户数: 100
+- 测试时长: 60 秒
+- 请求类型: GET
+- 目标接口: `/api/v1/user/dashboard`
 
-Results:
-- Average response time: 89ms
-- 95th percentile: 167ms
-- Maximum response time: 289ms
-- Requests per second: 1121
+测试结果:
+- 平均响应时间: 89ms
+- 95 分位响应时间: 167ms
+- 最大响应时间: 289ms
+- 每秒请求数: 1121
 
-### 3. Node List Query
-- Concurrent users: 100
-- Test duration: 60 seconds
-- Request type: GET
-- Target endpoint: `/api/v1/user/server/nodes`
+### 3. 节点列表查询
+- 并发用户数: 100
+- 测试时长: 60 秒
+- 请求类型: GET
+- 目标接口: `/api/v1/user/server/nodes`
 
-Results:
-- Average response time: 134ms
-- 95th percentile: 223ms
-- Maximum response time: 378ms
-- Requests per second: 745
+测试结果:
+- 平均响应时间: 134ms
+- 95 分位响应时间: 223ms
+- 最大响应时间: 378ms
+- 每秒请求数: 745
 
-## Performance Optimization Measures
+## 性能优化措施
 
-1. Database Optimization
-   - Added indexes for frequently queried fields
-   - Optimized slow queries
-   - Implemented query caching
+1. 数据库优化
+   - 为高频查询字段添加索引
+   - 优化慢查询
+   - 引入查询缓存
 
-2. Cache Strategy
-   - Using Redis for session storage
-   - Caching frequently accessed data
-   - Implementing cache warming
+2. 缓存策略
+   - 使用 Redis 存储会话
+   - 缓存高频访问数据
+   - 实施缓存预热
 
-3. Code Optimization
-   - Reduced database queries
-   - Optimized database connection pool
-   - Improved error handling
+3. 代码优化
+   - 减少数据库查询次数
+   - 优化数据库连接池
+   - 改进错误处理流程
 
-## Comparison with Previous Version
+## 与上一版本对比
 
-| Metric | Previous Version | Current Version | Improvement |
-|--------|-----------------|-----------------|-------------|
-| Login Response | 289ms | 156ms | 46% |
-| Dashboard Loading | 178ms | 89ms | 50% |
-| Node List Query | 256ms | 134ms | 48% |
+| 指标 | 上一版本 | 当前版本 | 提升 |
+|------|---------|---------|------|
+| 登录响应 | 289ms | 156ms | 46% |
+| 仪表盘加载 | 178ms | 89ms | 50% |
+| 节点列表查询 | 256ms | 134ms | 48% |
 
-## Future Optimization Plans
+## 后续优化计划
 
-1. Infrastructure Level
-   - Implement horizontal scaling
-   - Add load balancing
-   - Optimize network configuration
+1. 基础设施层
+   - 实施横向扩展
+   - 增加负载均衡
+   - 优化网络配置
 
-2. Application Level
-   - Further optimize database queries
-   - Implement more efficient caching strategies
-   - Reduce memory usage
+2. 应用层
+   - 进一步优化数据库查询
+   - 实施更高效的缓存策略
+   - 降低内存使用
 
-3. Monitoring and Maintenance
-   - Add performance monitoring
-   - Implement automatic scaling
-   - Regular performance testing
+3. 监控与维护
+   - 增加性能监控
+   - 实施自动扩缩容
+   - 定期执行性能测试
 
-## Conclusion
+## 总结
 
-The current version shows significant performance improvements compared to the previous version, with an average improvement of 48% in response times. The optimization measures implemented have effectively enhanced the system's performance and stability. 
+当前版本相较上一版本有明显性能提升，响应时间平均提升约 48%。已实施的优化措施有效增强了系统性能与稳定性。

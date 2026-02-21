@@ -1,54 +1,54 @@
-# Configuration Migration Guide
+# 配置迁移指南
 
-This guide explains how to migrate configuration files from v2board to Xboard. Xboard stores configurations in the database instead of files.
+本指南说明如何将配置文件从 v2board 迁移到 Xboard。Xboard 将配置存储在数据库中，而不是文件中。
 
-### 1. Docker Compose Environment
+### 1. Docker Compose 环境
 
-1. Prepare configuration file:
+1. 准备配置文件：
 ```bash
-# Create config directory
+# 创建 config 目录
 mkdir config
 
-# Copy old configuration file
+# 复制旧配置文件
 cp old-project-path/config/v2board.php config/
 ```
 
-2. Modify `docker-compose.yaml`, uncomment the following line:
+2. 修改 `docker-compose.yaml`，取消注释以下行：
 ```yaml
 - ./config/v2board.php:/www/config/v2board.php
 ```
 
-3. Execute migration:
+3. 执行迁移：
 ```bash
 docker compose run -it --rm web php artisan migrateFromV2b config
 ```
 
-### 2. aaPanel Environment
+### 2. aaPanel 环境
 
-1. Copy configuration file:
+1. 复制配置文件：
 ```bash
 cp old-project-path/config/v2board.php config/v2board.php
 ```
 
-2. Execute migration:
+2. 执行迁移：
 ```bash
 php artisan migrateFromV2b config
 ```
 
-### 3. aaPanel + Docker Environment
+### 3. aaPanel + Docker 环境
 
-1. Copy configuration file:
+1. 复制配置文件：
 ```bash
 cp old-project-path/config/v2board.php config/v2board.php
 ```
 
-2. Execute migration:
+2. 执行迁移：
 ```bash
 docker compose run -it --rm web php artisan migrateFromV2b config
 ```
 
-### Important Notes
+### 重要说明
 
-- After modifying the admin path, service restart is required:
-  - Docker environment: `docker compose restart`
-  - aaPanel environment: Restart the Octane daemon process 
+- 修改后台路径后需要重启服务：
+  - Docker 环境：`docker compose restart`
+  - aaPanel 环境：重启 Octane 守护进程

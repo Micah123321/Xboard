@@ -1,61 +1,61 @@
-# V2board Dev Migration Guide
+# V2board Dev 迁移指南
 
-This guide explains how to migrate from V2board Dev version (2023/10/27) to Xboard.
+本指南说明如何从 V2board Dev 版本（2023/10/27）迁移到 Xboard。
 
-⚠️ Please upgrade to version 2023/10/27 following the official guide before proceeding with migration.
+> 注意：迁移前请先按官方指南升级到 2023/10/27 版本。
 
-### 1. Database Changes Overview
+### 1. 数据库变更概览
 
-- `v2_order` table:
-  - Added `surplus_order_ids` (text, nullable) - Deduction orders
+- `v2_order` 表：
+  - 新增 `surplus_order_ids`（text, nullable）- 扣费订单
 
-- `v2_plan` table:
-  - Removed `daily_unit_price` - Affects period value
-  - Removed `transfer_unit_price` - Affects traffic value
+- `v2_plan` 表：
+  - 移除 `daily_unit_price` - 影响周期价格
+  - 移除 `transfer_unit_price` - 影响流量价格
 
-- `v2_server_hysteria` table:
-  - Removed `ignore_client_bandwidth` - Affects bandwidth configuration
-  - Removed `obfs_type` - Affects obfuscation type configuration
+- `v2_server_hysteria` 表：
+  - 移除 `ignore_client_bandwidth` - 影响带宽配置
+  - 移除 `obfs_type` - 影响混淆类型配置
 
-### 2. Prerequisites
+### 2. 前置条件
 
-⚠️ Please complete the basic Xboard installation first (SQLite not supported):
-- [Docker Compose Deployment](../installation/docker-compose.md)
-- [aaPanel + Docker Deployment](../installation/aapanel-docker.md)
-- [aaPanel Deployment](../installation/aapanel.md)
+> 注意：请先完成 Xboard 基础安装（不支持 SQLite）：
+- [Docker Compose 部署](../installation/docker-compose.md)
+- [aaPanel + Docker 部署](../installation/aapanel-docker.md)
+- [aaPanel 部署](../installation/aapanel.md)
 
-### 3. Migration Steps
+### 3. 迁移步骤
 
-#### Docker Environment
+#### Docker 环境
 
 ```bash
-# 1. Stop services
+# 1. 停止服务
 docker compose down
 
-# 2. Clear database
+# 2. 清空数据库
 docker compose run -it --rm web php artisan db:wipe
 
-# 3. Import old database (Important)
-# Please manually import the V2board Dev database
+# 3. 导入旧数据库（重要）
+# 请手动导入 V2board Dev 数据库
 
-# 4. Execute migration
+# 4. 执行迁移
 docker compose run -it --rm web php artisan migratefromv2b dev231027
 ```
 
-#### aaPanel Environment
+#### aaPanel 环境
 
 ```bash
-# 1. Clear database
+# 1. 清空数据库
 php artisan db:wipe
 
-# 2. Import old database (Important)
-# Please manually import the V2board Dev database
+# 2. 导入旧数据库（重要）
+# 请手动导入 V2board Dev 数据库
 
-# 3. Execute migration
+# 3. 执行迁移
 php artisan migratefromv2b dev231027
 ```
 
-### 4. Configuration Migration
+### 4. 配置迁移
 
-After completing the data migration, you need to migrate the configuration file:
-- [Configuration Migration Guide](./config.md) 
+数据迁移完成后，还需要迁移配置文件：
+- [配置迁移指南](./config.md)

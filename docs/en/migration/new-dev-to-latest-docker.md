@@ -1,21 +1,21 @@
-# Upgrade from `new-dev` to Latest Docker Version
+# 从 `new-dev` 升级到最新 Docker 版本
 
-This guide uses Docker Compose to move from an old `new-dev` deployment flow to the latest version.
+本指南使用 Docker Compose，将旧的 `new-dev` 部署流程迁移到最新版本。
 
-## 1. Get the project
+## 1. 获取项目
 
 ```bash
 git clone -b compose --depth 1 https://github.com/Micah123321/Xboard Xboard-new
 cd Xboard-new
 ```
 
-If your local file is `compose.sample.yaml`, create `compose.yaml` first:
+如果你的本地文件是 `compose.sample.yaml`，请先创建 `compose.yaml`：
 
 ```bash
 cp compose.sample.yaml compose.yaml
 ```
 
-## 2. Initialize with built-in SQLite + Redis
+## 2. 使用内置 SQLite + Redis 初始化
 
 ```bash
 docker compose run -it --rm \
@@ -25,9 +25,9 @@ docker compose run -it --rm \
     web php artisan xboard:install
 ```
 
-## 3. Update `.env` to MySQL configuration
+## 3. 将 `.env` 更新为 MySQL 配置
 
-Edit `.env` and switch database settings to MySQL:
+编辑 `.env`，将数据库配置切换为 MySQL：
 
 ```env
 DB_CONNECTION=mysql
@@ -38,19 +38,19 @@ DB_USERNAME=your_user
 DB_PASSWORD=your_password
 ```
 
-Then run:
+然后执行：
 
 ```bash
 docker compose run -it --rm web php artisan xboard:update
 ```
 
-## 4. Start services
+## 4. 启动服务
 
 ```bash
 docker compose up -d
 ```
 
-## 5. Check status
+## 5. 检查状态
 
 ```bash
 docker compose ps

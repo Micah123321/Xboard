@@ -1,46 +1,46 @@
-# Xboard Deployment Guide for aaPanel Environment
+# aaPanel 环境下的 Xboard 部署指南
 
-## Table of Contents
-1. [Requirements](#requirements)
-2. [Quick Deployment](#quick-deployment)
-3. [Detailed Configuration](#detailed-configuration)
-4. [Maintenance Guide](#maintenance-guide)
-5. [Troubleshooting](#troubleshooting)
+## 目录
+1. [环境要求](#环境要求)
+2. [快速部署](#快速部署)
+3. [详细配置](#详细配置)
+4. [维护指南](#维护指南)
+5. [故障排查](#故障排查)
 
-## Requirements
+## 环境要求
 
-### Hardware Requirements
-- CPU: 1 core or above
-- Memory: 2GB or above
-- Storage: 10GB+ available space
+### 硬件要求
+- CPU：1 核及以上
+- 内存：2GB 及以上
+- 存储：可用空间 10GB+
 
-### Software Requirements
-- Operating System: Ubuntu 20.04+ / Debian 10+ (⚠️ CentOS 7 is not recommended)
-- Latest version of aaPanel
+### 软件要求
+- 操作系统：Ubuntu 20.04+ / Debian 10+（CentOS 7 不推荐）
+- aaPanel 最新版本
 - PHP 8.2
 - MySQL 5.7+
 - Redis
-- Nginx (any version)
+- Nginx（任意版本）
 
-## Quick Deployment
+## 快速部署
 
-### 1. Install aaPanel
+### 1. 安装 aaPanel
 ```bash
 URL=https://www.aapanel.com/script/install_6.0_en.sh && \
 if [ -f /usr/bin/curl ];then curl -ksSO "$URL" ;else wget --no-check-certificate -O install_6.0_en.sh "$URL";fi && \
 bash install_6.0_en.sh aapanel
 ```
 
-### 2. Basic Environment Setup
+### 2. 基础环境配置
 
-#### 2.1 Install LNMP Environment
-In the aaPanel dashboard, install:
-- Nginx (any version)
+#### 2.1 安装 LNMP 环境
+在 aaPanel 面板中安装：
+- Nginx（任意版本）
 - MySQL 5.7
 - PHP 8.2
 
-#### 2.2 Install PHP Extensions
-Required PHP extensions:
+#### 2.2 安装 PHP 扩展
+必需的 PHP 扩展：
 - redis
 - fileinfo
 - swoole
@@ -48,41 +48,41 @@ Required PHP extensions:
 - event
 - mbstring
 
-#### 2.3 Enable Required PHP Functions
-Functions that need to be enabled:
+#### 2.3 启用所需 PHP 函数
+需要启用的函数：
 - putenv
 - proc_open
 - pcntl_alarm
 - pcntl_signal
 
-### 3. Site Configuration
+### 3. 网站配置
 
-#### 3.1 Create Website
-1. Navigate to: aaPanel > Website > Add site
-2. Fill in the information:
-   - Domain: Enter your site domain
-   - Database: Select MySQL
-   - PHP Version: Select 8.2
+#### 3.1 创建网站
+1. 进入：aaPanel > 网站 > 添加站点
+2. 填写信息：
+   - 域名：填写你的网站域名
+   - 数据库：选择 MySQL
+   - PHP 版本：选择 8.2
 
-#### 3.2 Deploy Xboard
+#### 3.2 部署 Xboard
 ```bash
-# Enter site directory
+# 进入网站目录
 cd /www/wwwroot/your-domain
 
-# Clean directory
+# 清理目录
 chattr -i .user.ini
 rm -rf .htaccess 404.html 502.html index.html .user.ini
 
-# Clone repository
+# 克隆仓库
 git clone https://github.com/Micah123321/Xboard.git ./
 
-# Install dependencies
+# 安装依赖
 sh init.sh
 ```
 
-#### 3.3 Configure Site
-1. Set running directory to `/public`
-2. Add rewrite rules:
+#### 3.3 配置网站
+1. 运行目录设置为 `/public`
+2. 添加伪静态规则：
 ```nginx
 location /downloads {
 }
@@ -99,33 +99,33 @@ location ~ .*\.(js|css)?$
 }
 ```
 
-## Detailed Configuration
+## 详细配置
 
-### 1. Configure Daemon Process
-1. Install Supervisor
-2. Add queue daemon process:
-   - Name: `Xboard`
-   - Run User: `www`
-   - Running Directory: Site directory
-   - Start Command: `php artisan horizon`
-   - Process Count: 1
+### 1. 配置守护进程
+1. 安装 Supervisor
+2. 添加队列守护进程：
+   - 名称：`Xboard`
+   - 运行用户：`www`
+   - 运行目录：网站目录
+   - 启动命令：`php artisan horizon`
+   - 进程数量：1
 
-### 2. Configure Scheduled Tasks
-- Type: Shell Script
-- Task Name: v2board
-- Run User: www
-- Frequency: 1 minute
-- Script Content: `php /www/wwwroot/site-directory/artisan schedule:run`
+### 2. 配置计划任务
+- 类型：Shell 脚本
+- 任务名称：v2board
+- 执行用户：www
+- 执行周期：每 1 分钟
+- 脚本内容：`php /www/wwwroot/site-directory/artisan schedule:run`
 
-### 3. Octane Configuration (Optional)
-#### 3.1 Add Octane Daemon Process
-- Name: Octane
-- Run User: www
-- Running Directory: Site directory
-- Start Command: `/www/server/php/82/bin/php artisan octane:start --port 7010`
-- Process Count: 1
+### 3. Octane 配置（可选）
+#### 3.1 添加 Octane 守护进程
+- 名称：Octane
+- 运行用户：www
+- 运行目录：网站目录
+- 启动命令：`/www/server/php/82/bin/php artisan octane:start --port 7010`
+- 进程数量：1
 
-#### 3.2 Octane-specific Rewrite Rules
+#### 3.2 Octane 专用伪静态规则
 ```nginx
 location ~* \.(jpg|jpeg|png|gif|js|css|svg|woff2|woff|ttf|eot|wasm|json|ico)$ {
 }
@@ -146,30 +146,30 @@ location ~ .* {
 }
 ```
 
-## Maintenance Guide
+## 维护指南
 
-### Version Updates
+### 版本更新
 ```bash
-# Enter site directory
+# 进入网站目录
 cd /www/wwwroot/your-domain
 
-# Execute update script
+# 执行更新脚本
 git fetch --all && git reset --hard origin/master && git pull origin master
 sh update.sh
 
-# If Octane is enabled, restart the daemon process
-# aaPanel > App Store > Tools > Supervisor > Restart Octane
+# 如果启用了 Octane，请重启守护进程
+# aaPanel > 应用商店 > 工具 > Supervisor > 重启 Octane
 ```
 
-### Routine Maintenance
-- Regular log checking
-- Monitor system resource usage
-- Regular backup of database and configuration files
+### 日常维护
+- 定期检查日志
+- 监控系统资源使用情况
+- 定期备份数据库和配置文件
 
-## Troubleshooting
+## 故障排查
 
-### Common Issues
-1. Changes to admin path require service restart to take effect
-2. Any code changes after enabling Octane require restart to take effect
-3. When PHP extension installation fails, check if PHP version is correct
-4. For database connection failures, check database configuration and permissions 
+### 常见问题
+1. 修改后台路径后，需要重启服务才会生效
+2. 启用 Octane 后，任何代码变更都需要重启才会生效
+3. PHP 扩展安装失败时，请检查 PHP 版本是否正确
+4. 数据库连接失败时，请检查数据库配置和权限
