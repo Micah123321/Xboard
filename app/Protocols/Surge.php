@@ -32,7 +32,9 @@ class Surge
                     'aes-128-gcm',
                     'aes-192-gcm',
                     'aes-256-gcm',
-                    'chacha20-ietf-poly1305'
+                    'chacha20-ietf-poly1305',
+                    '2022-blake3-aes-128-gcm',
+                    '2022-blake3-aes-256-gcm',
                 ])
             ) {
                 // [Proxy]
@@ -69,9 +71,8 @@ class Surge
         }
 
         // Subscription link
-        $subsURL = Helper::getSubscribeUrl("/api/v1/client/subscribe?token={$user['token']}");
         $subsDomain = request()->header('Host');
-        $subsURL = 'https://' . $subsDomain . '/api/v1/client/subscribe?token=' . $user['token'];
+        $subsURL = Helper::getSubscribeUrl($user['token'], $subsDomain ? 'https://' . $subsDomain : null);
 
         $config = str_replace('$subs_link', $subsURL, $config);
         $config = str_replace('$subs_domain', $subsDomain, $config);

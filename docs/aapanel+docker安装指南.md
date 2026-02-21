@@ -6,6 +6,7 @@
 ```
 # 安装Docker
 curl -sSL https://get.docker.com | bash
+# Centos系统可能还需要执行下面命令来启动Docker
 systemctl enable docker
 systemctl start docker
 ```
@@ -38,7 +39,7 @@ rm -rf .htaccess 404.html 502.html index.html .user.ini
 ```
 > 执行命令从 Github 克隆到当前目录。
 ```
-git clone https://github.com/cedar2025/Xboard.git ./
+git clone -b dev https://github.com/cedar2025/Xboard.git ./
 ```
 > 复制一份docker-compose.yaml文件
 ```
@@ -79,7 +80,9 @@ location ^~ / {
 }
 ```
 
-🎉： 到这里，你可以已经可以通过域名访问你的站点了
+🎉： 到这里，你可以已经可以通过域名访问你的站点了  
+
+⚠️： 请务必开启防火墙防止7001端口暴露到公网当中。
 
 ### 更新
 1. 更新代码
