@@ -57,6 +57,7 @@ docker compose up -d
 - [Migrate from v2board dev](./docs/en/migration/v2board-dev.md)
 - [Migrate from v2board 1.7.4](./docs/en/migration/v2board-1.7.4.md)
 - [Migrate from v2board 1.7.3](./docs/en/migration/v2board-1.7.3.md)
+- [Upgrade from new-dev to latest Docker](./docs/en/migration/new-dev-to-latest-docker.md)
 
 ## 🛠️ Tech Stack
 
