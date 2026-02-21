@@ -441,27 +441,32 @@ class UserController extends Controller
         ini_set('memory_limit', '-1');
         $sortType = in_array($request->input('sort_type'), ['ASC', 'DESC']) ? $request->input('sort_type') : 'DESC';
         $sort = $request->input('sort') ? $request->input('sort') : 'created_at';
+        $hourlyLimit = (int) env('MASS_EMAIL_HOURLY_LIMIT', 500);
+        $hourlyLimit = $hourlyLimit > 0 ? $hourlyLimit : 500;
         $builder = User::orderBy($sort, $sortType);
         $this->applyFiltersAndSorts($request, $builder);
 
         $subject = $request->input('subject');
         $content = $request->input('content');
         $templateValue = [
-            'name' => admin_setting('app_name', 'XBoard'),
+            'name' => admin_setting('app_name', 'Notification Service'),
             'url' => admin_setting('app_url'),
             'content' => $content
         ];
 
         $chunkSize = 1000;
+        $processed = 0;
 
-        $builder->chunk($chunkSize, function ($users) use ($subject, $templateValue, &$totalProcessed) {
+        $builder->chunk($chunkSize, function ($users) use ($subject, $templateValue, $hourlyLimit, &$processed) {
             foreach ($users as $user) {
+                $delaySeconds = intdiv($processed, $hourlyLimit) * 3600;
                 dispatch(new SendEmailJob([
                     'email' => $user->email,
                     'subject' => $subject,
                     'template_name' => 'notify',
                     'template_value' => $templateValue
-                ], 'send_email_mass'));
+                ], 'send_email_mass'))->delay(now()->addSeconds($delaySeconds));
+                $processed++;
             }
         });
 
