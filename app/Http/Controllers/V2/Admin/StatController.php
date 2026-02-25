@@ -239,7 +239,9 @@ class StatController extends Controller
         $userId = (int) $request->input('user_id');
         $records = StatUser::query()
             ->with(['server:id,name'])
-            ->orderBy('record_at', 'DESC')
+            ->orderByDesc('updated_at')
+            ->orderByDesc('created_at')
+            ->orderByDesc('record_at')
             ->where('user_id', $userId)
             ->paginate($pageSize);
 

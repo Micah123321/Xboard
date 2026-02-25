@@ -16,6 +16,7 @@ class TrafficLogResource extends JsonResource
     {
         $serverId = (int) data_get($this->resource, 'server_id', 0);
         $serverType = strtolower((string) data_get($this->resource, 'server_type', ''));
+        $displayAt = $this->resolveDisplayAt();
         $serverName = data_get($this->resource, 'server_name')
             ?: data_get($this->resource, 'node_name')
             ?: data_get($this->resource, 'server.name');
@@ -39,6 +40,7 @@ class TrafficLogResource extends JsonResource
             'd' => (int) data_get($this->resource, 'd', 0),
             'u' => (int) data_get($this->resource, 'u', 0),
             'record_at' => (int) data_get($this->resource, 'record_at', 0),
+            'display_at' => $displayAt,
             'record_type' => data_get($this->resource, 'record_type'),
             'server_rate' => (float) data_get($this->resource, 'server_rate', 1),
             'server_id' => $serverId > 0 ? $serverId : null,
@@ -58,5 +60,28 @@ class TrafficLogResource extends JsonResource
         }
 
         return $data;
+    }
+
+    private function resolveDisplayAt(): int
+    {
+        foreach (['updated_at', 'created_at'] as $field) {
+            $value = data_get($this->resource, $field);
+            if ($value instanceof \DateTimeInterface) {
+                return $value->getTimestamp();
+            }
+
+            if (is_numeric($value)) {
+                return (int) $value;
+            }
+
+            if (is_string($value) && trim($value) !== '') {
+                $timestamp = strtotime($value);
+                if ($timestamp !== false) {
+                    return $timestamp;
+                }
+            }
+        }
+
+        return (int) data_get($this->resource, 'record_at', 0);
     }
 }

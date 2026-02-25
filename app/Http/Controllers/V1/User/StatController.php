@@ -19,7 +19,9 @@ class StatController extends Controller
             ->with(['server:id,name'])
             ->where('user_id', $userId)
             ->where('record_at', '>=', $startDate)
-            ->orderBy('record_at', 'DESC')
+            ->orderByDesc('updated_at')
+            ->orderByDesc('created_at')
+            ->orderByDesc('record_at')
             ->get();
 
         $deviceMap = $this->buildNodeDeviceMap($userId);
