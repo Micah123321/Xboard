@@ -100,15 +100,23 @@ class ServerService
      */
     public static function getServer($serverId, ?string $serverType)
     {
-        return Server::query()
+        $baseQuery = Server::query()
             ->when($serverType, function ($query) use ($serverType) {
                 $query->where('type', Server::normalizeType($serverType));
-            })
-            ->where(function ($query) use ($serverId) {
-                $query->where('code', $serverId)
-                    ->orWhere('id', $serverId);
-            })
-            ->orderByRaw('CASE WHEN code = ? THEN 0 ELSE 1 END', [$serverId])
+            });
+
+        $serverIdValue = is_scalar($serverId) ? (string) $serverId : '';
+        $isCanonicalInt = preg_match('/^(0|[1-9][0-9]*)$/', $serverIdValue) === 1;
+
+        if ($isCanonicalInt) {
+            $serverById = (clone $baseQuery)->whereKey((int) $serverIdValue)->first();
+            if ($serverById) {
+                return $serverById;
+            }
+        }
+
+        return (clone $baseQuery)
+            ->where('code', $serverIdValue)
             ->first();
     }
 }

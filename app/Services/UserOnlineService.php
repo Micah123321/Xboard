@@ -3,6 +3,7 @@
 
 namespace App\Services;
 
+use App\Models\Server;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -49,17 +50,26 @@ class UserOnlineService
         $devices = collect($data)
             ->filter(fn(mixed $item): bool => is_array($item) && isset($item['aliveips']))
             ->flatMap(function (array $nodeData, string $nodeKey): array {
+                $parsedNode = self::parseNodeMeta((string) $nodeKey);
+
                 return collect($nodeData['aliveips'])
-                    ->mapWithKeys(function (string $ipNodeId) use ($nodeData, $nodeKey): array {
+                    ->map(function (string $ipNodeId) use ($nodeData, $parsedNode): array {
                         $ip = Str::before($ipNodeId, '_');
+                        $payloadNodeId = (int) Str::after($ipNodeId, '_');
+                        $nodeType = $parsedNode['node_type'] ?? '';
+                        $nodeId = $payloadNodeId > 0 ? $payloadNodeId : ((int) ($parsedNode['node_id'] ?? 0));
+                        $nodeKeyValue = self::buildNodeKey($nodeType, $nodeId);
+
                         return [
-                            $ip => [
-                                'ip' => $ip,
-                                'last_seen' => $nodeData['lastupdateAt'],
-                                'node_type' => Str::before($nodeKey, (string) $nodeData['lastupdateAt'])
-                            ]
+                            'ip' => $ip,
+                            'last_seen' => (int) ($nodeData['lastupdateAt'] ?? 0),
+                            'node_type' => $nodeType,
+                            'node_id' => $nodeId > 0 ? $nodeId : null,
+                            'node_key' => $nodeKeyValue,
                         ];
                     })
+                    ->filter(fn(array $item): bool => !empty($item['ip']))
+                    ->values()
                     ->all();
             })
             ->values()
@@ -69,6 +79,45 @@ class UserOnlineService
             'total_count' => $data['alive_ip'] ?? 0,
             'devices' => $devices
         ];
+    }
+
+    /**
+     * Parse node metadata from cache key such as "shadowsocks12".
+     *
+     * @return array{node_type: string, node_id: int}
+     */
+    private static function parseNodeMeta(string $nodeKey): array
+    {
+        $normalizedKey = strtolower(trim($nodeKey));
+        if ($normalizedKey === '') {
+            return ['node_type' => '', 'node_id' => 0];
+        }
+
+        $types = collect(Server::VALID_TYPES)
+            ->map(fn(string $type): string => strtolower($type))
+            ->sortByDesc(fn(string $type): int => strlen($type))
+            ->values();
+
+        foreach ($types as $type) {
+            if (!str_starts_with($normalizedKey, $type)) {
+                continue;
+            }
+
+            $idPart = substr($normalizedKey, strlen($type));
+            $nodeId = ctype_digit($idPart) ? (int) $idPart : 0;
+            return ['node_type' => $type, 'node_id' => $nodeId];
+        }
+
+        return ['node_type' => '', 'node_id' => 0];
+    }
+
+    private static function buildNodeKey(string $nodeType, int $nodeId): ?string
+    {
+        if ($nodeType === '' || $nodeId <= 0) {
+            return null;
+        }
+
+        return "{$nodeType}{$nodeId}";
     }
 
 

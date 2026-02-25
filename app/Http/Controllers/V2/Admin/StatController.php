@@ -273,8 +273,22 @@ class StatController extends Controller
         $deviceList = data_get($devices, 'devices', []);
 
         return collect($deviceList)
-            ->filter(fn($item): bool => is_array($item) && !empty($item['ip']) && !empty($item['node_type']))
-            ->groupBy(fn(array $item): string => strtolower((string) $item['node_type']))
+            ->filter(fn($item): bool => is_array($item) && !empty($item['ip']))
+            ->map(function (array $item): array {
+                $nodeKey = strtolower((string) ($item['node_key'] ?? ''));
+                if ($nodeKey === '') {
+                    $nodeType = strtolower((string) ($item['node_type'] ?? ''));
+                    $nodeId = (int) ($item['node_id'] ?? 0);
+                    $nodeKey = ($nodeType !== '' && $nodeId > 0) ? "{$nodeType}{$nodeId}" : $nodeType;
+                }
+
+                return [
+                    'node_key' => $nodeKey,
+                    'ip' => (string) ($item['ip'] ?? ''),
+                ];
+            })
+            ->filter(fn(array $item): bool => $item['node_key'] !== '' && $item['ip'] !== '')
+            ->groupBy(fn(array $item): string => $item['node_key'])
             ->map(fn($items): array => collect($items)
                 ->pluck('ip')
                 ->filter()
