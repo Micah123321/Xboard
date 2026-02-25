@@ -129,7 +129,7 @@ class StatUserJob implements ShouldQueue
                 'created_at' => time(),
                 'updated_at' => time(),
             ],
-            ['user_id', 'server_rate', 'server_id', 'server_type', 'record_at'],
+            ['user_id', 'server_rate', 'server_id', 'server_type', 'record_at', 'record_type'],
             [
                 'u' => DB::raw("u + VALUES(u)"),
                 'd' => DB::raw("d + VALUES(d)"),
@@ -152,7 +152,7 @@ class StatUserJob implements ShouldQueue
 
         $sql = "INSERT INTO {$table} (user_id, server_rate, server_id, server_type, record_at, record_type, u, d, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (user_id, server_rate, server_id, server_type, record_at)
+                ON CONFLICT (user_id, server_rate, server_id, server_type, record_at, record_type)
                 DO UPDATE SET
                     u = {$table}.u + EXCLUDED.u,
                     d = {$table}.d + EXCLUDED.d,

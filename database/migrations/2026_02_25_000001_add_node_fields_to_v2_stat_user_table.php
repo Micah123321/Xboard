@@ -28,17 +28,19 @@ return new class extends Migration {
             }
         });
 
+        $this->mergeDuplicateRows();
+
         $this->dropUniqueIfExists(self::TABLE, self::OLD_UNIQUE_INDEX);
         $this->dropIndexIfExists(self::TABLE, self::OLD_COMPOSITE_INDEX);
 
         $this->addUniqueIfNotExists(
             self::TABLE,
-            ['user_id', 'server_rate', 'server_id', 'server_type', 'record_at'],
+            ['user_id', 'server_rate', 'server_id', 'server_type', 'record_at', 'record_type'],
             self::NEW_UNIQUE_INDEX
         );
         $this->addIndexIfNotExists(
             self::TABLE,
-            ['user_id', 'server_id', 'server_type', 'record_at'],
+            ['user_id', 'server_id', 'server_type', 'record_at', 'record_type'],
             self::NEW_COMPOSITE_INDEX
         );
         $this->addIndexIfNotExists(self::TABLE, ['server_id'], self::NEW_SERVER_ID_INDEX);
@@ -131,5 +133,43 @@ return new class extends Migration {
                 ->contains(fn($index) => isset($index->name) && $index->name === $indexName),
             default => false,
         };
+    }
+
+    /**
+     * Merge historical duplicates before adding the new unique index.
+     * Duplicate criteria is aligned with the new unique key columns.
+     */
+    private function mergeDuplicateRows(): void
+    {
+        $duplicateRows = DB::table(self::TABLE)
+            ->selectRaw(
+                'MIN(id) AS keep_id, user_id, server_rate, server_id, server_type, record_at, record_type, ' .
+                'SUM(u) AS total_u, SUM(d) AS total_d, MIN(created_at) AS min_created_at, MAX(updated_at) AS max_updated_at'
+            )
+            ->groupBy('user_id', 'server_rate', 'server_id', 'server_type', 'record_at', 'record_type')
+            ->havingRaw('COUNT(*) > 1')
+            ->orderBy('keep_id')
+            ->cursor();
+
+        foreach ($duplicateRows as $row) {
+            DB::table(self::TABLE)
+                ->where('id', $row->keep_id)
+                ->update([
+                    'u' => (int) $row->total_u,
+                    'd' => (int) $row->total_d,
+                    'created_at' => (int) $row->min_created_at,
+                    'updated_at' => (int) $row->max_updated_at,
+                ]);
+
+            DB::table(self::TABLE)
+                ->where('user_id', $row->user_id)
+                ->where('server_rate', $row->server_rate)
+                ->where('server_id', $row->server_id)
+                ->where('server_type', $row->server_type)
+                ->where('record_at', $row->record_at)
+                ->where('record_type', $row->record_type)
+                ->where('id', '!=', $row->keep_id)
+                ->delete();
+        }
     }
 };
