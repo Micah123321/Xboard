@@ -75,10 +75,15 @@ class StatUserJob implements ShouldQueue
 
     protected function processUserStatForSqlite(int $uid, array $v, int $recordAt): void
     {
-        DB::transaction(function () use ($uid, $v, $recordAt) {
+        $serverId = $this->getServerId();
+        $serverType = $this->getServerType();
+
+        DB::transaction(function () use ($uid, $v, $recordAt, $serverId, $serverType) {
             $existingRecord = StatUser::where([
                 'user_id' => $uid,
                 'server_rate' => $this->server['rate'],
+                'server_id' => $serverId,
+                'server_type' => $serverType,
                 'record_at' => $recordAt,
                 'record_type' => $this->recordType,
             ])->first();
@@ -93,6 +98,8 @@ class StatUserJob implements ShouldQueue
                 StatUser::create([
                     'user_id' => $uid,
                     'server_rate' => $this->server['rate'],
+                    'server_id' => $serverId,
+                    'server_type' => $serverType,
                     'record_at' => $recordAt,
                     'record_type' => $this->recordType,
                     'u' => ($v[0] * $this->server['rate']),
@@ -106,10 +113,15 @@ class StatUserJob implements ShouldQueue
 
     protected function processUserStatForOtherDatabases(int $uid, array $v, int $recordAt): void
     {
+        $serverId = $this->getServerId();
+        $serverType = $this->getServerType();
+
         StatUser::upsert(
             [
                 'user_id' => $uid,
                 'server_rate' => $this->server['rate'],
+                'server_id' => $serverId,
+                'server_type' => $serverType,
                 'record_at' => $recordAt,
                 'record_type' => $this->recordType,
                 'u' => ($v[0] * $this->server['rate']),
@@ -117,7 +129,7 @@ class StatUserJob implements ShouldQueue
                 'created_at' => time(),
                 'updated_at' => time(),
             ],
-            ['user_id', 'server_rate', 'record_at', 'record_type'],
+            ['user_id', 'server_rate', 'server_id', 'server_type', 'record_at'],
             [
                 'u' => DB::raw("u + VALUES(u)"),
                 'd' => DB::raw("d + VALUES(d)"),
@@ -135,10 +147,12 @@ class StatUserJob implements ShouldQueue
         $now = time();
         $u = ($v[0] * $this->server['rate']);
         $d = ($v[1] * $this->server['rate']);
+        $serverId = $this->getServerId();
+        $serverType = $this->getServerType();
 
-        $sql = "INSERT INTO {$table} (user_id, server_rate, record_at, record_type, u, d, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (user_id, server_rate, record_at)
+        $sql = "INSERT INTO {$table} (user_id, server_rate, server_id, server_type, record_at, record_type, u, d, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (user_id, server_rate, server_id, server_type, record_at)
                 DO UPDATE SET
                     u = {$table}.u + EXCLUDED.u,
                     d = {$table}.d + EXCLUDED.d,
@@ -147,6 +161,8 @@ class StatUserJob implements ShouldQueue
         DB::statement($sql, [
             $uid,
             $this->server['rate'],
+            $serverId,
+            $serverType,
             $recordAt,
             $this->recordType,
             $u,
@@ -154,5 +170,16 @@ class StatUserJob implements ShouldQueue
             $now,
             $now,
         ]);
+    }
+
+    private function getServerId(): int
+    {
+        return (int) ($this->server['id'] ?? 0);
+    }
+
+    private function getServerType(): string
+    {
+        $serverType = $this->server['type'] ?? $this->protocol ?? '';
+        return strtolower((string) $serverType);
     }
 }

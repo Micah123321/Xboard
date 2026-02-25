@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * App\Models\StatUser
@@ -22,7 +23,25 @@ class StatUser extends Model
     protected $dateFormat = 'U';
     protected $guarded = ['id'];
     protected $casts = [
+        'server_id' => 'integer',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp'
     ];
+
+    public function server(): BelongsTo
+    {
+        return $this->belongsTo(Server::class, 'server_id', 'id');
+    }
+
+    public function getNodeKeyAttribute(): ?string
+    {
+        $serverType = strtolower((string) $this->server_type);
+        $serverId = (int) $this->server_id;
+
+        if ($serverType === '' || $serverId <= 0) {
+            return null;
+        }
+
+        return $serverType . $serverId;
+    }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V2\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\TrafficLogResource;
 use App\Models\CommissionLog;
 use App\Models\Order;
 use App\Models\Server;
@@ -12,6 +13,7 @@ use App\Models\StatUser;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\StatisticalService;
+use App\Services\UserOnlineService;
 use Illuminate\Http\Request;
 
 class StatController extends Controller
@@ -234,15 +236,52 @@ class StatController extends Controller
         ]);
 
         $pageSize = $request->input('pageSize', 10);
-        $records = StatUser::orderBy('record_at', 'DESC')
-            ->where('user_id', $request->input('user_id'))
+        $userId = (int) $request->input('user_id');
+        $records = StatUser::query()
+            ->with(['server:id,name'])
+            ->orderBy('record_at', 'DESC')
+            ->where('user_id', $userId)
             ->paginate($pageSize);
 
-        $data = $records->items();
+        $deviceMap = $this->buildNodeDeviceMap($userId);
+        $data = collect($records->items())
+            ->map(function (StatUser $record) use ($deviceMap, $request): array {
+                $serverType = strtolower((string) $record->server_type);
+                $serverId = (int) $record->server_id;
+                $nodeKey = $serverType !== '' && $serverId > 0 ? "{$serverType}{$serverId}" : null;
+                $deviceIps = $nodeKey ? ($deviceMap[$nodeKey] ?? []) : [];
+
+                $record->setAttribute('server_name', $record->server?->name);
+                $record->setAttribute('node_name', $record->server?->name);
+                $record->setAttribute('device_ips', $deviceIps);
+                $record->setAttribute('device_count', count($deviceIps));
+                $record->setAttribute('device_name', $deviceIps[0] ?? 'Unknown');
+
+                return (new TrafficLogResource($record))->toArray($request);
+            })
+            ->all();
+
         return [
             'data' => $data,
             'total' => $records->total(),
         ];
+    }
+
+    private function buildNodeDeviceMap(int $userId): array
+    {
+        $devices = UserOnlineService::getUserDevices($userId);
+        $deviceList = data_get($devices, 'devices', []);
+
+        return collect($deviceList)
+            ->filter(fn($item): bool => is_array($item) && !empty($item['ip']) && !empty($item['node_type']))
+            ->groupBy(fn(array $item): string => strtolower((string) $item['node_type']))
+            ->map(fn($items): array => collect($items)
+                ->pluck('ip')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all())
+            ->all();
     }
 
     public function getStatRecord(Request $request)
