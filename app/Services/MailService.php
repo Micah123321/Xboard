@@ -13,6 +13,33 @@ use Illuminate\Support\Facades\Mail;
 
 class MailService
 {
+    // Render {{key}} / {{key|default}} placeholders.
+    private static function renderPlaceholders(string $template, array $vars): string
+    {
+        if ($template === '' || empty($vars)) {
+            return $template;
+        }
+
+        return (string) preg_replace_callback('/\{\{\s*([a-zA-Z0-9_.-]+)(?:\|([^}]*))?\s*\}\}/', function ($m) use ($vars) {
+            $key = $m[1] ?? '';
+            $default = array_key_exists(2, $m) ? trim((string) $m[2]) : null;
+
+            if (!array_key_exists($key, $vars) || $vars[$key] === null || $vars[$key] === '') {
+                return $default !== null ? $default : $m[0];
+            }
+
+            $value = $vars[$key];
+            if (is_bool($value)) {
+                return $value ? '1' : '0';
+            }
+            if (is_scalar($value)) {
+                return (string) $value;
+            }
+
+            return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+        }, $template);
+    }
+
     /**
      * 获取需要发送提醒的用户总数
      */
@@ -233,19 +260,44 @@ class MailService
         }
 
         if (array_key_exists('content', $params['template_value'])) {
-            $params['template_value']['content'] = self::sanitizeMailText((string) $params['template_value']['content']);
+            $params['template_value']['content'] = (string) $params['template_value']['content'];
         }
 
         $email = (string) $params['email'];
-        $subject = self::sanitizeMailText((string) $params['subject']);
+        $originTemplateName = (string) $params['template_name'];
+        $subject = (string) $params['subject'];
+
+        $vars = is_array($params['template_value']) ? ($params['template_value']['vars'] ?? []) : [];
+        $contentMode = is_array($params['template_value']) ? ($params['template_value']['content_mode'] ?? null) : null;
+
+        if (is_array($vars) && !empty($vars)) {
+            $subject = self::renderPlaceholders($subject, $vars);
+
+            if (isset($params['template_value']['content']) && is_string($params['template_value']['content'])) {
+                $params['template_value']['content'] = self::renderPlaceholders($params['template_value']['content'], $vars);
+            }
+        }
+
+        $subject = self::sanitizeMailText($subject);
         if ($subject === '') {
             $subject = 'Notification';
         }
 
-        $originTemplateName = (string) $params['template_name'];
+        if (array_key_exists('content', $params['template_value'])) {
+            $params['template_value']['content'] = self::sanitizeMailText((string) $params['template_value']['content']);
+        }
+
+        if (
+            $contentMode === 'text'
+            && $originTemplateName !== 'notify'
+            && isset($params['template_value']['content'])
+            && is_string($params['template_value']['content'])
+        ) {
+            $params['template_value']['content'] = e($params['template_value']['content']);
+        }
+
         $params['template_name'] = 'mail.' . admin_setting('email_template', 'default') . '.' . $originTemplateName;
         $logTemplateName = $params['template_name'];
-
         try {
             if ($originTemplateName === 'notify') {
                 $html = self::buildModernNotifyHtml($params['template_value'], $subject, $appName);

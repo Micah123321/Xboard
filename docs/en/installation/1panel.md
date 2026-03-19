@@ -1,38 +1,48 @@
-# 1Panel 快速部署指南
+# Quick Deployment Guide for 1Panel
 
-本文档介绍如何使用 1Panel 部署 Xboard。
+This guide explains how to deploy Xboard using 1Panel.
 
-## 1. 环境准备
+## 1. Environment Preparation
 
-安装 1Panel：
+Install 1Panel:
 ```bash
 curl -sSL https://resource.fit2cloud.com/1panel/package/quick_start.sh -o quick_start.sh && \
 sudo bash quick_start.sh
 ```
 
-## 2. 环境配置
+## 2. Environment Configuration
 
-1. 从应用商店安装：
-   - OpenResty（任意版本）
-     - 勾选“外部端口访问”以放行防火墙
-   - MySQL 5.7（ARM 架构请使用 MariaDB）
+1. Install from App Store:
+   - OpenResty (any version)
+     - ⚠️ Check "External Port Access" to open firewall
+   - MySQL 5.7 (Use MariaDB for ARM architecture)
 
-2. 创建数据库：
-   - 数据库名：`xboard`
-   - 用户名：`xboard`
-   - 权限：所有主机（%）
-   - 请保存数据库密码，安装时需要使用
+2. Create Database:
+   - Database name: `xboard`
+   - Username: `xboard`
+   - Access rights: All hosts (%)
+   - Save the database password for installation
 
-## 3. 部署步骤
+## 3. Deployment Steps
 
-1. 添加网站：
-   - 进入“网站” > “创建网站” > “反向代理”
-   - 域名：填写你的域名
-   - 代号：`xboard`
-   - 代理地址：`127.0.0.1:7001`
+1. Add Website:
+   - Go to "Website" > "Create Website" > "Reverse Proxy"
+   - Domain: Enter your domain
+   - Code: `xboard`
+   - Proxy address: `127.0.0.1:7001`
 
-2. 配置反向代理：
+2. Configure Reverse Proxy:
 ```nginx
+location /ws/ {
+    proxy_pass http://127.0.0.1:8076;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_read_timeout 60s;
+}
+
 location ^~ / {
     proxy_pass http://127.0.0.1:7001;
     proxy_http_version 1.1;
@@ -49,31 +59,32 @@ location ^~ / {
     proxy_cache off;
 }
 ```
+> The `/ws/` location enables WebSocket real-time node synchronization via `ws-server`. This service is enabled by default and can be toggled in Admin Panel > System Settings > Server.
 
-3. 安装 Xboard：
+3. Install Xboard:
 ```bash
-# 进入网站目录
+# Enter site directory
 cd /opt/1panel/apps/openresty/openresty/www/sites/xboard/index
 
-# 安装 Git（未安装时执行）
+# Install Git (if not installed)
 ## Ubuntu/Debian
 apt update && apt install -y git
 ## CentOS/RHEL
 yum update && yum install -y git
 
-# 克隆仓库
-git clone -b compose --depth 1 https://github.com/Micah123321/Xboard ./
+# Clone repository
+git clone -b compose --depth 1 https://github.com/cedar2025/Xboard ./
 
-# 配置 Docker Compose
+# Configure Docker Compose
 ```
 
-4. 编辑 compose.yaml：
+4. Edit compose.yaml:
 ```yaml
 services:
   web:
-    image: ghcr.io/Micah123321/xboard:new
+    image: ghcr.io/cedar2025/xboard:new
     volumes:
-      - ./.docker/.data/redis/:/data/
+      - redis-data:/data
       - ./.env:/www/.env
       - ./.docker/.data/:/www/.docker/.data
       - ./storage/logs:/www/storage/logs
@@ -91,9 +102,9 @@ services:
       - 1panel-network
 
   horizon:
-    image: ghcr.io/Micah123321/xboard:new
+    image: ghcr.io/cedar2025/xboard:new
     volumes:
-      - ./.docker/.data/redis/:/data/
+      - redis-data:/data
       - ./.env:/www/.env
       - ./.docker/.data/:/www/.docker/.data
       - ./storage/logs:/www/storage/logs
@@ -104,6 +115,22 @@ services:
       - 1panel-network
     depends_on:
       - redis
+  ws-server:
+    image: ghcr.io/cedar2025/xboard:new
+    volumes:
+      - redis-data:/data
+      - ./.env:/www/.env
+      - ./.docker/.data/:/www/.docker/.data
+      - ./storage/logs:/www/storage/logs
+      - ./plugins:/www/plugins
+    restart: on-failure
+    ports:
+      - 8076:8076
+    networks:
+      - 1panel-network
+    command: php artisan ws-server start
+    depends_on:
+      - redis
 
   redis:
     image: redis:7-alpine
@@ -112,67 +139,72 @@ services:
     networks:
       - 1panel-network
     volumes:
-      - ./.docker/.data/redis:/data
+      - redis-data:/data
+
+volumes:
+  redis-data:
 
 networks:
   1panel-network:
     external: true
 ```
 
-5. 初始化安装：
+5. Initialize Installation:
 ```bash
-# 安装依赖并初始化
+# Install dependencies and initialize
 docker compose run -it --rm web php artisan xboard:install
 ```
 
-重要配置说明：
-1. 数据库配置
-   - Database Host：按部署方式填写：
-     1. 如果数据库与 Xboard 在同一网络，填写 `mysql`
-     2. 如果连接失败，进入：数据库 -> 选择数据库 -> 连接信息 -> 容器连接，使用其中的 Host 值
-     3. 如果使用外部数据库，填写实际数据库地址
-   - Database Port：`3306`（默认端口，除非你另有配置）
-   - Database Name：`xboard`（前面创建的数据库）
-   - Database User：`xboard`（前面创建的用户）
-   - Database Password：填写前面保存的密码
+⚠️ Important Configuration Notes:
+1. Database Configuration
+   - Database Host: Choose based on your deployment:
+     1. If database and Xboard are in the same network, use `mysql`
+     2. If connection fails, go to: Database -> Select Database -> Connection Info -> Container Connection, and use the "Host" value
+     3. If using external database, enter your actual database host
+   - Database Port: `3306` (default port unless configured otherwise)
+   - Database Name: `xboard` (the database created earlier)
+   - Database User: `xboard` (the user created earlier)
+   - Database Password: Enter the password saved earlier
 
-2. Redis 配置
-   - 选择使用内置 Redis
-   - 无需额外配置
+2. Redis Configuration
+   - Choose to use built-in Redis
+   - No additional configuration needed
 
-3. 管理员信息
-   - 保存安装完成后显示的管理员账号信息
-   - 记录管理后台访问地址
+3. Administrator Information
+   - Save the admin credentials displayed after installation
+   - Note down the admin panel access URL
 
-配置完成后，启动服务：
+After configuration, start the services:
 ```bash
 docker compose up -d
 ```
 
-6. 启动服务：
+6. Start Services:
 ```bash
 docker compose up -d
 ```
 
-## 4. 版本更新
+## 4. Version Update
 
-> 重要说明：更新命令会因安装版本不同而有所区别：
-> - 如果是最近安装（新版本），使用以下命令：
+> 💡 Important Note: The update command varies depending on your installation version:
+> - If you installed recently (new version), use this command:
 ```bash
 docker compose pull && \
 docker compose run -it --rm web php artisan xboard:update && \
 docker compose up -d
 ```
-> - 如果是较早安装（旧版本），请把 `web` 替换为 `xboard`：
+> - If you installed earlier (old version), replace `web` with `xboard`:
 ```bash
 docker compose pull && \
 docker compose run -it --rm xboard php artisan xboard:update && \
 docker compose up -d
 ```
-> 不确定该用哪个命令？先尝试新版本命令，失败后再使用旧版本命令。
+> 🤔 Not sure which to use? Try the new version command first, if it fails, use the old version command.
 
-## 重要提示
+## Important Notes
 
-- 请确保已开启防火墙，避免 7001 端口直接暴露到公网
-- 代码修改后需要重启服务才能生效
-- 建议配置 SSL 证书以保障访问安全
+- ⚠️ Ensure firewall is enabled to prevent port 7001 exposure to public
+- Service restart is required after code modifications
+- SSL certificate configuration is recommended for secure access
+
+> The node will automatically detect WebSocket availability during handshake. No extra configuration is needed on the node side. 

@@ -1,89 +1,99 @@
-# aaPanel + Docker 环境下的 Xboard 部署指南
+# Xboard Deployment Guide for aaPanel + Docker Environment
 
-## 目录
-1. [环境要求](#环境要求)
-2. [快速部署](#快速部署)
-3. [详细配置](#详细配置)
-4. [维护指南](#维护指南)
-5. [故障排查](#故障排查)
+## Table of Contents
+1. [Requirements](#requirements)
+2. [Quick Deployment](#quick-deployment)
+3. [Detailed Configuration](#detailed-configuration)
+4. [Maintenance Guide](#maintenance-guide)
+5. [Troubleshooting](#troubleshooting)
 
-## 环境要求
+## Requirements
 
-### 硬件要求
-- CPU：1 核及以上
-- 内存：2GB 及以上
-- 存储：可用空间 10GB+
+### Hardware Requirements
+- CPU: 1 core or above
+- Memory: 2GB or above
+- Storage: 10GB+ available space
 
-### 软件要求
-- 操作系统：Ubuntu 20.04+ / CentOS 7+ / Debian 10+
-- aaPanel 最新版本
-- Docker 和 Docker Compose
-- Nginx（任意版本）
+### Software Requirements
+- Operating System: Ubuntu 20.04+ / CentOS 7+ / Debian 10+
+- Latest version of aaPanel
+- Docker and Docker Compose
+- Nginx (any version)
 - MySQL 5.7+
 
-## 快速部署
+## Quick Deployment
 
-### 1. 安装 aaPanel
+### 1. Install aaPanel
 ```bash
 curl -sSL https://www.aapanel.com/script/install_6.0_en.sh -o install_6.0_en.sh && \
 bash install_6.0_en.sh aapanel
 ```
 
-### 2. 基础环境配置
+### 2. Basic Environment Setup
 
-#### 2.1 安装 Docker
+#### 2.1 Install Docker
 ```bash
-# 安装 Docker
+# Install Docker
 curl -sSL https://get.docker.com | bash
 
-# CentOS 系统还需要执行：
+# For CentOS systems, also run:
 systemctl enable docker
 systemctl start docker
 ```
 
-#### 2.2 安装必需组件
-在 aaPanel 面板中安装：
-- Nginx（任意版本）
+#### 2.2 Install Required Components
+In the aaPanel dashboard, install:
+- Nginx (any version)
 - MySQL 5.7
-- PHP 和 Redis 不需要安装
+- ⚠️ PHP and Redis are not required
 
-### 3. 网站配置
+### 3. Site Configuration
 
-#### 3.1 创建网站
-1. 进入：aaPanel > 网站 > 添加站点
-2. 填写信息：
-   - 域名：填写你的网站域名
-   - 数据库：选择 MySQL
-   - PHP 版本：选择纯静态
+#### 3.1 Create Website
+1. Navigate to: aaPanel > Website > Add site
+2. Fill in the information:
+   - Domain: Enter your site domain
+   - Database: Select MySQL
+   - PHP Version: Select Pure Static
 
-#### 3.2 部署 Xboard
+#### 3.2 Deploy Xboard
 ```bash
-# 进入网站目录
+# Enter site directory
 cd /www/wwwroot/your-domain
 
-# 清理目录
+# Clean directory
 chattr -i .user.ini
 rm -rf .htaccess 404.html 502.html index.html .user.ini
 
-# 克隆仓库
-git clone https://github.com/Micah123321/Xboard.git ./
+# Clone repository
+git clone https://github.com/cedar2025/Xboard.git ./
 
-# 准备配置文件
+# Prepare configuration file
 cp compose.sample.yaml compose.yaml
 
-# 安装依赖并初始化
+# Install dependencies and initialize
 docker compose run -it --rm web sh init.sh
 ```
-> 请保存安装完成后显示的管理后台地址、用户名和密码
+> ⚠️ Please save the admin dashboard URL, username, and password shown after installation
 
-#### 3.3 启动服务
+#### 3.3 Start Services
 ```bash
 docker compose up -d
 ```
 
-#### 3.4 配置反向代理
-将以下内容添加到网站配置：
+#### 3.4 Configure Reverse Proxy
+Add the following content to your site configuration:
 ```nginx
+location /ws/ {
+    proxy_pass http://127.0.0.1:8076;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_read_timeout 60s;
+}
+
 location ^~ / {
     proxy_pass http://127.0.0.1:7001;
     proxy_http_version 1.1;
@@ -100,19 +110,20 @@ location ^~ / {
     proxy_cache off;
 }
 ```
+> The `/ws/` location enables real-time node synchronization via `ws-server`. This service is enabled by default and can be toggled in Admin Panel > System Settings > Server.
 
-## 维护指南
+## Maintenance Guide
 
-### 版本更新
+### Version Updates
 
-> 重要说明：更新命令会因你安装的版本不同而有所区别：
-> - 如果是最近安装（新版本），使用：
+> 💡 Important Note: Update commands may vary depending on your installed version:
+> - For recent installations (new version), use:
 ```bash
 docker compose pull && \
 docker compose run -it --rm web sh update.sh && \
 docker compose up -d
 ```
-> - 如果是较早安装（旧版本），请把 `web` 替换为 `xboard`：
+> - For older installations, replace `web` with `xboard`:
 ```bash
 git config --global --add safe.directory $(pwd)
 git fetch --all && git reset --hard origin/master && git pull origin master
@@ -120,18 +131,21 @@ docker compose pull && \
 docker compose run -it --rm xboard sh update.sh && \
 docker compose up -d
 ```
-> 不确定该用哪个命令？先尝试新版本命令，失败后再使用旧版本命令。
+> 🤔 Not sure which to use? Try the new version command first, if it fails, use the old version command.
 
-### 日常维护
-- 定期查看日志：`docker compose logs`
-- 监控系统资源使用情况
-- 定期备份数据库和配置文件
+### Routine Maintenance
+- Regular log checking: `docker compose logs`
+- Monitor system resource usage
+- Regular backup of database and configuration files
 
-## 故障排查
+## Troubleshooting
 
-如果在安装或运行中遇到问题，请检查：
-1. 系统要求是否满足
-2. 所有必需端口是否可用
-3. Docker 服务是否正常运行
-4. Nginx 配置是否正确
-5. 查看日志以获取详细报错信息
+If you encounter any issues during installation or operation, please check:
+1. **Empty Admin Dashboard**: If the admin panel is blank, run `git submodule update --init --recursive --force` to restore the theme files.
+2. System requirements are met
+3. All required ports are available
+3. Docker services are running properly
+4. Nginx configuration is correct
+5. Check logs for detailed error messages
+
+> The node will automatically detect WebSocket availability during handshake. No extra configuration is needed on the node side. 
