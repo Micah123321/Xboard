@@ -1,0 +1,8 @@
+{
+    "name": "TokenPay",
+    "code": "token_pay",
+    "type": "payment",
+    "version": "1.0.0",
+    "description": "TokenPay payment plugin",
+    "author": "Micah123321"
+}

@@ -72,12 +72,14 @@ class ConfigController extends Controller
     public function fetch(Request $request)
     {
         $key = $request->input('key');
-        $configMappings = $this->getConfigMappings();
-        if ($key && isset($configMappings[$key])) {
-            return $this->success([$key => $configMappings[$key]]);
+        if ($key) {
+            $configMapping = $this->getConfigMapping($key);
+            if ($configMapping !== null) {
+                return $this->success([$key => $configMapping]);
+            }
         }
 
-        return $this->success($configMappings);
+        return $this->success($this->getConfigMappings());
     }
 
     /**
@@ -87,7 +89,36 @@ class ConfigController extends Controller
      */
     private function getConfigMappings(): array
     {
-        return [
+        $keys = [
+            'invite',
+            'site',
+            'subscribe',
+            'frontend',
+            'server',
+            'email',
+            'telegram',
+            'app',
+            'safe',
+            'subscribe_template',
+        ];
+
+        $configMappings = [];
+        foreach ($keys as $key) {
+            $configMappings[$key] = $this->getConfigMapping($key);
+        }
+
+        return $configMappings;
+    }
+
+    /**
+     * 获取单个配置分组
+     *
+     * @param string $key 配置分组键名
+     * @return array|null 配置分组内容
+     */
+    private function getConfigMapping(string $key): ?array
+    {
+        return match ($key) {
             'invite' => [
                 'invite_force' => (bool) admin_setting('invite_force', 0),
                 'invite_commission' => admin_setting('invite_commission', 10),
@@ -205,8 +236,9 @@ class ConfigController extends Controller
                 'subscribe_template_stash' => subscribe_template('stash') ?? '',
                 'subscribe_template_surge' => subscribe_template('surge') ?? '',
                 'subscribe_template_surfboard' => subscribe_template('surfboard') ?? ''
-            ]
-        ];
+            ],
+            default => null,
+        };
     }
 
     public function save(ConfigSave $request)
