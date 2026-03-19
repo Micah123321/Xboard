@@ -173,6 +173,8 @@ class OrderController extends Controller
 
     public function getPaymentMethod()
     {
+        $availableMethods = array_flip(PaymentService::getAllPaymentMethodNames());
+
         $methods = Payment::select([
             'id',
             'name',
@@ -183,7 +185,11 @@ class OrderController extends Controller
         ])
             ->where('enable', 1)
             ->orderBy('sort', 'ASC')
-            ->get();
+            ->get()
+            ->filter(function ($payment) use ($availableMethods) {
+                return isset($availableMethods[$payment->payment]);
+            })
+            ->values();
 
         return $this->success($methods);
     }

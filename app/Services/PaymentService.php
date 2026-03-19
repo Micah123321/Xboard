@@ -13,7 +13,6 @@ class PaymentService
     protected $config;
     protected $payment;
     protected $pluginManager;
-    protected $class;
 
     public function __construct($method, $id = NULL, $uuid = NULL)
     {
@@ -24,36 +23,50 @@ class PaymentService
             return;
         }
 
+        $payment = null;
         if ($id) {
-            $payment = Payment::find($id)->toArray();
+            $payment = Payment::find($id);
         }
-        if ($uuid) {
-            $payment = Payment::where('uuid', $uuid)->first()->toArray();
+        if (!$payment && $uuid) {
+            $payment = Payment::where('uuid', $uuid)->first();
+        }
+        if (($id || $uuid) && !$payment) {
+            throw new ApiException(__('Payment method is not available'));
         }
 
         $this->config = [];
-        if (isset($payment)) {
-            $this->config = is_string($payment['config']) ? json_decode($payment['config'], true) : $payment['config'];
-            $this->config['enable'] = $payment['enable'];
-            $this->config['id'] = $payment['id'];
-            $this->config['uuid'] = $payment['uuid'];
-            $this->config['notify_domain'] = $payment['notify_domain'] ?? '';
+        if ($payment) {
+            $config = $payment->config;
+            $this->config = is_string($config) ? json_decode($config, true) : ($config ?? []);
+            if (!is_array($this->config)) {
+                $this->config = [];
+            }
+            $this->config['enable'] = $payment->enable;
+            $this->config['id'] = $payment->id;
+            $this->config['uuid'] = $payment->uuid;
+            $this->config['notify_domain'] = $payment->notify_domain ?? '';
         }
 
         $paymentMethods = $this->getAvailablePaymentMethods();
-        if (isset($paymentMethods[$this->method])) {
-            $pluginCode = $paymentMethods[$this->method]['plugin_code'];
-            $paymentPlugins = $this->pluginManager->getEnabledPaymentPlugins();
-            foreach ($paymentPlugins as $plugin) {
-                if ($plugin->getPluginCode() === $pluginCode) {
-                    $plugin->setConfig($this->config);
-                    $this->payment = $plugin;
-                    return;
-                }
+        if (!isset($paymentMethods[$this->method])) {
+            throw new ApiException(__('Payment method is not available'));
+        }
+
+        $pluginCode = $paymentMethods[$this->method]['plugin_code'] ?? null;
+        if (!$pluginCode) {
+            throw new ApiException(__('Payment method is not available'));
+        }
+
+        $paymentPlugins = $this->pluginManager->getEnabledPaymentPlugins();
+        foreach ($paymentPlugins as $plugin) {
+            if ($plugin->getPluginCode() === $pluginCode) {
+                $plugin->setConfig($this->config);
+                $this->payment = $plugin;
+                return;
             }
         }
 
-        $this->payment = new $this->class($this->config);
+        throw new ApiException(__('Payment method is not available'));
     }
 
     public function notify($params)
