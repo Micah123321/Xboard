@@ -90,8 +90,8 @@ class StatUserJob implements ShouldQueue
 
             if ($existingRecord) {
                 $existingRecord->update([
-                    'u' => $existingRecord->u + ($v[0] * $this->server['rate']),
-                    'd' => $existingRecord->d + ($v[1] * $this->server['rate']),
+                    'u' => $existingRecord->u + intval($v[0] * $this->server['rate']),
+                    'd' => $existingRecord->d + intval($v[1] * $this->server['rate']),
                     'updated_at' => time(),
                 ]);
             } else {
@@ -102,8 +102,8 @@ class StatUserJob implements ShouldQueue
                     'server_type' => $serverType,
                     'record_at' => $recordAt,
                     'record_type' => $this->recordType,
-                    'u' => ($v[0] * $this->server['rate']),
-                    'd' => ($v[1] * $this->server['rate']),
+                    'u' => intval($v[0] * $this->server['rate']),
+                    'd' => intval($v[1] * $this->server['rate']),
                     'created_at' => time(),
                     'updated_at' => time(),
                 ]);
@@ -124,8 +124,8 @@ class StatUserJob implements ShouldQueue
                 'server_type' => $serverType,
                 'record_at' => $recordAt,
                 'record_type' => $this->recordType,
-                'u' => ($v[0] * $this->server['rate']),
-                'd' => ($v[1] * $this->server['rate']),
+                'u' => intval($v[0] * $this->server['rate']),
+                'd' => intval($v[1] * $this->server['rate']),
                 'created_at' => time(),
                 'updated_at' => time(),
             ],
