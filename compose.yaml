@@ -31,7 +31,7 @@ services:
     depends_on:
       - redis
   ws-server:
-    image: ghcr.io/cedar2025/xboard:new
+    image: ghcr.io/micah123321/xboard:new
     volumes:
       - redis-data:/data
       - ./.env:/www/.env
