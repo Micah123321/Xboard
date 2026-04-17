@@ -250,6 +250,25 @@ class ClashMeta extends AbstractProtocol
             foreach ($value as $item) {
                 $prefix = str_repeat(' ', $indent) . '-';
                 if (is_array($item)) {
+                    if (self::isAssocArray($item)) {
+                        $isFirst = true;
+                        foreach ($item as $key => $child) {
+                            $keyPrefix = ($isFirst ? $prefix . ' ' : str_repeat(' ', $indent + 2)) . $key . ':';
+                            if (is_array($child)) {
+                                if ($child === []) {
+                                    $lines[] = $keyPrefix . ' []';
+                                } else {
+                                    $lines[] = $keyPrefix;
+                                    $lines[] = rtrim(self::dumpYamlNode($child, $indent + 4), "\n");
+                                }
+                            } else {
+                                $lines[] = $keyPrefix . ' ' . self::dumpYamlScalar($child);
+                            }
+                            $isFirst = false;
+                        }
+                        continue;
+                    }
+
                     if ($item === []) {
                         $lines[] = $prefix . ' []';
                         continue;
