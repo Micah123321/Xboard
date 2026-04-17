@@ -143,7 +143,9 @@ class ClashMeta extends AbstractProtocol
         $config['proxy-groups'] = array_values($config['proxy-groups']);
         $config = $this->buildRules($config);
 
-        $yaml = Yaml::dump($config, 2, 4, Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE);
+        // Keep nested proxy objects in block style to avoid long one-line flow maps
+        // that some Clash Meta clients fail to parse.
+        $yaml = Yaml::dump($config, 10, 4, Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE);
         $yaml = str_replace('$app_name', admin_setting('app_name', 'XBoard'), $yaml);
         return response($yaml)
             ->header('content-type', 'text/yaml')
