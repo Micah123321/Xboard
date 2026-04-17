@@ -281,7 +281,7 @@ class ClashMeta extends AbstractProtocol
             return (string) $value;
         }
 
-        return "'" . str_replace("'", "''", (string) $value) . "'";
+        return json_encode((string) $value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     private static function isAssocArray(array $value): bool
