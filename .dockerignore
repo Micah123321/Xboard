@@ -6,6 +6,9 @@
 /storage/*.key
 /vendor
 .env
+.git
+.github
+.helloagents
 .env.backup
 .phpunit.result.cache
 .idea
