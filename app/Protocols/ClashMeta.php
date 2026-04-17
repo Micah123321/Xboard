@@ -203,15 +203,94 @@ class ClashMeta extends AbstractProtocol
         $config['proxy-groups'] = array_values($config['proxy-groups']);
         $config = $this->buildRules($config);
 
-        // Keep nested proxy objects in block style to avoid long one-line flow maps
-        // that some Clash Meta clients fail to parse.
-        $yaml = Yaml::dump($config, 10, 4, Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE);
+        // Force full block-style YAML output because some Clash Meta clients fail
+        // to parse long flow maps such as "- { name: ..., alpn: [...] }".
+        $yaml = self::dumpExpandedYaml($config);
         $yaml = str_replace('$app_name', admin_setting('app_name', 'XBoard'), $yaml);
         return response($yaml)
             ->header('content-type', 'text/yaml')
             ->header('subscription-userinfo', "upload={$user['u']}; download={$user['d']}; total={$user['transfer_enable']}; expire={$user['expired_at']}")
             ->header('profile-update-interval', '24')
             ->header('content-disposition', 'attachment;filename*=UTF-8\'\'' . rawurlencode($appName));
+    }
+
+    private static function dumpExpandedYaml(array $config): string
+    {
+        return rtrim(self::dumpYamlNode($config), "\n") . "\n";
+    }
+
+    private static function dumpYamlNode($value, int $indent = 0): string
+    {
+        if (!is_array($value)) {
+            return str_repeat(' ', $indent) . self::dumpYamlScalar($value) . "\n";
+        }
+
+        if ($value === []) {
+            return str_repeat(' ', $indent) . "[]\n";
+        }
+
+        $lines = [];
+        if (self::isAssocArray($value)) {
+            foreach ($value as $key => $item) {
+                $prefix = str_repeat(' ', $indent) . $key . ':';
+                if (is_array($item)) {
+                    if ($item === []) {
+                        $lines[] = $prefix . ' []';
+                        continue;
+                    }
+
+                    $lines[] = $prefix;
+                    $lines[] = rtrim(self::dumpYamlNode($item, $indent + 4), "\n");
+                    continue;
+                }
+
+                $lines[] = $prefix . ' ' . self::dumpYamlScalar($item);
+            }
+        } else {
+            foreach ($value as $item) {
+                $prefix = str_repeat(' ', $indent) . '-';
+                if (is_array($item)) {
+                    if ($item === []) {
+                        $lines[] = $prefix . ' []';
+                        continue;
+                    }
+
+                    $lines[] = $prefix;
+                    $lines[] = rtrim(self::dumpYamlNode($item, $indent + 4), "\n");
+                    continue;
+                }
+
+                $lines[] = $prefix . ' ' . self::dumpYamlScalar($item);
+            }
+        }
+
+        return implode("\n", $lines) . "\n";
+    }
+
+    private static function dumpYamlScalar($value): string
+    {
+        if ($value === null) {
+            return 'null';
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        return "'" . str_replace("'", "''", (string) $value) . "'";
+    }
+
+    private static function isAssocArray(array $value): bool
+    {
+        if ($value === []) {
+            return true;
+        }
+
+        return array_keys($value) !== range(0, count($value) - 1);
     }
 
     /**

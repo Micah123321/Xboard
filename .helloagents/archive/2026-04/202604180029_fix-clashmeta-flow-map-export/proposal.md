@@ -46,12 +46,12 @@
 ## 2. 方案
 
 ### 技术方案
-将 `ClashMeta` 中的 `Yaml::dump($config, 2, 4, ...)` 提升为更高的 inline 深度阈值，
-使 `proxies`、`proxy-groups` 等深层结构优先以 block style 导出，而不是压缩成单行 flow map。
+将 `ClashMeta` 中依赖 `Yaml::dump(...)` 的默认风格选择，替换为显式的 block style YAML 渲染，
+避免 `proxies`、`proxy-groups` 等深层结构被压缩成单行 flow map。
 
 本次仅修改：
 
-1. `app/Protocols/ClashMeta.php` 的 dump 参数；
+1. `app/Protocols/ClashMeta.php` 的 YAML 渲染路径；
 2. 在代码旁增加一行说明性注释，明确修复目的；
 3. 不改模板、不改节点字段构造、不改 Clash / Stash。
 
@@ -99,17 +99,17 @@ N/A
 
 ## 5. 技术决策
 
-### fix-clashmeta-flow-map-export#D001: 只调整 dump 参数，不重写节点构造逻辑
+### fix-clashmeta-flow-map-export#D001: 显式渲染 block style YAML，不再依赖 dumper 的默认风格选择
 **日期**: 2026-04-18
 **状态**: ✅采纳
-**背景**: 问题的根源在序列化风格，而不是 TUIC 节点字段本身的构造。
+**背景**: 问题的根源在序列化风格，而不是 TUIC 节点字段本身的构造。仅修改 `Yaml::dump` 参数后，服务器真值仍然返回单行 flow map。
 **选项分析**:
 | 选项 | 优点 | 缺点 |
 |------|------|------|
-| A: 提高 `Yaml::dump` 的 inline 深度阈值 | 改动最小，直接命中根因，不改变节点字段 | 输出会更展开 |
-| B: 手工重写整个 YAML 渲染流程 | 可完全控制格式 | 风险高，改动大，超出当前修复范围 |
-**决策**: 选择方案 A
-**理由**: 当前问题是 flow style 输出兼容性差，调高 dump 阈值即可稳定转回 block style，最符合最小修复原则。
+| A: 继续微调 `Yaml::dump` 参数 | 改动小 | 已被服务器真值否定，不能保证摆脱 flow map |
+| B: 显式输出 block style YAML | 可完全控制 `proxies` / `proxy-groups` / `rules` 的格式 | 代码量更大，需要自定义渲染 |
+**决策**: 选择方案 B
+**理由**: 服务器真值已经证明仅调参数不够，必须显式控制 YAML 输出风格，才能彻底避免客户端继续收到 `- { ... }`。
 **影响**: 仅影响 Clash Meta 订阅的最终文本格式，不影响节点字段语义
 
 ---
