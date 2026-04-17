@@ -850,4 +850,17 @@ class ClashMeta extends AbstractProtocol
             }
         }
     }
+
+    protected static function appendEch(&$array, $ech): void
+    {
+        if (!$normalized = Helper::normalizeEchSettings($ech)) {
+            return;
+        }
+
+        $array['ech-opts'] = array_filter([
+            'enable' => true,
+            'config' => Helper::toMihomoEchConfig(data_get($normalized, 'config')),
+            'query-server-name' => data_get($normalized, 'query_server_name'),
+        ], fn($value) => $value !== null);
+    }
 }
