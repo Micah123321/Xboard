@@ -1,5 +1,11 @@
 import { adminClient } from './client'
 import type {
+  AdminPaginationResult,
+  AdminPlanOption,
+  AdminUserFetchParams,
+  AdminUserGeneratePayload,
+  AdminUserListItem,
+  AdminUserUpdatePayload,
   ApiResponse,
   DashboardStats,
   OrderTrendData,
@@ -12,6 +18,25 @@ function unwrap<T>(url: string, params?: Record<string, unknown>): Promise<ApiRe
   return adminClient
     .get<ApiResponse<T>>(url, { params })
     .then((res) => res.data)
+}
+
+function unwrapPost<T>(url: string, data?: Record<string, unknown>): Promise<ApiResponse<T>> {
+  return adminClient
+    .post<ApiResponse<T>>(url, data)
+    .then((res) => res.data)
+}
+
+function splitEmail(email: string): { email_prefix: string; email_suffix: string } {
+  const normalized = email.trim()
+  const atIndex = normalized.lastIndexOf('@')
+  if (atIndex <= 0 || atIndex === normalized.length - 1) {
+    throw new Error('请输入有效的邮箱地址')
+  }
+
+  return {
+    email_prefix: normalized.slice(0, atIndex),
+    email_suffix: normalized.slice(atIndex + 1),
+  }
 }
 
 export function getDashboardStats(): Promise<ApiResponse<DashboardStats>> {
@@ -52,4 +77,40 @@ export function getSystemStatus(): Promise<ApiResponse<SystemStatus>> {
 
 export function getQueueStats(): Promise<ApiResponse<QueueStats>> {
   return unwrap<QueueStats>('/system/getQueueStats')
+}
+
+export function getPlans(): Promise<ApiResponse<AdminPlanOption[]>> {
+  return unwrap<AdminPlanOption[]>('/plan/fetch')
+}
+
+export function fetchUsers(params: AdminUserFetchParams): Promise<AdminPaginationResult<AdminUserListItem>> {
+  return adminClient
+    .get<AdminPaginationResult<AdminUserListItem>>('/user/fetch', { params })
+    .then((res) => res.data)
+}
+
+export function getUserById(id: number): Promise<ApiResponse<AdminUserListItem>> {
+  return unwrap<AdminUserListItem>('/user/getUserInfoById', { id })
+}
+
+export function createUser(payload: AdminUserGeneratePayload): Promise<ApiResponse<boolean>> {
+  const email = splitEmail(payload.email)
+  return unwrapPost<boolean>('/user/generate', {
+    ...email,
+    password: payload.password,
+    plan_id: payload.plan_id,
+    expired_at: payload.expired_at,
+  })
+}
+
+export function updateUser(payload: AdminUserUpdatePayload): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/user/update', payload as unknown as Record<string, unknown>)
+}
+
+export function resetUserSecret(id: number): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/user/resetSecret', { id })
+}
+
+export function deleteUser(id: number): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/user/destroy', { id })
 }

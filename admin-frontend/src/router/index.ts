@@ -23,6 +23,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/dashboard/DashboardView.vue'),
         meta: { title: '仪表盘', kicker: 'Overview' },
       },
+      {
+        path: 'users',
+        name: 'Users',
+        component: () => import('@/views/users/UsersView.vue'),
+        meta: { title: '用户管理', kicker: 'Users' },
+      },
+      {
+        path: 'tickets',
+        name: 'Tickets',
+        component: () => import('@/views/tickets/TicketsView.vue'),
+        meta: { title: '工单管理', kicker: 'Tickets' },
+      },
     ],
   },
 ]

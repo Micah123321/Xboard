@@ -17,6 +17,13 @@
   - `stat/getTrafficRank`
   - `system/getSystemStatus`
   - `system/getQueueStats`
+- 管理端用户管理现已接入:
+  - `user/fetch`
+  - `user/generate`
+  - `user/update`
+  - `user/resetSecret`
+  - `user/destroy`
+  - `plan/fetch`
 
 ## 项目概述
 
@@ -27,10 +34,11 @@
 ## 开发约定
 
 - 管理端路由使用 Hash 模式
+- 管理端当前业务路由包含 `/dashboard`、`/users` 与 `/tickets`
 - Bearer Token 存储于 `sessionStorage/localStorage`
 - `admin-frontend` 的视觉方向当前以 Apple 风格为基线，优先纯色分区、系统字体栈和低装饰成本
 
 ## 当前约束
 
-- 本地预览环境默认缺少真实 `secure_path` 与管理员凭证
+- 本地静态 preview 环境默认缺少 Laravel 注入的 `window.settings` 与真实管理 API，受保护页面只能验证结构与跳转，不能替代完整联调
 - 后端接口契约以仓库内 Controller/Route 为准，不在前端推断字段

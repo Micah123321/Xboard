@@ -116,6 +116,111 @@ export interface QueueStats {
   wait?: QueueWaitEntry[]
 }
 
+export interface AdminPaginationResult<T> {
+  data: T[]
+  total: number
+}
+
+export interface AdminGroupOption {
+  id: number
+  name: string
+}
+
+export interface AdminPlanOption {
+  id: number
+  name: string
+  sort?: number
+  transfer_enable?: number | null
+  group_id?: number | null
+  users_count?: number
+  active_users_count?: number
+  group?: AdminGroupOption | null
+}
+
+export interface AdminUserRef {
+  id: number
+  email: string
+}
+
+export interface AdminUserListItem {
+  id: number
+  email: string
+  token: string
+  uuid: string
+  plan_id: number | null
+  group_id: number | null
+  transfer_enable: number
+  u: number
+  d: number
+  total_used: number
+  expired_at: number | null
+  balance: number
+  commission_balance: number
+  commission_rate: number | null
+  commission_type: number | null
+  discount: number | null
+  speed_limit: number | null
+  device_limit: number | null
+  remarks: string | null
+  banned: boolean
+  is_admin: boolean
+  is_staff: boolean
+  created_at: number
+  updated_at: number
+  subscribe_url: string
+  plan?: AdminPlanOption | null
+  group?: AdminGroupOption | null
+  invite_user?: AdminUserRef | null
+}
+
+export interface AdminUserFilter {
+  id: string
+  value: string | number | boolean | Array<string | number>
+  logic?: 'and' | 'or'
+}
+
+export interface AdminUserSort {
+  id: string
+  desc: boolean
+}
+
+export interface AdminUserFetchParams {
+  current: number
+  pageSize: number
+  filter?: AdminUserFilter[]
+  sort?: AdminUserSort[]
+}
+
+export interface AdminUserGeneratePayload {
+  email: string
+  password: string
+  plan_id?: number | null
+  expired_at?: number | null
+}
+
+export interface AdminUserUpdatePayload {
+  id: number
+  email?: string
+  password?: string
+  transfer_enable?: number
+  expired_at?: number | null
+  banned?: boolean | number
+  plan_id?: number | null
+  commission_rate?: number | null
+  discount?: number | null
+  is_admin?: boolean
+  is_staff?: boolean
+  u?: number
+  d?: number
+  balance?: number
+  commission_type?: number | null
+  commission_balance?: number
+  remarks?: string | null
+  speed_limit?: number | null
+  device_limit?: number | null
+  invite_user_email?: string | null
+}
+
 declare global {
   interface Window {
     settings?: {

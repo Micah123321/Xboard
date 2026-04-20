@@ -11,11 +11,11 @@ active_package: 无
 
 - 类型: PHP Laravel 主仓 + `admin-frontend` Vue3 管理端前端
 - 当前重点模块: `admin-frontend`
-- 最新归档: `202604210326_admin-frontend-composio-dashboard`
+- 最新归档: `202604210441_admin-frontend-user-management`
 
 ## 活跃模块
 
-- [admin-frontend](modules/admin-frontend.md): 管理端登录、主布局、仪表盘与管理 API 前端封装
+- [admin-frontend](modules/admin-frontend.md): 管理端登录、主布局、仪表盘、用户管理与管理 API 前端封装
 
 ## 归档与变更
 

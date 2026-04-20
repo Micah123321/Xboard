@@ -5,9 +5,12 @@ import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import {
   Odometer,
+  Tickets,
   SwitchButton,
   Fold,
   Expand,
+  User,
+  UserFilled,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -22,6 +25,11 @@ const currentKicker = computed(() => String(route.meta.kicker || 'Xboard Admin')
 
 const menuItems = [
   { index: '/dashboard', title: '仪表盘', icon: Odometer },
+]
+
+const managementItems = [
+  { index: '/users', title: '用户管理', icon: User },
+  { index: '/tickets', title: '工单管理', icon: Tickets },
 ]
 
 function syncViewport() {
@@ -66,20 +74,37 @@ onBeforeUnmount(() => {
 
       <ElMenu
         :default-active="route.path"
+        :default-openeds="['management']"
         :collapse="app.sidebarCollapsed"
         :collapse-transition="false"
         router
         class="admin-menu"
         @select="handleMenuSelect"
-      >
-        <ElMenuItem
-          v-for="item in menuItems"
+        >
+          <ElMenuItem
+            v-for="item in menuItems"
           :key="item.index"
           :index="item.index"
-        >
-          <ElIcon><component :is="item.icon" /></ElIcon>
-          <template #title>{{ item.title }}</template>
-        </ElMenuItem>
+          >
+            <ElIcon><component :is="item.icon" /></ElIcon>
+            <template #title>{{ item.title }}</template>
+          </ElMenuItem>
+
+          <ElSubMenu index="management">
+            <template #title>
+              <ElIcon><UserFilled /></ElIcon>
+              <span>用户管理</span>
+            </template>
+
+            <ElMenuItem
+              v-for="item in managementItems"
+              :key="item.index"
+              :index="item.index"
+            >
+              <ElIcon><component :is="item.icon" /></ElIcon>
+              <template #title>{{ item.title }}</template>
+            </ElMenuItem>
+          </ElSubMenu>
       </ElMenu>
     </ElAside>
 
@@ -189,6 +214,16 @@ onBeforeUnmount(() => {
 .admin-menu :deep(.el-menu-item.is-active) {
   background: rgba(0, 113, 227, 0.08);
   color: #0071e3;
+}
+
+.admin-menu :deep(.el-sub-menu__title) {
+  border-radius: 12px;
+  color: var(--xboard-text-secondary);
+  height: 44px;
+}
+
+.admin-menu :deep(.el-sub-menu .el-menu-item) {
+  margin-left: 8px;
 }
 
 .admin-stage {

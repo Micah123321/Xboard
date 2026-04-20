@@ -2,4 +2,4 @@
 
 | 模块名 | 说明 | 最近更新 |
 |--------|------|----------|
-| [admin-frontend](admin-frontend.md) | 管理端前端登录、布局、仪表盘与管理 API 封装 | 2026-04-21 |
+| [admin-frontend](admin-frontend.md) | 管理端前端登录、布局、仪表盘、用户管理与管理 API 封装 | 2026-04-21 |

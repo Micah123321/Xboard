@@ -7,6 +7,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202604210441 | admin-frontend-user-management | - | - | - | ✅完成 |
 | 202604210400 | admin-frontend-apple-performance-refresh | implementation | admin-frontend | admin-frontend-apple-performance-refresh#D001,#D002 | ✅完成 |
 | 202604210326 | admin-frontend-composio-dashboard | implementation | admin-frontend | admin-frontend-composio-dashboard#D001,#D002 | ✅完成 |
 | 202604180040 | optimize-docker-publish-workflow | - | - | - | ✅完成 |
@@ -17,6 +18,7 @@
 ## 按月归档
 
 ### 2026-04
+- [202604210441_admin-frontend-user-management](./2026-04/202604210441_admin-frontend-user-management/) - 新增用户管理工作台、抽屉表单、用户操作菜单，以及“用户管理 / 工单管理”导航与路由骨架
 - [202604210400_admin-frontend-apple-performance-refresh](./2026-04/202604210400_admin-frontend-apple-performance-refresh/) - Apple 风格重构登录页、主布局和仪表盘，并移除高成本装饰层以缓解卡顿
 - [202604210326_admin-frontend-composio-dashboard](./2026-04/202604210326_admin-frontend-composio-dashboard/) - 深色 Composio 风格管理端仪表盘、登录回跳与真实统计数据接入
 
