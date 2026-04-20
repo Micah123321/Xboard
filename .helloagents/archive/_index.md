@@ -7,16 +7,18 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202604210400 | admin-frontend-apple-performance-refresh | implementation | admin-frontend | admin-frontend-apple-performance-refresh#D001,#D002 | ✅完成 |
+| 202604210326 | admin-frontend-composio-dashboard | implementation | admin-frontend | admin-frontend-composio-dashboard#D001,#D002 | ✅完成 |
 | 202604180040 | optimize-docker-publish-workflow | - | - | - | ✅完成 |
 | 202604180029 | fix-clashmeta-flow-map-export | - | - | - | ✅完成 |
 | 202604161703 | create-git-merge-preserve-local-skill | - | - | - | ✅完成 |
 | 202604161655 | merge-upstream-preserve-local | - | - | - | ✅完成 |
-| {YYYYMMDDHHMM} | {feature} | {类型} | {模块列表} | {feature}#D001,#D002 | ✅完成 |
 
 ## 按月归档
 
-### YYYY-MM
-- [YYYYMMDDHHMM_feature](./YYYY-MM/YYYYMMDDHHMM_feature/) - 一句话功能描述
+### 2026-04
+- [202604210400_admin-frontend-apple-performance-refresh](./2026-04/202604210400_admin-frontend-apple-performance-refresh/) - Apple 风格重构登录页、主布局和仪表盘，并移除高成本装饰层以缓解卡顿
+- [202604210326_admin-frontend-composio-dashboard](./2026-04/202604210326_admin-frontend-composio-dashboard/) - 深色 Composio 风格管理端仪表盘、登录回跳与真实统计数据接入
 
 ## 结果状态说明
 - ✅ 完成

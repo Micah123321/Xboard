@@ -6,10 +6,11 @@ const routes: RouteRecordRaw[] = [
     path: '/login',
     name: 'Login',
     component: () => import('@/views/login/LoginView.vue'),
-    meta: { public: true },
+    meta: { public: true, title: '管理员登录', kicker: 'Xboard Admin' },
   },
   {
     path: '/',
+    name: 'AdminRoot',
     component: () => import('@/layouts/AdminLayout.vue'),
     children: [
       {
@@ -20,6 +21,7 @@ const routes: RouteRecordRaw[] = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/dashboard/DashboardView.vue'),
+        meta: { title: '仪表盘', kicker: 'Overview' },
       },
     ],
   },

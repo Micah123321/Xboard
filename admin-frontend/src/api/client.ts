@@ -2,6 +2,18 @@ import axios from 'axios'
 import type { ApiResponse } from '@/types/api'
 import { getApiBaseUrl, getSecurePath } from '@/utils/runtime'
 import { getToken, removeToken } from '@/utils/token'
+import { buildLoginHash, DEFAULT_AFTER_LOGIN, normalizeRedirectTarget } from '@/utils/navigation'
+
+function redirectToLogin(): void {
+  const currentTarget = normalizeRedirectTarget(
+    window.location.hash.replace(/^#/, ''),
+    DEFAULT_AFTER_LOGIN,
+  )
+
+  window.location.hash = currentTarget === DEFAULT_AFTER_LOGIN
+    ? '#/login'
+    : buildLoginHash(currentTarget)
+}
 
 function handleError(error: unknown): never {
   if (axios.isAxiosError(error)) {
@@ -10,7 +22,7 @@ function handleError(error: unknown): never {
 
     if (status === 401 || status === 403) {
       removeToken()
-      window.location.hash = '#/login'
+      redirectToLogin()
     }
 
     throw new Error(data?.message || error.message || '请求失败')

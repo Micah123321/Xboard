@@ -1,14 +1,46 @@
 @use 'element-plus/theme-chalk/src/mixins/config' as *;
 
 :root {
-  --xboard-primary: #409eff;
-  --xboard-sidebar-bg: #ffffff;
-  --xboard-header-bg: #ffffff;
+  --xboard-font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+    'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --xboard-font-mono: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  --xboard-bg: #f5f5f7;
+  --xboard-surface: #ffffff;
+  --xboard-surface-soft: #fbfbfd;
+  --xboard-surface-dark: #000000;
+  --xboard-text-strong: #1d1d1f;
+  --xboard-text-secondary: rgba(29, 29, 31, 0.8);
+  --xboard-text-muted: rgba(29, 29, 31, 0.56);
+  --xboard-text-on-dark: #ffffff;
+  --xboard-text-on-dark-muted: rgba(255, 255, 255, 0.72);
+  --xboard-primary: #0071e3;
+  --xboard-link: #0066cc;
+  --xboard-link-dark: #2997ff;
+  --xboard-border: rgba(0, 0, 0, 0.08);
+  --xboard-border-strong: rgba(0, 0, 0, 0.12);
+  --xboard-shadow: 0 6px 30px rgba(0, 0, 0, 0.08);
+  --xboard-success: #23863f;
+  --xboard-warning: #b05a00;
+  --xboard-danger: #c93428;
+  --el-color-primary: #0071e3;
+  --el-color-primary-light-3: #2997ff;
+  --el-color-primary-light-5: #4da1ff;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #f5f5f7;
+  --el-bg-color-overlay: #ffffff;
+  --el-border-color: rgba(0, 0, 0, 0.1);
+  --el-border-color-light: rgba(0, 0, 0, 0.08);
+  --el-border-color-lighter: rgba(0, 0, 0, 0.06);
+  --el-fill-color-blank: #ffffff;
+  --el-fill-color-light: rgba(0, 0, 0, 0.03);
+  --el-text-color-primary: #1d1d1f;
+  --el-text-color-regular: rgba(29, 29, 31, 0.8);
+  --el-text-color-secondary: rgba(29, 29, 31, 0.56);
+  --el-mask-color: rgba(255, 255, 255, 0.78);
 }
 
 html.dark {
-  --xboard-sidebar-bg: #1d1e1f;
-  --xboard-header-bg: #1d1e1f;
+  color-scheme: light;
 }
 
 * {
@@ -22,11 +54,99 @@ body,
 #app {
   width: 100%;
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    'Noto Sans', sans-serif;
+  font-family: var(--xboard-font-sans);
+  background: var(--xboard-bg);
+  color: var(--xboard-text-strong);
+}
+
+body {
+  overflow: hidden;
+}
+
+#app {
+  isolation: isolate;
 }
 
 a {
   text-decoration: none;
   color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.mono {
+  font-family: var(--xboard-font-mono);
+}
+
+.positive {
+  color: var(--xboard-success);
+}
+
+.negative {
+  color: var(--xboard-danger);
+}
+
+.neutral {
+  color: var(--xboard-text-secondary);
+}
+
+.el-card,
+.el-menu,
+.el-input__wrapper,
+.el-select__wrapper,
+.el-button,
+.el-alert {
+  border-radius: 12px;
+}
+
+.el-card {
+  background: #ffffff;
+  border-color: var(--xboard-border);
+  box-shadow: var(--xboard-shadow);
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08) inset !important;
+}
+
+.el-button--primary {
+  background: #0071e3;
+  border-color: #0071e3;
+  color: #ffffff;
+}
+
+.el-button.is-text {
+  color: var(--xboard-link);
+}
+
+.el-checkbox__label,
+.el-form-item__label {
+  color: var(--xboard-text-secondary) !important;
+}
+
+.el-breadcrumb__item:last-child .el-breadcrumb__inner,
+.el-alert__title {
+  color: var(--xboard-text-strong);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 999px;
 }

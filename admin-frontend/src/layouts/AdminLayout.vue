@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
@@ -8,22 +8,33 @@ import {
   SwitchButton,
   Fold,
   Expand,
-  Sunny,
-  Moon,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const app = useAppStore()
+const isMobile = ref(false)
 
-const sidebarWidth = computed(() => app.sidebarCollapsed ? '64px' : '220px')
+const sidebarWidth = computed(() => app.sidebarCollapsed ? '72px' : '220px')
+const currentTitle = computed(() => String(route.meta.title || '控制台'))
+const currentKicker = computed(() => String(route.meta.kicker || 'Xboard Admin'))
 
 const menuItems = [
   { index: '/dashboard', title: '仪表盘', icon: Odometer },
 ]
 
+function syncViewport() {
+  isMobile.value = window.innerWidth < 960
+  if (isMobile.value) {
+    app.sidebarCollapsed = true
+  }
+}
+
 function handleMenuSelect(index: string) {
+  if (isMobile.value) {
+    app.sidebarCollapsed = true
+  }
   router.push(index)
 }
 
@@ -31,20 +42,34 @@ function handleLogout() {
   auth.logout()
   router.push('/login')
 }
+
+onMounted(() => {
+  syncViewport()
+  window.addEventListener('resize', syncViewport)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', syncViewport)
+})
 </script>
 
 <template>
   <ElContainer class="admin-layout">
     <ElAside :width="sidebarWidth" class="admin-aside">
       <div class="aside-logo">
-        <h1 v-if="!app.sidebarCollapsed">Xboard</h1>
-        <span v-else>X</span>
+        <div class="aside-mark">X</div>
+        <div v-if="!app.sidebarCollapsed" class="aside-brand">
+          <p>Xboard</p>
+          <h1>{{ app.title }}</h1>
+        </div>
       </div>
+
       <ElMenu
         :default-active="route.path"
         :collapse="app.sidebarCollapsed"
         :collapse-transition="false"
         router
+        class="admin-menu"
         @select="handleMenuSelect"
       >
         <ElMenuItem
@@ -58,7 +83,7 @@ function handleLogout() {
       </ElMenu>
     </ElAside>
 
-    <ElContainer>
+    <ElContainer class="admin-stage">
       <ElHeader class="admin-header">
         <div class="header-left">
           <ElIcon
@@ -68,20 +93,19 @@ function handleLogout() {
             <Fold v-if="!app.sidebarCollapsed" />
             <Expand v-else />
           </ElIcon>
-          <ElBreadcrumb separator="/">
-            <ElBreadcrumbItem :to="{ path: '/dashboard' }">首页</ElBreadcrumbItem>
-            <ElBreadcrumbItem v-if="route.name !== 'Dashboard'">
-              {{ route.name }}
-            </ElBreadcrumbItem>
-          </ElBreadcrumb>
+
+          <div class="page-copy">
+            <p>{{ currentKicker }}</p>
+            <h2>{{ currentTitle }}</h2>
+          </div>
         </div>
 
         <div class="header-right">
-          <ElIcon class="theme-btn" @click="app.toggleTheme">
-            <Sunny v-if="app.isDark" />
-            <Moon v-else />
-          </ElIcon>
-          <ElButton text @click="handleLogout">
+          <div class="header-info">
+            <span class="header-info__label">secure_path</span>
+            <strong>/{{ app.securePath || 'admin' }}</strong>
+          </div>
+          <ElButton text class="logout-btn" @click="handleLogout">
             <ElIcon><SwitchButton /></ElIcon>
             退出
           </ElButton>
@@ -98,83 +122,179 @@ function handleLogout() {
 <style scoped>
 .admin-layout {
   height: 100vh;
+  background: #f5f5f7;
 }
 
 .admin-aside {
-  background: var(--el-bg-color);
-  border-right: 1px solid var(--el-border-color-light);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
   overflow: hidden;
   transition: width 0.3s;
+  padding: 18px 12px 12px;
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
 .aside-logo {
-  height: 56px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-bottom: 1px solid var(--el-border-color-light);
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--el-text-color-primary);
+  gap: 12px;
+  padding: 12px 8px 20px;
 }
 
-.aside-logo h1 {
+.aside-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #1d1d1f;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.aside-brand {
+  display: grid;
+  gap: 2px;
+}
+
+.aside-brand p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--xboard-text-muted);
+}
+
+.aside-brand h1 {
   margin: 0;
   font-size: 18px;
+  line-height: 1.1;
+  color: var(--xboard-text-strong);
+}
+
+.admin-menu {
+  flex: 1;
+  background: #ffffff;
+  border-right: 0;
+}
+
+.admin-menu :deep(.el-menu-item) {
+  margin-bottom: 8px;
+  border-radius: 12px;
+  color: var(--xboard-text-secondary);
+  height: 44px;
+}
+
+.admin-menu :deep(.el-menu-item.is-active) {
+  background: rgba(0, 113, 227, 0.08);
+  color: #0071e3;
+}
+
+.admin-stage {
+  background: #f5f5f7;
 }
 
 .admin-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--el-bg-color);
-  border-bottom: 1px solid var(--el-border-color-light);
-  padding: 0 20px;
-  height: 56px;
+  background: rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  backdrop-filter: saturate(180%) blur(20px);
+  padding: 0 24px;
+  height: 64px;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 18px;
 }
 
 .collapse-btn {
   font-size: 20px;
   cursor: pointer;
-  color: var(--el-text-color-regular);
+  color: var(--xboard-text-secondary);
 }
 
 .collapse-btn:hover {
-  color: var(--el-color-primary);
+  color: #0071e3;
+}
+
+.page-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.page-copy p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--xboard-text-muted);
+}
+
+.page-copy h2 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.1;
+  color: var(--xboard-text-strong);
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
-.theme-btn {
-  font-size: 18px;
-  cursor: pointer;
-  color: var(--el-text-color-regular);
+.header-info {
+  display: grid;
+  gap: 2px;
+  text-align: right;
 }
 
-.theme-btn:hover {
-  color: var(--el-color-primary);
+.header-info__label {
+  font-size: 12px;
+  color: var(--xboard-text-secondary);
+}
+
+.header-info strong {
+  font-size: 14px;
+  color: var(--xboard-text-strong);
+  font-weight: 600;
+}
+
+.logout-btn {
+  color: #0071e3;
 }
 
 .admin-main {
-  background: var(--el-bg-color-page);
+  background: #f5f5f7;
   overflow-y: auto;
+  padding: 24px;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 959px) {
   .admin-aside {
     position: fixed;
-    z-index: 100;
+    z-index: 30;
     height: 100vh;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  }
+
+  .admin-header {
+    padding: 0 18px;
+  }
+
+  .page-copy h2 {
+    font-size: 20px;
+  }
+
+  .header-info {
+    display: none;
+  }
+
+  .admin-main {
+    padding: 18px;
   }
 }
 </style>

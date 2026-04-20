@@ -7,13 +7,13 @@ export function getApiBaseUrl(): string {
 export function initSecurePath(): string {
   if (window.settings?.secure_path) {
     cachedSecurePath = window.settings.secure_path
-    return cachedSecurePath
+    return window.settings.secure_path
   }
 
   const envPath = import.meta.env.VITE_ADMIN_PATH
   if (envPath) {
     cachedSecurePath = envPath
-    return cachedSecurePath
+    return envPath
   }
 
   console.error('[Xboard] secure_path 未配置。请设置 window.settings.secure_path 或环境变量 VITE_ADMIN_PATH')
