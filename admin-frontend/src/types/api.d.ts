@@ -221,6 +221,69 @@ export interface AdminUserUpdatePayload {
   invite_user_email?: string | null
 }
 
+export interface AdminTicketMessage {
+  id: number
+  ticket_id: number
+  user_id: number
+  message: string
+  created_at: number
+  updated_at: number
+  is_from_user: boolean
+  is_from_admin: boolean
+}
+
+export interface AdminTicketListItem {
+  id: number
+  user_id: number
+  subject: string
+  level: string | number | null
+  status: number
+  reply_status: number | null
+  last_reply_user_id: number | null
+  created_at: number
+  updated_at: number
+  user: AdminUserListItem
+}
+
+export interface AdminTicketDetail extends AdminTicketListItem {
+  messages: AdminTicketMessage[]
+}
+
+export interface AdminTicketFetchParams {
+  current?: number
+  pageSize?: number
+  status?: number
+  reply_status?: number[]
+  email?: string
+  filter?: AdminUserFilter[]
+  sort?: AdminUserSort[]
+}
+
+export interface AdminTrafficLogItem {
+  id: number
+  user_id?: number
+  d: number
+  u: number
+  record_at: number
+  display_at: number
+  record_type: string | null
+  server_rate: number
+  server_id: number | null
+  server_type: string | null
+  server_name: string | null
+  node_name: string | null
+  node_key: string | null
+  device_name: string
+  device_ips: string[]
+  device_count: number
+  created_at: number | string | null
+  updated_at: number | string | null
+}
+
+export interface AdminTrafficLogResult extends AdminPaginationResult<AdminTrafficLogItem> {
+  summary: TrafficAmount
+}
+
 declare global {
   interface Window {
     settings?: {

@@ -232,18 +232,39 @@ class StatController extends Controller
     public function getStatUser(Request $request)
     {
         $request->validate([
-            'user_id' => 'required|integer'
+            'user_id' => 'required|integer',
+            'min_total' => 'nullable|integer|min:0',
+            'start_time' => 'nullable|integer|min:0',
+            'end_time' => 'nullable|integer|min:0',
         ]);
 
         $pageSize = $request->input('pageSize', 10);
         $userId = (int) $request->input('user_id');
-        $records = StatUser::query()
+        $minTotal = max(0, (int) $request->input('min_total', 0));
+        $startTime = $request->filled('start_time') ? (int) $request->input('start_time') : null;
+        $endTime = $request->filled('end_time') ? (int) $request->input('end_time') : null;
+
+        $baseQuery = StatUser::query()
             ->with(['server:id,name'])
             ->orderByDesc('updated_at')
             ->orderByDesc('created_at')
             ->orderByDesc('record_at')
             ->where('user_id', $userId)
-            ->paginate($pageSize);
+            ->when($startTime !== null, function ($query) use ($startTime) {
+                $query->where('updated_at', '>=', $startTime);
+            })
+            ->when($endTime !== null, function ($query) use ($endTime) {
+                $query->where('updated_at', '<=', $endTime);
+            })
+            ->when($minTotal > 0, function ($query) use ($minTotal) {
+                $query->whereRaw('(u + d) >= ?', [$minTotal]);
+            });
+
+        $summary = (clone $baseQuery)
+            ->selectRaw('COALESCE(SUM(u), 0) as upload, COALESCE(SUM(d), 0) as download, COALESCE(SUM(u + d), 0) as total')
+            ->first();
+
+        $records = $baseQuery->paginate($pageSize);
 
         $deviceMap = $this->buildNodeDeviceMap($userId);
         $data = collect($records->items())
@@ -266,6 +287,11 @@ class StatController extends Controller
         return [
             'data' => $data,
             'total' => $records->total(),
+            'summary' => [
+                'upload' => (int) ($summary->upload ?? 0),
+                'download' => (int) ($summary->download ?? 0),
+                'total' => (int) ($summary->total ?? 0),
+            ],
         ];
     }
 

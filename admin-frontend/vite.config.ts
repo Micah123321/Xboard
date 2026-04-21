@@ -1,11 +1,18 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { fileURLToPath, URL } from 'node:url'
 
-export default defineConfig({
+const backendTarget = 'https://jc-kzmb.ikuncdn.com'
+const uploadTarget = 'https://pic.535888.xyz'
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const uploadAuthToken = env.DEV_UPLOAD_AUTH_TOKEN || ''
+
+  return {
   base: '/assets/admin/',
   resolve: {
     alias: {
@@ -28,8 +35,18 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'https://jc-kzmb.ikuncdn.com',
+        target: backendTarget,
         changeOrigin: true,
+      },
+      '/upload': {
+        target: uploadTarget,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/upload/, ''),
+        headers: uploadAuthToken
+          ? {
+              Authorization: uploadAuthToken,
+            }
+          : undefined,
       },
     },
   },
@@ -37,4 +54,5 @@ export default defineConfig({
     outDir: '../public/assets/admin',
     emptyOutDir: true,
   },
+  }
 })

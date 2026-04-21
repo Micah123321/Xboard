@@ -2,6 +2,10 @@ import { adminClient } from './client'
 import type {
   AdminPaginationResult,
   AdminPlanOption,
+  AdminTicketDetail,
+  AdminTicketFetchParams,
+  AdminTicketListItem,
+  AdminTrafficLogResult,
   AdminUserFetchParams,
   AdminUserGeneratePayload,
   AdminUserListItem,
@@ -113,4 +117,44 @@ export function resetUserSecret(id: number): Promise<ApiResponse<boolean>> {
 
 export function deleteUser(id: number): Promise<ApiResponse<boolean>> {
   return unwrapPost<boolean>('/user/destroy', { id })
+}
+
+export function fetchTickets(params: AdminTicketFetchParams): Promise<AdminPaginationResult<AdminTicketListItem>> {
+  return adminClient
+    .get<AdminPaginationResult<AdminTicketListItem>>('/ticket/fetch', { params })
+    .then((res) => res.data)
+}
+
+export function getTicketById(id: number): Promise<ApiResponse<AdminTicketDetail>> {
+  return unwrap<AdminTicketDetail>('/ticket/fetch', { id })
+}
+
+export function replyTicket(id: number, message: string): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/ticket/reply', { id, message })
+}
+
+export function closeTicket(id: number): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/ticket/close', { id })
+}
+
+export function fetchUserTrafficLogs(params: {
+  userId: number
+  pageSize?: number
+  page?: number
+  minTotal?: number
+  startTime?: number
+  endTime?: number
+}): Promise<AdminTrafficLogResult> {
+  return adminClient
+    .get<AdminTrafficLogResult>('/stat/getStatUser', {
+      params: {
+        user_id: params.userId,
+        pageSize: params.pageSize,
+        page: params.page,
+        min_total: params.minTotal,
+        start_time: params.startTime,
+        end_time: params.endTime,
+      },
+    })
+    .then((res) => res.data)
 }
