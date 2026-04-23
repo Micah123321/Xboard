@@ -29,11 +29,11 @@ docker compose run -it --rm \
     -e ENABLE_SQLITE=true \
     -e ENABLE_REDIS=true \
     -e ADMIN_ACCOUNT=admin@demo.com \
-    web php artisan xboard:install
+    xboard php artisan xboard:install
 ```
 - 自定义配置安装（高级用户）
 ```bash
-docker compose run -it --rm web php artisan xboard:install
+docker compose run -it --rm xboard php artisan xboard:install
 ```
 > 请保存安装完成后显示的管理后台地址、用户名和密码
 
@@ -52,9 +52,7 @@ docker compose up -d
 > - 如果是最近安装（新版本），使用：
 ```bash
 cd Xboard
-docker compose pull && \
-docker compose run -it --rm web php artisan xboard:update && \
-docker compose up -d
+docker compose pull && docker compose up -d
 ```
 > - 如果是较早安装（旧版本），请把 `web` 替换为 `xboard`：
 ```bash

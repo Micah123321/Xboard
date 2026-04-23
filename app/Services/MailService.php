@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\SendEmailJob;
 use App\Models\MailLog;
+use App\Models\MailTemplate;
 use App\Models\User;
 use App\Utils\CacheKey;
 use Illuminate\Support\Facades\Cache;

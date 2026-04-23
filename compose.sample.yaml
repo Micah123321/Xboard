@@ -1,3 +1,13 @@
+# Default deployment: bridge network with port 7001 published to the host.
+# Suitable for: bare docker-compose, aaPanel + Docker manager, custom reverse
+# proxies (nginx, Caddy on host, Cloudflare Tunnel, etc.) that talk to
+# 127.0.0.1:7001 on the host.
+#
+# For 1Panel users: use compose.1panel.sample.yaml so the container can reach
+# the 1Panel-managed MySQL/Redis on the 1panel-network.
+#
+# For aaPanel native (openresty on host) users that prefer host networking:
+# use compose.host.sample.yaml.
 services:
   web:
     build:
@@ -50,6 +60,8 @@ services:
     image: redis:7-alpine
     command: redis-server --unixsocket /data/redis.sock --unixsocketperm 777 --save 900 1 --save 300 10 --save 60 10000
     restart: unless-stopped
+    ports:
+      - "7001:7001"
     volumes:
       - ./.docker/.data/redis:/data
     sysctls:
