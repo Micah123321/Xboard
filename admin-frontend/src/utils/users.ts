@@ -32,6 +32,7 @@ export type UserAdvancedFieldKey =
   | 'email'
   | 'id'
   | 'plan_id'
+  | 'activity_status'
   | 'transfer_enable'
   | 'total_used'
   | 'online_count'
@@ -52,7 +53,7 @@ export type UserAdvancedOperator =
   | 'null'
   | 'notnull'
 
-export type UserAdvancedInputKind = 'text' | 'number' | 'plan' | 'status' | 'date'
+export type UserAdvancedInputKind = 'text' | 'number' | 'plan' | 'status' | 'activity' | 'date'
 
 export interface UserAdvancedFilterItem {
   key: string
@@ -75,6 +76,11 @@ export interface UserAdvancedFieldDefinition {
 export const USER_STATUS_VALUE_OPTIONS = [
   { label: '正常', value: 0 },
   { label: '封禁', value: 1 },
+] as const
+
+export const USER_ACTIVITY_STATUS_OPTIONS = [
+  { label: '活跃', value: 1 },
+  { label: '非活跃', value: 0 },
 ] as const
 
 export const USER_ADVANCED_FIELD_DEFINITIONS: UserAdvancedFieldDefinition[] = [
@@ -112,6 +118,12 @@ export const USER_ADVANCED_FIELD_DEFINITIONS: UserAdvancedFieldDefinition[] = [
       { value: 'null', label: '未订阅' },
       { value: 'notnull', label: '已订阅' },
     ],
+  },
+  {
+    field: 'activity_status',
+    label: '活跃状态',
+    input: 'activity',
+    operators: [{ value: 'eq', label: '是' }],
   },
   {
     field: 'transfer_enable',
@@ -303,7 +315,7 @@ function normalizeAdvancedFilterValue(item: UserAdvancedFilterItem): string | nu
     return timestamp ? `${item.operator}:${timestamp}` : null
   }
 
-  if (item.field === 'id' || item.field === 'plan_id' || item.field === 'online_count' || item.field === 'banned') {
+  if (item.field === 'id' || item.field === 'plan_id' || item.field === 'activity_status' || item.field === 'online_count' || item.field === 'banned') {
     const numeric = Number(item.value)
     return Number.isFinite(numeric) ? `${item.operator}:${numeric}` : null
   }
@@ -329,6 +341,10 @@ function formatAdvancedFilterValue(item: UserAdvancedFilterItem, plans: AdminPla
 
   if (item.field === 'banned') {
     return Number(item.value) === 1 ? '封禁' : '正常'
+  }
+
+  if (item.field === 'activity_status') {
+    return Number(item.value) === 1 ? '活跃' : '非活跃'
   }
 
   if (item.field === 'transfer_enable' || item.field === 'total_used') {

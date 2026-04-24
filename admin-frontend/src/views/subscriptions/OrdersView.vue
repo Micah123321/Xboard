@@ -100,6 +100,34 @@ const scopedUserFilters = computed(() => (
     : []
 ))
 
+const dashboardWorkbench = computed<CommissionWorkbenchMode | null>(() => {
+  const raw = route.query.workbench
+  const value = Array.isArray(raw) ? raw[0] : raw
+  if (value === 'pending' || value === 'commission') {
+    return value
+  }
+
+  return null
+})
+
+const dashboardEntryNotice = computed(() => {
+  const raw = route.query.source
+  const source = Array.isArray(raw) ? raw[0] : raw
+  if (source !== 'dashboard') {
+    return ''
+  }
+
+  if (dashboardWorkbench.value === 'pending') {
+    return '已从仪表盘进入，当前默认展示真实待确认佣金订单。'
+  }
+
+  if (dashboardWorkbench.value === 'commission') {
+    return '已从仪表盘进入，当前默认展示全部佣金订单。'
+  }
+
+  return '已从仪表盘进入订单工作台。'
+})
+
 const scopedUserNotice = computed(() => (
   scopedUserId.value
     ? `当前仅展示 ${scopedUserEmail.value || `用户 #${scopedUserId.value}`} 的订单。`
@@ -118,6 +146,10 @@ const commissionWorkbenchLabel = computed(() => {
 })
 
 const commissionWorkbenchNotice = computed(() => {
+  if (dashboardEntryNotice.value) {
+    return ''
+  }
+
   if (commissionWorkbench.value === 'pending') {
     return '当前仅展示真实待确认佣金订单，可在操作列直接确认。'
   }
@@ -218,6 +250,35 @@ function handleCommissionWorkbench(command: string) {
   }
 
   refreshOrders(true)
+}
+
+function syncDashboardWorkbench() {
+  if (dashboardWorkbench.value === 'pending') {
+    commissionWorkbench.value = 'pending'
+    commissionFilter.value = 0
+    return
+  }
+
+  if (dashboardWorkbench.value === 'commission') {
+    commissionWorkbench.value = 'commission'
+    commissionFilter.value = 'all'
+    return
+  }
+
+  if (route.query.workbench !== undefined) {
+    commissionWorkbench.value = 'all'
+    commissionFilter.value = 'all'
+  }
+}
+
+function clearDashboardEntry() {
+  const nextQuery = { ...route.query }
+  delete nextQuery.source
+  delete nextQuery.workbench
+  void router.replace({
+    name: 'SubscriptionOrders',
+    query: nextQuery,
+  })
 }
 
 function clearFilters() {
@@ -397,13 +458,15 @@ watch([current, pageSize], () => {
 })
 
 watch(
-  () => [route.query.user_id, route.query.user_email],
+  () => [route.query.user_id, route.query.user_email, route.query.workbench],
   () => {
+    syncDashboardWorkbench()
     refreshOrders(true)
   },
 )
 
 onMounted(() => {
+  syncDashboardWorkbench()
   void Promise.all([loadPlans(), loadOrders()]).catch(() => {
     ElMessage.error('订单管理页面初始化失败')
   })
@@ -552,6 +615,19 @@ onMounted(() => {
       >
         <template #default>
           <ElButton size="small" @click="refreshOrders(false)">重新加载</ElButton>
+        </template>
+      </ElAlert>
+
+      <ElAlert
+        v-if="!errorMessage && dashboardEntryNotice"
+        class="orders-alert orders-alert--info"
+        type="info"
+        :closable="false"
+        show-icon
+        :title="dashboardEntryNotice"
+      >
+        <template #default>
+          <ElButton size="small" @click="clearDashboardEntry">关闭提示</ElButton>
         </template>
       </ElAlert>
 

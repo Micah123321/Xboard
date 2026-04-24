@@ -70,6 +70,14 @@ class UserController extends Controller
     // Build one filter query condition.
     private function buildFilterQuery(Builder|QueryBuilder $query, string $field, mixed $value): void
     {
+        if ($field === 'activity_status') {
+            $activityStatus = $this->resolveActivityStatusValue($value);
+            if ($activityStatus !== null) {
+                $this->applyActivityStatusFilter($query, $activityStatus);
+            }
+            return;
+        }
+
         // 处理关联查询
         if (str_contains($field, '.')) {
             if (!method_exists($query, 'whereHas')) {
@@ -117,6 +125,60 @@ class UserController extends Controller
         };
 
         $this->applyQueryCondition($query, $queryField, $operator, $filterValue);
+    }
+
+    private function resolveActivityStatusValue(mixed $value): ?bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            $numericValue = (int) $value;
+            return match ($numericValue) {
+                1 => true,
+                0 => false,
+                default => null,
+            };
+        }
+
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $normalized = trim($value);
+        if (str_contains($normalized, ':')) {
+            [$operator, $normalized] = explode(':', $normalized, 2);
+            if (strtolower($operator) !== 'eq') {
+                return null;
+            }
+        }
+
+        return match (strtolower(trim($normalized))) {
+            '1', 'true', 'active', 'yes' => true,
+            '0', 'false', 'inactive', 'no' => false,
+            default => null,
+        };
+    }
+
+    private function applyActivityStatusFilter(Builder|QueryBuilder $query, bool $active): void
+    {
+        $threshold = now()->subMonths(6);
+
+        if ($active) {
+            $query->whereNotNull('plan_id')
+                ->whereRaw('COALESCE(transfer_enable, 0) > COALESCE(u, 0) + COALESCE(d, 0)')
+                ->whereNotNull('last_online_at')
+                ->where('last_online_at', '>=', $threshold);
+            return;
+        }
+
+        $query->where(function ($activityQuery) use ($threshold) {
+            $activityQuery->whereNull('plan_id')
+                ->orWhereRaw('COALESCE(transfer_enable, 0) <= COALESCE(u, 0) + COALESCE(d, 0)')
+                ->orWhereNull('last_online_at')
+                ->orWhere('last_online_at', '<', $threshold);
+        });
     }
 
     // Apply sorting rules to the query builder.

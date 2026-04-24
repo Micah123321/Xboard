@@ -1,6 +1,7 @@
 import type { AdminNodeItem } from '@/types/api'
 
 export type NodeRelationFilter = 'all' | 'parent' | 'child'
+export type NodeStatusFilter = 'all' | 'online' | 'offline'
 
 export interface NodeStatusMeta {
   label: string
@@ -119,11 +120,13 @@ export function filterNodes(
   keyword: string,
   typeFilter: string,
   groupFilter: string,
+  statusFilter: NodeStatusFilter = 'all',
   relationFilter: NodeRelationFilter = 'all',
 ): AdminNodeItem[] {
   const normalizedKeyword = normalizeText(keyword)
   const normalizedType = normalizeText(typeFilter)
   const normalizedGroup = normalizeText(groupFilter)
+  const normalizedStatus = normalizeText(statusFilter)
   const normalizedRelation = normalizeText(relationFilter)
 
   return nodes.filter((node) => {
@@ -140,6 +143,15 @@ export function filterNodes(
       if (!belongsToGroup) {
         return false
       }
+    }
+
+    const nodeStatus = getNodeStatusMeta(node).dotClass
+    if (normalizedStatus === 'online' && nodeStatus !== 'online') {
+      return false
+    }
+
+    if (normalizedStatus === 'offline' && nodeStatus !== 'offline') {
+      return false
     }
 
     if (normalizedRelation === 'parent' && node.parent_id) {

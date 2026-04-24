@@ -2,6 +2,7 @@ import type {
   AdminOrderDetail,
   AdminOrderFilter,
   AdminOrderListItem,
+  AdminOrderPaymentRef,
   AdminPlanListItem,
 } from '@/types/api'
 import { formatPlanPrice } from './plans'
@@ -111,6 +112,15 @@ export const ORDER_PERIOD_OPTIONS: Array<OrderFilterOption<OrderPeriodKey>> = PE
 function toAmount(value: unknown): number {
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric : 0
+}
+
+function toDisplayText(value: unknown): string | null {
+  if (!['string', 'number'].includes(typeof value)) {
+    return null
+  }
+
+  const text = String(value).trim()
+  return text ? text : null
 }
 
 function toTimestampMilliseconds(value: number | string | null | undefined): number | null {
@@ -254,6 +264,29 @@ export function getCommissionStatusMeta(
 
 export function getOrderPeriodLabel(period: string | null | undefined): string {
   return findPeriodMeta(period)?.label ?? (period || '-')
+}
+
+type OrderPaymentDisplayTarget = {
+  payment_channel?: string | null
+  payment_method?: string | null
+  payment?: AdminOrderPaymentRef | null
+}
+
+export function getOrderPaymentChannel(order?: OrderPaymentDisplayTarget | null): string {
+  return (
+    toDisplayText(order?.payment_channel)
+    ?? toDisplayText(order?.payment?.name)
+    ?? toDisplayText(order?.payment?.payment)
+    ?? '-'
+  )
+}
+
+export function getOrderPaymentMethod(order?: OrderPaymentDisplayTarget | null): string {
+  return (
+    toDisplayText(order?.payment_method)
+    ?? toDisplayText(order?.payment?.payment)
+    ?? '-'
+  )
 }
 
 export function getOrderFilterLabel(type: OrderFilterValue<number>): string {

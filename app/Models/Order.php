@@ -13,10 +13,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $user_id
  * @property int $plan_id
  * @property int|null $payment_id
+ * @property string|null $payment_channel
+ * @property string|null $payment_method
  * @property string $period
  * @property string $trade_no
  * @property int $total_amount
  * @property int|null $handling_amount
+ * @property int|null $payment_amount
  * @property int|null $balance_amount
  * @property int|null $refund_amount
  * @property int|null $surplus_amount
@@ -35,6 +38,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $discount_amount
  * @property int|null $paid_at
  * @property string|null $callback_no
+ * @property string|null $payment_ip
  *
  * @property-read Plan $plan
  * @property-read Payment|null $payment
@@ -50,7 +54,8 @@ class Order extends Model
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
         'surplus_order_ids' => 'array',
-        'handling_amount' => 'integer'
+        'handling_amount' => 'integer',
+        'payment_amount' => 'integer',
     ];
 
     const STATUS_PENDING = 0; // 待支付

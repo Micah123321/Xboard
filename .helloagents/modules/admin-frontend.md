@@ -16,6 +16,7 @@
 - 登录成功后优先跳转 `redirect` 指定路由，否则回到 `/dashboard`
 - 受保护路由在未登录时会自动附加 `redirect` 查询参数
 - API 基础路径使用 `/api/v2/{secure_path}`，其中 `secure_path` 来自运行时配置
+- 工单工作台现允许对已关闭工单继续回复；管理员发送新消息后会提示“发送并重开”，并通过统一后端语义把工单状态重新开启
 - 仪表盘以真实后端接口返回值为准，不在前端伪造业务统计
 - 仪表盘“收入趋势”支持在同一张趋势图中切换“按金额 / 按数量”，数量模式同步切换摘要卡片、Y 轴标签与最近记录
 - 仪表盘“作业详情”支持打开失败作业报错弹窗，集中查看 Horizon 失败作业的报错摘要、失败时间与队列信息
@@ -24,9 +25,11 @@
 - `stat/getTrafficRank` 在 `24h` 口径下会按“昨天同日”统计做涨跌对比，避免日统计表因 `record_at=00:00` 被秒级窗口错位后全部回落为 `0%`
 - 排行项 hover 时会显示“当前流量 / 上期流量 / 变化率”详情卡；当前流量值固定右侧展示，避免长节点名挤压后不易识别
 - 仪表盘 Hero 区提供“刷新全部数据”入口，统一触发总览、趋势、排行和系统状态刷新，并在页面内展示最近一次刷新时间
+- 仪表盘指标卡中的“待处理工单 / 待处理佣金 / 总用户”现已支持快捷跳转；可点击卡片会显示明确的入口提示，并保留 hover / focus-visible 反馈
+- 工单页与订单页可读取 dashboard 来源查询参数：工单页支持 `focus=opening|closed|all`，订单页支持 `workbench=pending|commission`，并会显示低干扰入口提示
 - 用户管理页通过真实后端 `user/fetch`、`user/update`、`user/generate`、`user/dumpCSV`、`user/sendMail`、`user/ban`、`user/resetSecret`、`user/destroy` 与 `plan/fetch` 完成数据读写
 - 新增用户时采用“先 generate，后按邮箱回查并 update”的两段式流程，以兼容后端基础创建接口
-- 用户管理页现已补齐高级筛选弹窗，支持按邮箱、用户 ID、订阅、流量、已用流量、在线设备、到期时间、UUID、Token、账号状态和备注组合筛选
+- 用户管理页现已补齐高级筛选弹窗，支持按邮箱、用户 ID、订阅、活跃状态、流量、已用流量、在线设备、到期时间、UUID、Token、账号状态和备注组合筛选；其中“活跃状态”按“有任意订阅 + 剩余流量大于 0 + 最后在线时间在半年内”为活跃规则
 - 用户管理页新增勾选 + 批量操作工作流，支持“发送邮件 / 导出 CSV / 批量封禁 / 恢复正常”，作用范围按“已勾选用户 > 当前筛选结果 > 全部用户”自动判定
 - 批量恢复正常沿用 `user/ban` 现有接口，通过 `banned=0|1` 兼容，不额外引入重复路由
 - 用户管理页的“更多操作”菜单现已补齐 `分配订单 / TA的订单 / TA的邀请 / TA的流量记录 / 重置流量`；其中订单分配复用现有抽屉，用户订单跳转到订单页并自动按 `user_id` 过滤，邀请结果在当前用户页复用 `invite_user_id` 筛选视图
@@ -34,7 +37,7 @@
 - 节点管理页通过真实后端 `server/manage/getNodes`、`server/group/fetch` 与 `server/route/fetch` 获取列表 / 关联数据，并通过 `server/manage/save`、`server/manage/sort`、`server/manage/update`、`server/manage/batchUpdate`、`server/manage/copy`、`server/manage/drop` 完成新增、编辑、排序、批量修改与行级操作
 - 节点新增 / 编辑采用统一中央大弹窗，支持 `Shadowsocks / VMess / Trojan / Hysteria / VLess / TUIC / SOCKS / Naive / HTTP / Mieru / AnyTLS` 11 种协议的首版动态配置表单
 - 节点排序采用本地草稿 + 上移 / 下移模式，保存时向 `server/manage/sort` 提交 `{ id, order }[]` 顺序 payload
-- 节点列表现支持本地分页、父/子节点筛选，以及跨分页稳定勾选；批量修改仅作用于已勾选节点，可统一更新 `host / group_ids / rate`
+- 节点列表现支持本地分页、在线 / 离线筛选、父/子节点筛选，以及跨分页稳定勾选；批量修改 / 批量删除仅作用于已勾选节点，其中批量修改可统一更新 `host / group_ids / rate`
 - 节点行级菜单现已补齐“置顶节点”，会复用当前排序结果生成新的顺序 payload 并提交到 `server/manage/sort`
 - 权限组管理页使用真实后端 `server/group/fetch`、`server/group/save` 与 `server/group/drop`，支持关键字搜索、新增/编辑中央弹窗、删除确认，以及从节点数量列跳转到 `#/nodes?group={id}` 的筛选联动
 - 路由管理页使用真实后端 `server/route/fetch`、`server/route/save` 与 `server/route/drop`，支持路由列表、关键词搜索、新增/编辑中央弹窗、删除与动作值展示
@@ -46,6 +49,7 @@
 - 套餐管理页渲染 `ElSwitch` 前，会先把 `show / sell / renew` 归一化成布尔值；开关事件若新旧值相同则直接短路，避免初始化阶段误写后台状态
 - 套餐说明编辑采用轻量 Markdown/HTML 编辑器与预览模式，不引入额外富文本依赖
 - 订单管理页使用真实后端 `order/fetch`、`order/detail`、`order/assign`、`order/paid`、`order/cancel` 与 `order/update`，支持订单列表、类型/周期/状态筛选、详情抽屉、手动分配、人工标记已支付与佣金状态维护
+- 订单详情抽屉会优先展示支付成功快照（支付渠道 / 支付方法 / 平台订单号 / 商户订单号 / 实付金额 / 支付 IP）；旧订单缺字段时回退当前 `payment` 关联或以 `-` 占位
 - 订单金额、佣金金额与相关拆解字段以“分”为后端真相源，前端统一在 `src/utils/orders.ts` 中格式化为“元”展示，避免后台金额口径混乱
 - 订单管理页的佣金状态不再单看 `commission_status` 默认值；无真实佣金的订单统一显示“无佣金”，只有真实佣金订单才会参与“待确认 / 发放中 / 已发放 / 无效”状态流转
 - 订单页新增“确认佣金”工具栏菜单，佣金状态筛选会自动透传 `is_commission=true`，确保“真实待确认订单”不会混入无佣金记录；行级操作列可直接把真实待确认订单手动确认到“发放中”
@@ -88,5 +92,6 @@
 - 依赖 `src/utils/notices.ts` 负责公告表单转换、内容摘要、排序与显示字段归一化
 - 依赖 `src/utils/systemConfig.ts` 负责系统配置字段元信息、默认值、回填与保存序列化
 - 依赖 `src/utils/routes.ts` 负责路由动作映射、匹配规则序列化、节点引用摘要与搜索过滤
+- 依赖 Laravel 后端 `TicketService::reply()` 提供工单“再次回复自动重开”的统一业务语义
 - 依赖 Laravel 注入的 `window.settings`
 - 构建输出到 `public/assets/admin`

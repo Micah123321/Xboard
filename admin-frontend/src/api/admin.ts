@@ -514,6 +514,10 @@ export function batchUpdateNodes(payload: AdminNodeBatchUpdatePayload): Promise<
   return unwrapPost<boolean>('/server/manage/batchUpdate', payload as unknown as Record<string, unknown>)
 }
 
+export function batchDeleteNodes(ids: number[]): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/server/manage/batchDelete', { ids })
+}
+
 export function saveNode(payload: AdminNodeSavePayload): Promise<ApiResponse<boolean>> {
   return unwrapPost<boolean>('/server/manage/save', payload as unknown as Record<string, unknown>)
 }

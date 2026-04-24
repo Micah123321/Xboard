@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import type { AdminPlanOption } from '@/types/api'
 import {
+  USER_ACTIVITY_STATUS_OPTIONS,
   cloneUserAdvancedFilters,
   createEmptyUserAdvancedFilter,
   getUserAdvancedFieldDefinition,
@@ -212,6 +213,19 @@ watch(() => props.visible, (visible) => {
             >
               <ElOption
                 v-for="option in USER_STATUS_VALUE_OPTIONS"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
+            </ElSelect>
+
+            <ElSelect
+              v-else-if="getDefinition(filter.field).input === 'activity'"
+              v-model="filter.value"
+              placeholder="选择活跃状态"
+            >
+              <ElOption
+                v-for="option in USER_ACTIVITY_STATUS_OPTIONS"
                 :key="option.value"
                 :label="option.label"
                 :value="option.value"

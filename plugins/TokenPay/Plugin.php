@@ -10,6 +10,9 @@ use Curl\Curl;
 class Plugin extends AbstractPlugin implements PaymentInterface
 {
     private const FIXED_RETURN_URL = 'https://www.spkun.com/dashboard/finance/orders';
+    private const PAYMENT_AMOUNT_KEYS = ['ActualAmount', 'PayAmount', 'Amount', 'Money', 'OrderMoney'];
+    private const PAYMENT_METHOD_KEYS = ['PayTypeName', 'PayType', 'Method', 'Channel', 'Currency'];
+    private const PAYMENT_IP_KEYS = ['PayIp', 'PayIP', 'IP', 'Ip', 'ClientIp', 'ClientIP'];
 
     public function boot(): void
     {
@@ -117,7 +120,31 @@ class Plugin extends AbstractPlugin implements PaymentInterface
         return [
             'trade_no' => $params['OutOrderId'] ?? '',
             'callback_no' => $params['Id'] ?? '',
+            'payment_channel' => $this->getConfig('display_name', 'TokenPay'),
+            'payment_method' => $this->firstFilledValue($params, self::PAYMENT_METHOD_KEYS) ?? $this->getConfig('token_pay_currency'),
+            'payment_amount' => $this->firstFilledValue($params, self::PAYMENT_AMOUNT_KEYS),
+            'payment_ip' => $this->firstFilledValue($params, self::PAYMENT_IP_KEYS),
             'custom_result' => 'ok'
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     * @param array<int, string> $keys
+     */
+    private function firstFilledValue(array $params, array $keys): string|null
+    {
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $params) || !is_scalar($params[$key])) {
+                continue;
+            }
+
+            $value = trim((string) $params[$key]);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 }

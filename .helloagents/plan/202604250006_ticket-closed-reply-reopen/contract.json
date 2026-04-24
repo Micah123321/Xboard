@@ -1,0 +1,43 @@
+{
+  "updatedAt": "2026-04-24T16:06:00.000Z",
+  "version": 1,
+  "source": "R2",
+  "originCommand": "design",
+  "verifyMode": "review-first",
+  "reviewerFocus": [
+    "工单再次回复后的 reopen 语义是否统一落在 TicketService，不再依赖单端特判",
+    "管理端关闭态发送交互是否放开且未破坏现有 Apple 风格工单工作台结构",
+    "用户端是否通过既有 /user/ticket/reply 链路打通，而非引入新的接口分叉"
+  ],
+  "testerFocus": [
+    "用户侧 closed ticket reply 后是否会自动变回开启状态",
+    "管理端 TicketWorkspaceDialog 在 closed ticket 下是否可发送并刷新状态",
+    "admin-frontend 构建与后端目标测试是否通过"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "proposal.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": false,
+      "reason": "本轮以行为修复为主，未进行大规模视觉改版；代码级自检即可。",
+      "screens": [],
+      "states": []
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "updatedAt": "2026-04-24T16:15:00.000Z",
+  "version": 1,
+  "source": "R2",
+  "originCommand": "design",
+  "verifyMode": "test-first",
+  "reviewerFocus": [],
+  "testerFocus": [
+    "节点页状态筛选是否支持全部节点、在线节点、离线节点三种口径",
+    "离线筛选是否仅包含显式 offline 节点，不混入待同步或已停用节点",
+    "批量删除是否真实调用 /server/manage/batchDelete，并在成功后清空勾选与刷新列表",
+    "admin-frontend 执行 npm run build 应通过"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "plan.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": false,
+      "reason": "",
+      "screens": [
+        "#/nodes toolbar filters",
+        "#/nodes selection summary"
+      ],
+      "states": [
+        "status filter online/offline",
+        "selected nodes batch delete action"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

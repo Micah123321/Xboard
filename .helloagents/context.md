@@ -15,6 +15,7 @@
 - GHCR 前端镜像发布工作流位于 `.github/workflows/admin-frontend-docker-publish.yml`，镜像名为 `ghcr.io/<owner>/xboard-admin-frontend`
 - 管理端 API 通过 `window.settings.secure_path` 或 `VITE_ADMIN_PATH` 解析 `/api/v2/{secure_path}` 前缀
 - 登录接口复用 `/api/v2/passport/auth/login`
+- 工单回复链路当前以 `TicketService::reply()` 为统一真相源：管理员或用户再次回复已关闭工单时都会自动把工单状态改回开启，同时继续维护 `reply_status` 与 `last_reply_user_id`
 - 管理端仪表盘现已接入:
   - `stat/getStats`
   - `stat/getOrder`
@@ -88,8 +89,10 @@
   - `payment/show`
   - `payment/drop`
   - `payment/sort`
+- 订单支付成功后会额外快照保存 `payment_channel / payment_method / payment_amount / payment_ip`，管理端订单详情优先展示真实支付成功信息，再回退当前支付配置
 - 客户端订阅导出入口位于 `app/Http/Controllers/V1/Client/ClientController.php`，会根据 `flag` / `User-Agent` 匹配 `app/Protocols/*` 导出器
 - `Stash` 订阅导出位于 `app/Protocols/Stash.php`，当前对 `AnyTLS` 采用保守兼容：仅客户端版本 `>= 3.3.0` 时导出
+- 用户主题源代码当前不在仓内，仅保留 `theme/Xboard/assets/umi.js` 编译产物；涉及用户侧工单交互时，优先通过后端语义修复保证前后台一致
 
 ## 项目概述
 
@@ -103,7 +106,7 @@
 
 - 管理端路由使用 Hash 模式
 - 管理端当前业务路由包含 `/dashboard`、`/users`、`/tickets`、`/nodes`、`/node-groups`、`/node-routes`、`/subscriptions/plans`、`/subscriptions/orders`、`/subscriptions/coupons`、`/subscriptions/gift-cards`、`/system/config`、`/system/notices`、`/system/payments`、`/system/plugins`、`/system/themes` 与 `/system/knowledge`
-- `#/nodes` 当前已升级为真实节点工作台：支持搜索、父/子节点筛选、分页浏览、显隐切换、复制、单节点置顶、仅对已勾选节点生效的批量修改，以及 11 种协议的新增 / 编辑弹窗和排序对话框
+- `#/nodes` 当前已升级为真实节点工作台：支持搜索、在线 / 离线筛选、父/子节点筛选、分页浏览、显隐切换、复制、单节点置顶、仅对已勾选节点生效的批量修改 / 批量删除，以及 11 种协议的新增 / 编辑弹窗和排序对话框
 - Bearer Token 存储于 `sessionStorage/localStorage`
 - `admin-frontend` 的视觉方向当前以 Apple 风格为基线，优先纯色分区、系统字体栈和低装饰成本
 

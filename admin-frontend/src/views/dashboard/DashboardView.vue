@@ -2,6 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { Component } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
+import type { LocationQueryRaw } from 'vue-router'
 import {
   Coin,
   DataAnalysis,
@@ -9,6 +11,7 @@ import {
   Download,
   RefreshRight,
   Tickets,
+  TopRight,
   Upload,
   User,
   UserFilled,
@@ -53,9 +56,15 @@ interface MetricCard {
   change?: string
   tone: 'dark' | 'light' | 'soft'
   icon: Component
+  action?: {
+    routeName: 'Tickets' | 'SubscriptionOrders' | 'Users'
+    query?: LocationQueryRaw
+    helperText: string
+  }
 }
 
 const app = useAppStore()
+const router = useRouter()
 const booting = ref(true)
 const trendLoading = ref(false)
 const rankLoading = ref(false)
@@ -151,6 +160,14 @@ const metricCards = computed<MetricCard[]>(() => [
     detail: '待客服跟进',
     tone: 'soft',
     icon: Tickets,
+    action: {
+      routeName: 'Tickets',
+      query: {
+        source: 'dashboard',
+        focus: 'opening',
+      },
+      helperText: '进入工单台',
+    },
   },
   {
     key: 'commissionPendingTotal',
@@ -160,6 +177,14 @@ const metricCards = computed<MetricCard[]>(() => [
     change: formatPercent(dashboardStats.value.commissionGrowth),
     tone: 'soft',
     icon: Discount,
+    action: {
+      routeName: 'SubscriptionOrders',
+      query: {
+        source: 'dashboard',
+        workbench: 'pending',
+      },
+      helperText: '确认佣金',
+    },
   },
   {
     key: 'newUsers',
@@ -177,6 +202,10 @@ const metricCards = computed<MetricCard[]>(() => [
     detail: `在线 ${formatCompactNumber(dashboardStats.value.onlineUsers)} · 设备 ${formatCompactNumber(dashboardStats.value.onlineDevices)}`,
     tone: 'light',
     icon: UserFilled,
+    action: {
+      routeName: 'Users',
+      helperText: '查看用户',
+    },
   },
   {
     key: 'monthUpload',
@@ -475,6 +504,17 @@ function handleRefresh() {
   void refreshDashboard()
 }
 
+function openMetricCard(card: MetricCard) {
+  if (!card.action) {
+    return
+  }
+
+  void router.push({
+    name: card.action.routeName,
+    query: card.action.query,
+  })
+}
+
 function rankBarWidth(index: number): string {
   return `${Math.max(28, 100 - index * 12)}%`
 }
@@ -548,11 +588,15 @@ onMounted(() => {
     </section>
 
     <section class="metrics-grid">
-      <article
+      <component
         v-for="card in metricCards"
+        :is="card.action ? 'button' : 'article'"
         :key="card.key"
         class="metric-card"
-        :class="`tone-${card.tone}`"
+        :class="[`tone-${card.tone}`, { 'metric-card--interactive': Boolean(card.action) }]"
+        :type="card.action ? 'button' : undefined"
+        :aria-label="card.action ? `${card.label}，${card.action.helperText}` : undefined"
+        @click="openMetricCard(card)"
       >
         <div class="metric-card__meta">
           <span>{{ card.label }}</span>
@@ -560,14 +604,20 @@ onMounted(() => {
         </div>
         <strong class="metric-card__value">{{ card.value }}</strong>
         <p class="metric-card__detail">{{ card.detail }}</p>
-        <span
-          v-if="card.change"
-          class="metric-card__change"
-          :class="Number(card.change.replace('%', '')) >= 0 ? 'positive' : 'negative'"
-        >
-          {{ card.change }}
-        </span>
-      </article>
+        <div class="metric-card__footer">
+          <span
+            v-if="card.change"
+            class="metric-card__change"
+            :class="Number(card.change.replace('%', '')) >= 0 ? 'positive' : 'negative'"
+          >
+            {{ card.change }}
+          </span>
+          <span v-if="card.action" class="metric-card__action">
+            {{ card.action.helperText }}
+            <ElIcon class="metric-card__action-icon"><TopRight /></ElIcon>
+          </span>
+        </div>
+      </component>
     </section>
 
     <section class="content-grid">
@@ -1076,10 +1126,34 @@ onMounted(() => {
 }
 
 .metric-card {
+  border: 1px solid transparent;
   min-height: 150px;
   padding: 22px;
   display: grid;
   gap: 10px;
+}
+
+.metric-card--interactive {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.metric-card--interactive:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 113, 227, 0.14);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+}
+
+.metric-card--interactive:focus-visible {
+  outline: 2px solid rgba(0, 113, 227, 0.34);
+  outline-offset: 3px;
+}
+
+.metric-card--interactive:active {
+  transform: translateY(0);
 }
 
 .metric-card__meta {
@@ -1126,9 +1200,35 @@ onMounted(() => {
   color: var(--xboard-text-muted);
 }
 
-.metric-card__change {
+.metric-card__footer {
   margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 20px;
+}
+
+.metric-card__change {
   font-size: 13px;
+}
+
+.metric-card__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: #0071e3;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.metric-card__action-icon {
+  font-size: 12px;
+}
+
+.tone-dark .metric-card__action {
+  color: #2997ff;
 }
 
 .panel {

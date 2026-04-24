@@ -1,0 +1,47 @@
+{
+  "updatedAt": "2026-04-24T16:18:00.000Z",
+  "version": 1,
+  "source": "R2",
+  "originCommand": "design",
+  "verifyMode": "review-first",
+  "reviewerFocus": [
+    "高级筛选是否仅做增量改动并保持现有 Apple 风格工作台结构",
+    "活跃状态前端字段、摘要文案与后端复合规则是否一致",
+    "是否避免把隐式封禁/到期语义混入本轮活跃规则"
+  ],
+  "testerFocus": [
+    "user/fetch 是否支持 activity_status=eq:1|0 的活跃/非活跃筛选",
+    "高级筛选弹窗是否可选择活跃状态并正确生成筛选条件",
+    "admin-frontend 构建与新增单元验证是否通过"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "proposal.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": false,
+      "reason": "本轮仅在高级筛选弹窗中增量添加一个条件字段，不涉及整页视觉重构",
+      "screens": [
+        "#/users advanced filter dialog"
+      ],
+      "states": [
+        "活跃状态字段下拉展开态"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

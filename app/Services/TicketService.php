@@ -22,11 +22,7 @@ class TicketService
                 'ticket_id' => $ticket->id,
                 'message' => $message
             ]);
-            $isAdmin = $userId !== $ticket->user_id;
-            $ticket->reply_status = $isAdmin
-                ? Ticket::REPLY_STATUS_REPLIED
-                : Ticket::REPLY_STATUS_WAITING;
-            $ticket->last_reply_user_id = $userId;
+            $this->applyReplyState($ticket, (int) $userId);
             if (!$ticketMessage || !$ticket->save()) {
                 throw new \Exception();
             }
@@ -50,6 +46,24 @@ class TicketService
         }
         HookManager::call('ticket.reply.admin.after', [$ticket, $ticketMessage]);
         $this->sendEmailNotify($ticket, $ticketMessage);
+    }
+
+    /**
+     * Applies the unified reply state to a ticket.
+     *
+     * @param Ticket $ticket The target ticket.
+     * @param int $userId The replying user ID.
+     * @return void
+     */
+    private function applyReplyState(Ticket $ticket, int $userId): void
+    {
+        $isAdmin = $userId !== $ticket->user_id;
+
+        $ticket->status = Ticket::STATUS_OPENING;
+        $ticket->reply_status = $isAdmin
+            ? Ticket::REPLY_STATUS_REPLIED
+            : Ticket::REPLY_STATUS_WAITING;
+        $ticket->last_reply_user_id = $userId;
     }
 
     public function createTicket($userId, $subject, $level, $message)

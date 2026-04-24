@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { DataAnalysis, Search, View } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
 import { closeTicket, fetchTickets } from '@/api/admin'
 import type { AdminTicketListItem } from '@/types/api'
 import { formatDateTime } from '@/utils/dashboard'
@@ -13,6 +14,8 @@ import {
 import TicketWorkspaceDialog from './TicketWorkspaceDialog.vue'
 
 const loading = ref(false)
+const route = useRoute()
+const router = useRouter()
 const tickets = ref<AdminTicketListItem[]>([])
 const total = ref(0)
 const current = ref(1)
@@ -31,6 +34,38 @@ const headerStats = computed(() => [
   },
   { label: '当前页', value: String(current.value) },
 ])
+
+const dashboardFocus = computed<'opening' | 'closed' | 'all' | null>(() => {
+  const raw = route.query.focus
+  const value = Array.isArray(raw) ? raw[0] : raw
+  if (value === 'closed') {
+    return 'closed'
+  }
+
+  if (value === 'all') {
+    return 'all'
+  }
+
+  if (value === 'opening' || value === 'pending') {
+    return 'opening'
+  }
+
+  return null
+})
+
+const dashboardEntryNotice = computed(() => {
+  const raw = route.query.source
+  const source = Array.isArray(raw) ? raw[0] : raw
+  if (source !== 'dashboard') {
+    return ''
+  }
+
+  if (dashboardFocus.value === 'opening') {
+    return '已从仪表盘进入，这里默认展示待处理工单。'
+  }
+
+  return '已从仪表盘进入工单工作台。'
+})
 
 function statusValueToParam() {
   if (statusFilter.value === 'opening') {
@@ -92,6 +127,24 @@ function handleSearch() {
   void loadTickets()
 }
 
+function applyDashboardFocus() {
+  if (!dashboardFocus.value) {
+    return
+  }
+
+  statusFilter.value = dashboardFocus.value
+}
+
+function clearDashboardEntry() {
+  const nextQuery = { ...route.query }
+  delete nextQuery.source
+  delete nextQuery.focus
+  void router.replace({
+    name: 'Tickets',
+    query: nextQuery,
+  })
+}
+
 watch([current, pageSize], () => {
   void loadTickets()
 })
@@ -101,7 +154,15 @@ watch([statusFilter, levelFilter], () => {
   void loadTickets()
 })
 
+watch(
+  () => route.query.focus,
+  () => {
+    applyDashboardFocus()
+  },
+)
+
 onMounted(() => {
+  applyDashboardFocus()
   void loadTickets()
 })
 </script>
@@ -155,6 +216,19 @@ onMounted(() => {
           </ElInput>
         </div>
       </header>
+
+      <ElAlert
+        v-if="dashboardEntryNotice"
+        class="tickets-alert"
+        type="info"
+        :closable="false"
+        show-icon
+        :title="dashboardEntryNotice"
+      >
+        <template #default>
+          <ElButton size="small" @click="clearDashboardEntry">关闭提示</ElButton>
+        </template>
+      </ElAlert>
 
       <ElTable :data="tickets" v-loading="loading" class="ticket-table" row-key="id">
         <ElTableColumn label="工单号" width="92">
@@ -338,6 +412,10 @@ onMounted(() => {
 .ticket-table :deep(.el-table__row td.el-table__cell) {
   padding-top: 16px;
   padding-bottom: 16px;
+}
+
+.tickets-alert {
+  margin-top: -4px;
 }
 
 .subject-cell {

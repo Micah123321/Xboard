@@ -11,6 +11,8 @@ import {
   formatOrderDateTime,
   getCommissionStatusMeta,
   getOrderPeriodLabel,
+  getOrderPaymentChannel,
+  getOrderPaymentMethod,
   getOrderStatusMeta,
   getOrderTypeMeta,
 } from '@/utils/orders'
@@ -41,6 +43,8 @@ const commissionMeta = computed(() => getCommissionStatusMeta(
   props.order?.actual_commission_balance,
 ))
 const hasCommission = computed(() => hasOrderCommission(props.order))
+const paymentChannel = computed(() => getOrderPaymentChannel(props.order))
+const paymentMethod = computed(() => getOrderPaymentMethod(props.order))
 
 const summaryCards = computed(() => [
   { label: '订单状态', value: statusMeta.value.label, detail: typeMeta.value.label },
@@ -56,9 +60,30 @@ const basicFields = computed(() => [
   { label: '订阅计划', value: props.order?.plan?.name || '-' },
   { label: '订单类型', value: typeMeta.value.label },
   { label: '订阅周期', value: getOrderPeriodLabel(props.order?.period) },
-  { label: '回调编号', value: props.order?.callback_no || '-' },
-  { label: '支付时间', value: formatOrderDateTime(props.order?.paid_at) },
 ])
+
+const paymentSummaryDescription = computed(() => (
+  props.order?.paid_at
+    ? '集中查看支付成功后的渠道、方法与平台流水快照。'
+    : '订单完成支付后，这里会展示支付渠道、支付方法与平台流水信息。'
+))
+
+const paymentFields = computed(() => [
+  { label: '支付渠道', value: paymentChannel.value },
+  { label: '支付方法', value: paymentMethod.value },
+  { label: '平台订单号', value: props.order?.callback_no || '-' },
+  { label: '商户订单号', value: props.order?.trade_no || '-' },
+  { label: '订单金额', value: formatOrderAmount(props.order?.total_amount) },
+  { label: '实际支付金额', value: formatOrderAmount(props.order?.payment_amount) },
+  { label: '创建时间', value: formatOrderDateTime(props.order?.created_at) },
+  { label: '完成时间', value: formatOrderDateTime(props.order?.paid_at) },
+  { label: '支付 IP', value: props.order?.payment_ip || '-' },
+  { label: '订单状态', value: statusMeta.value.label },
+])
+const paymentBadges = computed(() => ([
+  { label: paymentChannel.value, tone: 'neutral' },
+  { label: paymentMethod.value, tone: 'info' },
+].filter((item) => item.label !== '-')))
 
 const amountFields = computed(() => [
   { label: '订单金额', value: formatOrderAmount(props.order?.total_amount) },
@@ -145,6 +170,33 @@ watch(
 
         <div class="description-grid">
           <article v-for="item in basicFields" :key="item.label">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="detail-card">
+        <header class="card-header">
+          <div>
+            <h3>支付成功信息</h3>
+            <p>{{ paymentSummaryDescription }}</p>
+          </div>
+
+          <div v-if="paymentBadges.length" class="payment-badges">
+            <span
+              v-for="item in paymentBadges"
+              :key="`${item.tone}-${item.label}`"
+              class="hero-badge"
+              :class="`is-${item.tone}`"
+            >
+              {{ item.label }}
+            </span>
+          </div>
+        </header>
+
+        <div class="description-grid">
+          <article v-for="item in paymentFields" :key="item.label">
             <span>{{ item.label }}</span>
             <strong>{{ item.value }}</strong>
           </article>
@@ -326,6 +378,13 @@ watch(
   gap: 10px;
 }
 
+.payment-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .hero-badge {
   display: inline-flex;
   align-items: center;
@@ -498,6 +557,7 @@ watch(
   }
 
   .card-header,
+  .payment-badges,
   .commission-actions,
   .list-row,
   .drawer-actions {

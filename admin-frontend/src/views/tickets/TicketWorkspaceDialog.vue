@@ -40,6 +40,7 @@ type UploadError = Parameters<UploadRequestOptions['onError']>[0]
 
 const statusMeta = computed(() => detail.value ? getTicketStatusMeta(detail.value) : null)
 const levelMeta = computed(() => detail.value ? getTicketLevelMeta(detail.value.level) : null)
+const willReopenClosedTicket = computed(() => detail.value?.status === 1)
 
 async function loadSidebarTickets() {
   if (!props.visible) {
@@ -312,6 +313,9 @@ watch(
           </div>
 
           <footer class="reply-box">
+            <p v-if="willReopenClosedTicket" class="reply-box__hint">
+              当前工单已关闭，发送新回复后会自动重新开启。
+            </p>
             <ElInput
               v-model="replyMessage"
               type="textarea"
@@ -335,10 +339,9 @@ watch(
                 type="primary"
                 :icon="ChatLineRound"
                 :loading="replying"
-                :disabled="detail.status === 1"
                 @click="handleReply"
               >
-                发送
+                {{ willReopenClosedTicket ? '发送并重开' : '发送' }}
               </ElButton>
             </div>
           </footer>
@@ -559,6 +562,12 @@ watch(
   padding: 20px 24px;
   border-top: 1px solid var(--xboard-border);
   background: rgba(255, 255, 255, 0.92);
+}
+
+.reply-box__hint {
+  color: var(--xboard-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .reply-box__actions {

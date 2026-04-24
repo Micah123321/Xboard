@@ -1,12 +1,15 @@
-name: Docker Build and Publish
+name: Backend Docker Build and Publish
 
 on:
   push:
     branches: ["master", "new-dev"]
+    paths-ignore:
+      - "admin-frontend/**"
+      - ".github/workflows/admin-frontend-docker-publish.yml"
   workflow_dispatch:
 
 concurrency:
-  group: docker-publish-${{ github.ref }}
+  group: backend-docker-publish-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -75,8 +78,8 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          cache-from: type=gha,scope=docker-publish-${{ github.ref_name }}
-          cache-to: type=gha,mode=max,scope=docker-publish-${{ github.ref_name }}
+          cache-from: type=gha,scope=backend-docker-publish-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=backend-docker-publish-${{ github.ref_name }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |

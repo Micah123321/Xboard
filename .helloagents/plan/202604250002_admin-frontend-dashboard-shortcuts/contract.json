@@ -1,0 +1,52 @@
+{
+  "updatedAt": "2026-04-24T16:02:00.000Z",
+  "version": 1,
+  "source": "R2",
+  "originCommand": "design",
+  "verifyMode": "review-first",
+  "reviewerFocus": [
+    "仪表盘可点击指标卡是否只覆盖已有明确落点的工作台",
+    "工单页与订单页的路由查询同步是否不会破坏既有筛选逻辑",
+    "可点击卡片是否具备清晰的 hover 与 focus 提示，而不是隐形跳转"
+  ],
+  "testerFocus": [
+    "点击待处理工单卡应进入工单工作台",
+    "点击待处理佣金卡应进入订单工作台并默认落在真实待确认佣金视图",
+    "点击总用户卡应进入用户工作台",
+    "admin-frontend 执行 npm run build 应通过"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "plan.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": false,
+      "reason": "",
+      "screens": [
+        "#/dashboard metrics grid",
+        "#/tickets dashboard-entry notice",
+        "#/subscriptions/orders commission workbench"
+      ],
+      "states": [
+        "metric card hover/focus",
+        "dashboard source info notice",
+        "commission workbench preset"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

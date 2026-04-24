@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 5,
+  "failed": 0,
+  "pending": 0,
+  "total": 5,
+  "done": 5,
+  "percent": 100,
+  "current": "活跃状态高级筛选已完成，等待在具备 PHP 运行时的环境补跑后端单元用例",
+  "updated_at": "2026-04-25 00:30:00"
+}

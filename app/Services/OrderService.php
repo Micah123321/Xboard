@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\ApiException;
 use App\Jobs\OrderHandleJob;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\TrafficResetLog;
 use App\Models\User;
@@ -283,7 +284,7 @@ class OrderService
         }
     }
 
-    public function paid(string $callbackNo)
+    public function paid(string $callbackNo, array $paymentSnapshot = [])
     {
         $order = $this->order;
         if ($order->status !== Order::STATUS_PENDING)
@@ -291,6 +292,7 @@ class OrderService
         $order->status = Order::STATUS_PROCESSING;
         $order->paid_at = time();
         $order->callback_no = $callbackNo;
+        $order->fill($this->buildPaymentSnapshot($paymentSnapshot));
         if (!$order->save())
             return false;
         try {
@@ -300,6 +302,82 @@ class OrderService
             return false;
         }
         return true;
+    }
+
+    /**
+     * @param array<string, mixed> $paymentSnapshot
+     * @return array<string, mixed>
+     */
+    private function buildPaymentSnapshot(array $paymentSnapshot): array
+    {
+        /** @var Payment|null $payment */
+        $payment = $this->order->relationLoaded('payment')
+            ? $this->order->payment
+            : $this->order->payment()->first();
+
+        $channel = $this->normalizeSnapshotText(
+            $paymentSnapshot['payment_channel'] ?? $payment?->name ?? $payment?->payment
+        );
+        $method = $this->normalizeSnapshotText(
+            $paymentSnapshot['payment_method'] ?? $this->resolvePaymentMethod($payment)
+        );
+        $amount = $this->normalizeSnapshotAmount($paymentSnapshot['payment_amount'] ?? null);
+        $ip = $this->normalizeSnapshotText($paymentSnapshot['payment_ip'] ?? null);
+
+        return array_filter([
+            'payment_channel' => $channel,
+            'payment_method' => $method,
+            'payment_amount' => $amount,
+            'payment_ip' => $ip,
+        ], static fn($value) => $value !== null && $value !== '');
+    }
+
+    private function resolvePaymentMethod(?Payment $payment): ?string
+    {
+        if (!$payment) {
+            return null;
+        }
+
+        $config = $payment->config;
+        if (is_string($config)) {
+            $decoded = json_decode($config, true);
+            $config = is_array($decoded) ? $decoded : [];
+        }
+
+        if (!is_array($config)) {
+            $config = [];
+        }
+
+        return $this->normalizeSnapshotText(
+            data_get($config, 'token_pay_currency') ?? $payment->payment ?? $payment->name
+        );
+    }
+
+    private function normalizeSnapshotText(mixed $value): ?string
+    {
+        if (!is_scalar($value)) {
+            return null;
+        }
+
+        $text = trim((string) $value);
+        return $text !== '' ? $text : null;
+    }
+
+    private function normalizeSnapshotAmount(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $normalized = is_string($value)
+            ? str_replace(',', '', trim($value))
+            : $value;
+
+        if (!is_numeric($normalized)) {
+            return null;
+        }
+
+        return (int) round(((float) $normalized) * 100);
     }
 
     public function cancel(): bool

@@ -579,6 +579,13 @@ export interface AdminOrderUserRef {
   plan_id?: number | null
 }
 
+export interface AdminOrderPaymentRef {
+  id: number
+  name: string
+  payment: string
+  icon?: string | null
+}
+
 export interface AdminCommissionLogItem {
   id: number
   invite_user_id: number
@@ -597,6 +604,10 @@ export interface AdminOrderListItem {
   plan_id: number | null
   coupon_id?: number | null
   payment_id?: number | null
+  payment_channel?: string | null
+  payment_method?: string | null
+  payment_amount?: number | null
+  payment_ip?: string | null
   type: number
   period: string
   trade_no: string
@@ -621,6 +632,7 @@ export interface AdminOrderListItem {
 export interface AdminOrderDetail extends AdminOrderListItem {
   user?: AdminOrderUserRef | null
   invite_user?: AdminOrderUserRef | null
+  payment?: AdminOrderPaymentRef | null
   commission_log?: AdminCommissionLogItem[]
   surplus_orders?: AdminOrderListItem[]
 }

@@ -23,7 +23,7 @@ class PaymentController extends Controller
                 return $this->fail([422, 'verify error']);
             }
             HookManager::call('payment.notify.verified', $verify);
-            if (!$this->handle($verify['trade_no'], $verify['callback_no'])) {
+            if (!$this->handle($verify)) {
                 return $this->fail([400, 'handle error']);
             }
             return (isset($verify['custom_result']) ? $verify['custom_result'] : 'success');
@@ -33,8 +33,17 @@ class PaymentController extends Controller
         }
     }
 
-    private function handle($tradeNo, $callbackNo)
+    /**
+     * @param array<string, mixed> $verify
+     */
+    private function handle(array $verify)
     {
+        $tradeNo = (string) ($verify['trade_no'] ?? '');
+        $callbackNo = (string) ($verify['callback_no'] ?? '');
+        if ($tradeNo === '') {
+            return false;
+        }
+
         $order = Order::where('trade_no', $tradeNo)->first();
         if (!$order) {
             return $this->fail([400202, 'order is not found']);
@@ -42,7 +51,7 @@ class PaymentController extends Controller
         if ($order->status !== Order::STATUS_PENDING)
             return true;
         $orderService = new OrderService($order);
-        if (!$orderService->paid($callbackNo)) {
+        if (!$orderService->paid($callbackNo, $verify)) {
             return false;
         }
 

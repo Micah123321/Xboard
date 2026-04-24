@@ -1,0 +1,11 @@
+{
+  "status": "in_progress",
+  "completed": 4,
+  "failed": 1,
+  "pending": 0,
+  "total": 5,
+  "done": 5,
+  "percent": 100,
+  "current": "代码修复与前端构建已完成，等待具备 PHP/Composer 的环境补跑后端验证",
+  "updated_at": "2026-04-25 00:15:50"
+}

@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 4,
+  "failed": 0,
+  "pending": 0,
+  "total": 4,
+  "done": 4,
+  "percent": 100,
+  "current": "节点页在线/离线筛选与批量删除已完成，等待用户验收",
+  "updated_at": "2026-04-25 00:15:00"
+}

@@ -7,6 +7,8 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202604250018 | admin-frontend-user-activity-status-filter | implementation | admin-frontend,backend | admin-frontend-user-activity-status-filter#D001,#D002,#D003 | ✅完成 |
+| 202604250002 | order-payment-snapshot | implementation | admin-frontend,order-payment | order-payment-snapshot#D001,#D002 | ✅完成 |
 | 202604242245 | admin-frontend-node-pagination-batch-edit | implementation | admin-frontend | admin-frontend-node-pagination-batch-edit#D001,#D002,#D003 | ✅完成 |
 | 202604242217 | admin-frontend-orders-commission-confirmation | implementation | admin-frontend | admin-frontend-orders-commission-confirmation#D001,#D002 | ✅完成 |
 | 202604241703 | admin-frontend-gift-card-management | implementation | admin-frontend | admin-frontend-gift-card-management#D001,#D002,#D003 | ✅完成 |
@@ -34,6 +36,8 @@
 ## 按月归档
 
 ### 2026-04
+- [202604250018_admin-frontend-user-activity-status-filter](./2026-04/202604250018_admin-frontend-user-activity-status-filter/) - 为用户管理高级筛选新增“活跃状态”条件，并在后端补齐 `activity_status` 复合过滤规则，支持按活跃 / 非活跃筛选用户
+- [202604250002_order-payment-snapshot](./2026-04/202604250002_order-payment-snapshot/) - 补齐订单支付成功快照保存链路，并在后台订单详情中集中展示支付渠道、支付方法、平台订单号、商户订单号、实付金额与支付 IP
 - [202604242245_admin-frontend-node-pagination-batch-edit](./2026-04/202604242245_admin-frontend-node-pagination-batch-edit/) - 为节点管理工作台补齐本地分页、父/子节点筛选、单节点置顶，以及仅对已勾选节点生效的批量修改
 - [202604242217_admin-frontend-orders-commission-confirmation](./2026-04/202604242217_admin-frontend-orders-commission-confirmation/) - 修复订单页无佣金订单误显示为待确认的问题，并新增真实待确认佣金筛选与行级手动确认入口
 - [202604241703_admin-frontend-gift-card-management](./2026-04/202604241703_admin-frontend-gift-card-management/) - 开放“礼品卡管理”入口，交付模板管理、兑换码管理、使用记录与统计数据四页签工作台，并接入真实 gift-card 接口

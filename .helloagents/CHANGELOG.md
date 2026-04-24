@@ -1,5 +1,54 @@
 # CHANGELOG
 
+## [0.5.16] - 2026-04-25
+
+### 新增
+- **[admin-frontend]**: 为用户管理高级筛选新增“活跃状态”条件，支持按“活跃 / 非活跃”筛选；后端 `user/fetch` 现可识别 `activity_status` 复合规则，并按“任意订阅 + 流量未用完 + 最后在线时间在半年内”为活跃标准返回结果 — by yinjianm
+  - 方案: [202604250018_admin-frontend-user-activity-status-filter](archive/2026-04/202604250018_admin-frontend-user-activity-status-filter/)
+  - 决策: admin-frontend-user-activity-status-filter#D001(活跃判断入口固定在高级筛选弹窗), admin-frontend-user-activity-status-filter#D002(复合活跃规则统一由后端 activity_status 承接), admin-frontend-user-activity-status-filter#D003(全部状态继续由无条件表达)
+
+## [0.5.15] - 2026-04-25
+
+### 新增
+- **[admin-frontend]**: 为节点管理工作台补齐“在线节点 / 离线节点”状态筛选，并新增针对已勾选节点的批量删除入口，接通真实 `server/manage/batchDelete` 后端链路；其中“离线节点”按本轮确认只筛显式离线状态，不包含待同步 / 已停用节点 — by yinjianm
+  - 方案: [202604250015_admin-frontend-node-status-filter-batch-delete](plan/202604250015_admin-frontend-node-status-filter-batch-delete/)
+  - 决策: admin-frontend-node-status-filter-batch-delete#D001(离线筛选仅匹配显式 offline 状态), admin-frontend-node-status-filter-batch-delete#D002(批量删除复用现有勾选工作流)
+
+## [0.5.14] - 2026-04-25
+
+### 修复
+- **[order-payment]**: 补齐订单支付成功快照保存链路；现在会在支付成功后保存支付渠道、支付方法、实际支付金额与支付 IP，并在后台订单详情中集中展示平台订单号 / 商户订单号 / 支付快照信息 — by yinjianm
+  - 方案: [202604250002_order-payment-snapshot](archive/2026-04/202604250002_order-payment-snapshot/)
+  - 决策: order-payment-snapshot#D001(支付快照优先展示真实快照并回退当前支付配置), order-payment-snapshot#D002(实际支付金额统一按“分”存储)
+
+## [0.5.13] - 2026-04-25
+
+### 修复
+- **[admin-frontend]**: 修复前后台已关闭工单无法再次回复的问题；现在用户与管理员再次回复 closed ticket 时都会自动重新开启工单，管理端工单工作台也补上“发送并重开”交互提示 — by yinjianm
+  - 方案: [202604250006_ticket-closed-reply-reopen](plan/202604250006_ticket-closed-reply-reopen/)
+  - 决策: ticket-closed-reply-reopen#D001(自动重开语义统一下沉到 TicketService::reply), ticket-closed-reply-reopen#D002(用户端优先通过后端语义修复打通), ticket-closed-reply-reopen#D003(管理端仅修复交互门禁)
+
+## [0.5.12] - 2026-04-25
+
+### 新增
+- **[admin-frontend]**: 为仪表盘顶部指标卡补齐快捷入口增强；“待处理工单 / 待处理佣金 / 总用户”现在可直接进入对应工作台，其中工单页与订单页还会自动识别 dashboard 来源并落在目标视图 — by yinjianm
+  - 方案: [202604250002_admin-frontend-dashboard-shortcuts](plan/202604250002_admin-frontend-dashboard-shortcuts/)
+  - 决策: admin-frontend-dashboard-shortcuts#D001(仅开放已有明确承接页的指标卡快捷入口), admin-frontend-dashboard-shortcuts#D002(用路由查询同步 dashboard 入口上下文)
+
+## [0.5.11] - 2026-04-24
+
+### 快速修改
+- **[admin-frontend]**: 修复节点管理页多选框点击后立即被程序化同步清空的问题；现在仅在分页切换时回填勾选状态，并在回填期间忽略内部 `selection-change` 事件，节点多选可正常选中与跨页恢复 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/views/nodes/NodesView.vue:67,179-197,240-243,412-417
+
+## [0.5.10] - 2026-04-24
+
+### 快速修改
+- **[ci-workflows]**: 将后端镜像发布工作流显式命名为 `Backend Docker Build and Publish`，并对 `admin-frontend/**` 及其独立 workflow 启用 `paths-ignore`；现在仅修改 `admin-frontend` 源码时只触发前端镜像发布，不再误触发后端镜像发布 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: .github/workflows/docker-publish.yml:1-76
+
 ## [0.5.9] - 2026-04-24
 
 ### 新增

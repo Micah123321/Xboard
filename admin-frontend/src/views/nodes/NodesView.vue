@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { TableInstance } from 'element-plus'
 import {
   Connection,
+  Delete,
   MoreFilled,
   Plus,
   RefreshRight,
@@ -12,6 +13,7 @@ import {
   User,
 } from '@element-plus/icons-vue'
 import {
+  batchDeleteNodes,
   batchUpdateNodes,
   copyNode,
   deleteNode,
@@ -42,6 +44,7 @@ import {
   getNodeStatusMeta,
   getNodeTypeLabel,
   type NodeRelationFilter,
+  type NodeStatusFilter,
 } from '@/utils/nodes'
 import { sortNodesByOrder } from '@/utils/nodeEditor'
 
@@ -60,10 +63,12 @@ const routes = ref<AdminNodeRouteItem[]>([])
 const keyword = ref('')
 const typeFilter = ref('all')
 const groupFilter = ref('all')
+const statusFilter = ref<NodeStatusFilter>('all')
 const relationFilter = ref<NodeRelationFilter>('all')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const selectedNodeIds = ref<number[]>([])
+const syncingSelection = ref(false)
 const switchingIds = ref<number[]>([])
 const workingIds = ref<number[]>([])
 const editorVisible = ref(false)
@@ -72,12 +77,14 @@ const activeNode = ref<AdminNodeItem | null>(null)
 const sortDialogVisible = ref(false)
 const batchEditVisible = ref(false)
 const batchSubmitting = ref(false)
+const batchDeleting = ref(false)
 
 const filteredNodes = computed(() => sortNodesByOrder(filterNodes(
   nodes.value,
   keyword.value,
   typeFilter.value,
   groupFilter.value,
+  statusFilter.value,
   relationFilter.value,
 )))
 
@@ -93,6 +100,7 @@ const hasActiveFilters = computed(() => (
   keyword.value !== ''
   || typeFilter.value !== 'all'
   || groupFilter.value !== 'all'
+  || statusFilter.value !== 'all'
   || relationFilter.value !== 'all'
 ))
 
@@ -106,7 +114,7 @@ const summaryCards = computed(() => [
 const batchTargetLabel = computed(() => (
   hasSelectedNodes.value
     ? `当前已选 ${selectedNodes.value.length} 个节点`
-    : '批量修改仅作用于已勾选节点'
+    : '批量修改 / 删除仅作用于已勾选节点'
 ))
 
 function getRouteGroupQuery(): string {
@@ -182,12 +190,20 @@ function syncTableSelection() {
       return
     }
 
-    table.clearSelection()
-    paginatedNodes.value.forEach((node) => {
-      if (selectedNodeIds.value.includes(node.id)) {
-        table.toggleRowSelection(node, true)
-      }
-    })
+    syncingSelection.value = true
+
+    try {
+      table.clearSelection()
+      paginatedNodes.value.forEach((node) => {
+        if (selectedNodeIds.value.includes(node.id)) {
+          table.toggleRowSelection(node, true)
+        }
+      })
+    } finally {
+      nextTick(() => {
+        syncingSelection.value = false
+      })
+    }
   })
 }
 
@@ -220,6 +236,7 @@ function handleReset() {
   keyword.value = ''
   typeFilter.value = 'all'
   groupFilter.value = 'all'
+  statusFilter.value = 'all'
   relationFilter.value = 'all'
   currentPage.value = 1
 }
@@ -229,6 +246,10 @@ function openNodeGroupManagement() {
 }
 
 function handleSelectionChange(selection: AdminNodeItem[]) {
+  if (syncingSelection.value) {
+    return
+  }
+
   const currentPageIds = paginatedNodes.value.map((item) => item.id)
   const selectionIds = selection.map((item) => item.id)
   const persistedIds = selectedNodeIds.value.filter((id) => !currentPageIds.includes(id))
@@ -278,6 +299,41 @@ async function handleBatchSubmit(payload: NodeBatchEditPayload) {
     ElMessage.error(error instanceof Error ? error.message : '批量修改失败')
   } finally {
     batchSubmitting.value = false
+  }
+}
+
+async function handleBatchDelete() {
+  if (!hasSelectedNodes.value) {
+    ElMessage.warning('请先勾选需要批量删除的节点')
+    return
+  }
+
+  const deleteCount = selectedNodes.value.length
+
+  try {
+    await ElMessageBox.confirm(
+      `确认批量删除 ${deleteCount} 个节点吗？此操作不可恢复。`,
+      '批量删除节点',
+      {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+      },
+    )
+
+    batchDeleting.value = true
+    await batchDeleteNodes([...selectedNodeIds.value])
+    clearSelection()
+    ElMessage.success(`已批量删除 ${deleteCount} 个节点`)
+    await loadNodeBoard()
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') {
+      return
+    }
+
+    ElMessage.error(error instanceof Error ? error.message : '批量删除失败')
+  } finally {
+    batchDeleting.value = false
   }
 }
 
@@ -381,7 +437,7 @@ watch(
   },
 )
 
-watch([keyword, typeFilter, groupFilter, relationFilter], () => {
+watch([keyword, typeFilter, groupFilter, statusFilter, relationFilter], () => {
   currentPage.value = 1
 })
 
@@ -397,10 +453,7 @@ watch(
 )
 
 watch(
-  () => [
-    paginatedNodes.value.map((item) => item.id).join(','),
-    selectedNodeIds.value.join(','),
-  ],
+  () => paginatedNodes.value.map((item) => item.id).join(','),
   () => {
     syncTableSelection()
   },
@@ -415,7 +468,7 @@ watch(
         <p class="nodes-kicker">Nodes</p>
         <h1>节点管理</h1>
         <span>
-          现在可以在同一页完成节点筛选、分页浏览、单行置顶、批量修改，以及新增、编辑、显隐和删除等运营动作。
+          现在可以在同一页完成节点筛选、在线 / 离线排查、分页浏览、单行置顶、批量修改与批量删除，以及新增、编辑、显隐和删除等运营动作。
         </span>
       </div>
 
@@ -466,6 +519,12 @@ watch(
             />
           </ElSelect>
 
+          <ElSelect v-model="statusFilter" class="toolbar-select" placeholder="状态">
+            <ElOption label="全部节点" value="all" />
+            <ElOption label="在线节点" value="online" />
+            <ElOption label="离线节点" value="offline" />
+          </ElSelect>
+
           <ElSelect v-model="relationFilter" class="toolbar-select" placeholder="节点关系">
             <ElOption label="全部节点" value="all" />
             <ElOption label="父节点" value="parent" />
@@ -475,7 +534,17 @@ watch(
 
         <div class="toolbar-actions">
           <span class="scope-hint">{{ batchTargetLabel }}</span>
-          <ElButton :disabled="!hasSelectedNodes" @click="openBatchEditor">批量修改</ElButton>
+          <ElButton :disabled="!hasSelectedNodes || batchDeleting" @click="openBatchEditor">批量修改</ElButton>
+          <ElButton
+            type="danger"
+            plain
+            :disabled="!hasSelectedNodes"
+            :loading="batchDeleting"
+            @click="handleBatchDelete"
+          >
+            <ElIcon><Delete /></ElIcon>
+            批量删除
+          </ElButton>
           <ElButton @click="openNodeGroupManagement">管理权限组</ElButton>
           <ElButton @click="handleReset" :disabled="!hasActiveFilters">
             <ElIcon><RefreshRight /></ElIcon>
@@ -486,7 +555,7 @@ watch(
       </header>
 
       <div v-if="hasSelectedNodes" class="selection-summary">
-        <span class="selection-summary__label">已勾选 {{ selectedNodes.length }} 个节点，批量修改只会作用于这些节点。</span>
+        <span class="selection-summary__label">已勾选 {{ selectedNodes.length }} 个节点，批量修改与批量删除只会作用于这些节点。</span>
         <ElButton text @click="clearSelection">清空勾选</ElButton>
       </div>
 
@@ -655,7 +724,7 @@ watch(
         />
         <div class="footer-hint">
           <ElIcon><Connection /></ElIcon>
-          <span>节点新增、编辑、置顶、排序与批量修改已收敛到同一工作台。</span>
+          <span>节点新增、编辑、置顶、排序、批量修改与批量删除已收敛到同一工作台。</span>
         </div>
       </footer>
     </section>
