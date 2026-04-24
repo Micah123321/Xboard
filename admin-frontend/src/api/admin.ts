@@ -24,6 +24,7 @@ import type {
   AdminNoticeItem,
   AdminNoticeSavePayload,
   AdminNodeItem,
+  AdminNodeBatchUpdatePayload,
   AdminNodeSavePayload,
   AdminNodeRouteItem,
   AdminNodeRouteSavePayload,
@@ -45,6 +46,9 @@ import type {
   AdminTicketFetchParams,
   AdminTicketListItem,
   AdminTrafficLogResult,
+  AdminUserBulkBanPayload,
+  AdminUserBulkMailPayload,
+  AdminUserBulkScopePayload,
   AdminUserFetchParams,
   AdminUserGeneratePayload,
   AdminUserListItem,
@@ -506,6 +510,10 @@ export function updateNode(payload: AdminNodeUpdatePayload): Promise<ApiResponse
   return unwrapPost<boolean>('/server/manage/update', payload as unknown as Record<string, unknown>)
 }
 
+export function batchUpdateNodes(payload: AdminNodeBatchUpdatePayload): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/server/manage/batchUpdate', payload as unknown as Record<string, unknown>)
+}
+
 export function saveNode(payload: AdminNodeSavePayload): Promise<ApiResponse<boolean>> {
   return unwrapPost<boolean>('/server/manage/save', payload as unknown as Record<string, unknown>)
 }
@@ -552,6 +560,29 @@ export function resetUserSecret(id: number): Promise<ApiResponse<boolean>> {
 
 export function deleteUser(id: number): Promise<ApiResponse<boolean>> {
   return unwrapPost<boolean>('/user/destroy', { id })
+}
+
+export function exportUsersCsv(payload: AdminUserBulkScopePayload): Promise<Blob> {
+  return adminClient
+    .post<Blob>('/user/dumpCSV', payload as unknown as Record<string, unknown>, {
+      responseType: 'blob',
+    })
+    .then((res) => res.data)
+}
+
+export function sendUsersMail(payload: AdminUserBulkMailPayload): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/user/sendMail', payload as unknown as Record<string, unknown>)
+}
+
+export function batchUpdateUserBan(payload: AdminUserBulkBanPayload): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/user/ban', payload as unknown as Record<string, unknown>)
+}
+
+export function resetUserTraffic(userId: number, reason?: string): Promise<ApiResponse<Record<string, unknown>>> {
+  return unwrapPost<Record<string, unknown>>('/traffic-reset/reset-user', {
+    user_id: userId,
+    reason,
+  })
 }
 
 export function fetchTickets(params: AdminTicketFetchParams): Promise<AdminPaginationResult<AdminTicketListItem>> {

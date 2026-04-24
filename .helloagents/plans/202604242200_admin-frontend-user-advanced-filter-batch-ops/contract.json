@@ -1,0 +1,49 @@
+{
+  "updatedAt": "2026-04-24T14:00:16.000Z",
+  "version": 1,
+  "source": "manual",
+  "originCommand": "generic-r2",
+  "verifyMode": "test-first",
+  "reviewerFocus": [
+    "高级筛选弹窗是否覆盖用户给出的字段并保持 Apple 化后台视觉节奏",
+    "批量操作的作用范围是否明确且不会误把“筛选结果”降级成仅当前页数据"
+  ],
+  "testerFocus": [
+    "用户列表是否能基于高级筛选条件重新请求真实 /user/fetch",
+    "批量发送邮件、导出 CSV、批量封禁与恢复正常是否按 selected/filtered/all 作用域提交正确 payload",
+    "后端 /user/ban 是否兼容 banned=0 并支撑恢复正常"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "requirements.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": true,
+      "reason": "用户管理页本轮新增高级筛选弹窗、批量邮件弹窗与批量操作入口，需要确认筛选结构、作用域提示和工作台节奏与既有 Apple 化后台契约一致。",
+      "screens": [
+        "#/users desktop"
+      ],
+      "states": [
+        "用户管理默认加载完成态",
+        "高级筛选弹窗展开态",
+        "批量邮件弹窗展开态",
+        "已勾选用户后的批量操作可用态"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

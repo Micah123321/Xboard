@@ -3,21 +3,26 @@
   "version": 1,
   "source": "R2",
   "originCommand": "design",
-  "verifyMode": "targeted-check",
+  "verifyMode": "review-first",
   "reviewerFocus": [
     "24h 排行比较窗口是否准确命中昨天整日统计",
     "7天 / 30天 对比逻辑是否保持原样，未被意外改动",
-    "节点排行与用户排行是否共用同一后端修复入口"
+    "节点/用户排行的 hover 详情卡与右侧流量值展示是否满足新增交互需求"
   ],
   "testerFocus": [
     "单日窗口应返回昨天整日作为 previous window",
     "多日窗口应继续沿用原等跨度比较规则",
-    "修改文件至少通过 PHP 语法校验"
+    "节点/用户排行 hover 时应展示 当前流量 / 上期流量 / 变化率",
+    "admin-frontend 执行 npm run build 应通过"
   ],
   "ui": {
-    "required": false,
-    "designContract": false,
-    "sourcePriority": [],
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "plan.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
     "styleAdvisor": {
       "required": false,
       "reason": "",
@@ -26,8 +31,14 @@
     "visualValidation": {
       "required": false,
       "reason": "",
-      "screens": [],
-      "states": []
+      "screens": [
+        "#/dashboard node rank hover",
+        "#/dashboard user rank hover"
+      ],
+      "states": [
+        "排行 hover tooltip",
+        "当前流量右侧显示"
+      ]
     }
   },
   "advisor": {

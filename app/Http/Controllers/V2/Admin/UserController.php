@@ -627,6 +627,9 @@ class UserController extends Controller
         $scopeInfo = $this->resolveScope($request);
         $scope = $scopeInfo['scope'];
         $userIds = $scopeInfo['user_ids'];
+        $banned = in_array((string) $request->input('banned', 1), ['0', '1'], true)
+            ? (int) $request->input('banned', 1)
+            : 1;
 
         if ($scope === 'selected') {
             if (empty($userIds)) {
@@ -649,7 +652,7 @@ class UserController extends Controller
 
         try {
             $builder->update([
-                'banned' => 1
+                'banned' => $banned
             ]);
         } catch (\Exception $e) {
             Log::error($e);

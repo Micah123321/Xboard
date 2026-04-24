@@ -5,6 +5,7 @@ import {
   COMMISSION_STATUS_UPDATE_OPTIONS,
   canCancelOrder,
   canMarkOrderPaid,
+  hasOrderCommission,
   canUpdateCommissionStatus,
   formatOrderAmount,
   formatOrderDateTime,
@@ -34,7 +35,12 @@ const commissionStatusDraft = ref<number | null>(null)
 
 const statusMeta = computed(() => getOrderStatusMeta(props.order?.status))
 const typeMeta = computed(() => getOrderTypeMeta(props.order?.type))
-const commissionMeta = computed(() => getCommissionStatusMeta(props.order?.commission_status, props.order?.commission_balance))
+const commissionMeta = computed(() => getCommissionStatusMeta(
+  props.order?.commission_status,
+  props.order?.commission_balance,
+  props.order?.actual_commission_balance,
+))
+const hasCommission = computed(() => hasOrderCommission(props.order))
 
 const summaryCards = computed(() => [
   { label: '订单状态', value: statusMeta.value.label, detail: typeMeta.value.label },
@@ -165,7 +171,7 @@ watch(
         <header class="card-header">
           <div>
             <h3>佣金状态</h3>
-            <p>仅对存在佣金金额的订单开放状态维护。</p>
+            <p>{{ hasCommission ? '仅对真实佣金订单开放状态维护。' : '当前订单未产生佣金，不进入佣金确认或发放流程。' }}</p>
           </div>
           <span class="hero-badge" :class="`is-${commissionMeta.tone}`">{{ commissionMeta.label }}</span>
         </header>
@@ -198,6 +204,10 @@ watch(
             保存佣金状态
           </ElButton>
         </div>
+
+        <p v-else class="commission-empty-note">
+          {{ hasCommission ? '当前佣金状态已完成发放，列表页与详情页均不再提供编辑入口。' : '该订单没有真实佣金，列表页也不会出现在“确认佣金”筛选结果中。' }}
+        </p>
       </section>
 
       <section v-if="props.order.surplus_orders?.length" class="detail-card">
@@ -441,6 +451,12 @@ watch(
 .commission-actions {
   display: flex;
   gap: 12px;
+}
+
+.commission-empty-note {
+  margin: 0;
+  color: var(--xboard-text-muted);
+  line-height: 1.6;
 }
 
 .commission-actions :deep(.el-select) {

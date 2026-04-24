@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 5,
+  "failed": 0,
+  "pending": 0,
+  "total": 5,
+  "done": 5,
+  "percent": 100,
+  "current": "用户管理高级筛选与批量操作已完成，等待后续需求",
+  "updated_at": "2026-04-24 22:12:00"
+}

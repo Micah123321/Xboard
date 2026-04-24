@@ -1,11 +1,11 @@
 {
   "status": "completed",
-  "completed": 4,
+  "completed": 5,
   "failed": 0,
   "pending": 0,
-  "total": 4,
-  "done": 4,
+  "total": 5,
+  "done": 5,
   "percent": 100,
-  "current": "24h 排行对昨天比较修复、测试补充与语法校验已完成",
-  "updated_at": "2026-04-24 19:25:00"
+  "current": "24h 排行对昨天比较修复、hover 详情卡与右侧流量展示已完成",
+  "updated_at": "2026-04-24 19:36:00"
 }

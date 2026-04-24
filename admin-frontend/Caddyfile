@@ -1,0 +1,17 @@
+:80 {
+  encode zstd gzip
+  root * /usr/share/caddy
+
+  redir / /assets/admin/ 308
+  redir /assets/admin /assets/admin/ 308
+
+  @admin path /assets/admin /assets/admin/*
+  handle @admin {
+    try_files {path} {path}/ /assets/admin/index.html
+    file_server
+  }
+
+  handle {
+    respond "Not Found" 404
+  }
+}

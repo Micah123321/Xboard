@@ -1,0 +1,49 @@
+{
+  "updatedAt": "2026-04-24T14:45:23.000Z",
+  "version": 1,
+  "source": "manual",
+  "originCommand": "generic-r2",
+  "verifyMode": "test-first",
+  "reviewerFocus": [
+    "节点分页后的勾选状态是否稳定，不会因切页导致批量修改作用域错误",
+    "置顶动作与批量修改是否真实复用现有后台接口而不是只做前端假交互"
+  ],
+  "testerFocus": [
+    "节点页是否支持按筛选结果分页浏览，并可切换每页数量",
+    "父节点与子节点筛选是否按 parent_id 正确区分",
+    "批量修改是否只提交已勾选节点的 ids，并只更新 host / group_ids / rate"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "requirements.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": true,
+      "reason": "节点管理本轮新增分页控件、父子筛选、批量修改弹窗与置顶动作，需要确认高密度工作台节奏与 Apple 化后台契约一致。",
+      "screens": [
+        "#/nodes desktop"
+      ],
+      "states": [
+        "节点列表默认加载完成态",
+        "节点列表已勾选批量操作可用态",
+        "节点批量修改弹窗展开态",
+        "节点父子筛选切换态"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

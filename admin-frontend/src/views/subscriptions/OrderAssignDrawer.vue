@@ -20,6 +20,7 @@ interface AssignOrderFormModel {
 const props = defineProps<{
   visible: boolean
   plans: AdminPlanListItem[]
+  initialEmail?: string
 }>()
 
 const emit = defineEmits<{
@@ -52,7 +53,7 @@ const rules = computed<FormRules<AssignOrderFormModel>>(() => ({
 }))
 
 function resetForm() {
-  form.email = ''
+  form.email = props.initialEmail?.trim() || ''
   form.planId = null
   form.period = ''
   form.totalAmountYuan = null

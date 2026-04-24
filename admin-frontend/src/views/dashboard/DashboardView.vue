@@ -483,6 +483,12 @@ function rankScrollClass(limit: RankDisplayCount): string {
   return limit === 20 ? 'rank-scroll rank-scroll--extended' : 'rank-scroll'
 }
 
+function rankChangeClass(change: number): string {
+  if (Number(change) > 0) return 'positive'
+  if (Number(change) < 0) return 'negative'
+  return 'neutral'
+}
+
 watch(trendPreset, () => {
   void loadTrend().catch(() => ElMessage.error('趋势数据刷新失败'))
 })
@@ -757,22 +763,45 @@ onMounted(() => {
           :class="rankScrollClass(nodeRankLimit)"
         >
           <div class="rank-list">
-            <div
+            <ElTooltip
               v-for="(item, index) in displayedNodeRanks"
               :key="item.id"
-              class="rank-item"
+              placement="top-end"
+              :show-after="80"
+              popper-class="dashboard-rank-tooltip-popper"
             >
-              <div class="rank-item__copy">
-                <strong>{{ item.name }}</strong>
-                <span>{{ formatTraffic(item.value) }}</span>
+              <template #content>
+                <div class="rank-tooltip">
+                  <div class="rank-tooltip__row">
+                    <span>当前流量</span>
+                    <strong>{{ formatTraffic(item.value) }}</strong>
+                  </div>
+                  <div class="rank-tooltip__row">
+                    <span>上期流量</span>
+                    <strong>{{ formatTraffic(item.previousValue) }}</strong>
+                  </div>
+                  <div class="rank-tooltip__row">
+                    <span>变化率</span>
+                    <strong :class="rankChangeClass(item.change)">{{ formatPercent(item.change) }}</strong>
+                  </div>
+                </div>
+              </template>
+
+              <div class="rank-item">
+                <div class="rank-item__copy">
+                  <strong>{{ item.name }}</strong>
+                </div>
+                <div class="rank-item__bar">
+                  <span :style="{ width: rankBarWidth(index) }" />
+                </div>
+                <div class="rank-item__meta">
+                  <em :class="rankChangeClass(item.change)">
+                    {{ formatPercent(item.change) }}
+                  </em>
+                  <span class="rank-item__value">{{ formatTraffic(item.value) }}</span>
+                </div>
               </div>
-              <div class="rank-item__bar">
-                <span :style="{ width: rankBarWidth(index) }" />
-              </div>
-              <em :class="Number(item.change) >= 0 ? 'positive' : 'negative'">
-                {{ formatPercent(item.change) }}
-              </em>
-            </div>
+            </ElTooltip>
           </div>
         </div>
         <div v-else class="panel-state">暂无节点排行数据</div>
@@ -822,22 +851,45 @@ onMounted(() => {
           :class="rankScrollClass(userRankLimit)"
         >
           <div class="rank-list">
-            <div
+            <ElTooltip
               v-for="(item, index) in displayedUserRanks"
               :key="item.id"
-              class="rank-item"
+              placement="top-end"
+              :show-after="80"
+              popper-class="dashboard-rank-tooltip-popper"
             >
-              <div class="rank-item__copy">
-                <strong>{{ item.name }}</strong>
-                <span>{{ formatTraffic(item.value) }}</span>
+              <template #content>
+                <div class="rank-tooltip">
+                  <div class="rank-tooltip__row">
+                    <span>当前流量</span>
+                    <strong>{{ formatTraffic(item.value) }}</strong>
+                  </div>
+                  <div class="rank-tooltip__row">
+                    <span>上期流量</span>
+                    <strong>{{ formatTraffic(item.previousValue) }}</strong>
+                  </div>
+                  <div class="rank-tooltip__row">
+                    <span>变化率</span>
+                    <strong :class="rankChangeClass(item.change)">{{ formatPercent(item.change) }}</strong>
+                  </div>
+                </div>
+              </template>
+
+              <div class="rank-item">
+                <div class="rank-item__copy">
+                  <strong>{{ item.name }}</strong>
+                </div>
+                <div class="rank-item__bar">
+                  <span :style="{ width: rankBarWidth(index) }" />
+                </div>
+                <div class="rank-item__meta">
+                  <em :class="rankChangeClass(item.change)">
+                    {{ formatPercent(item.change) }}
+                  </em>
+                  <span class="rank-item__value">{{ formatTraffic(item.value) }}</span>
+                </div>
               </div>
-              <div class="rank-item__bar">
-                <span :style="{ width: rankBarWidth(index) }" />
-              </div>
-              <em :class="Number(item.change) >= 0 ? 'positive' : 'negative'">
-                {{ formatPercent(item.change) }}
-              </em>
-            </div>
+            </ElTooltip>
           </div>
         </div>
         <div v-else class="panel-state">暂无用户排行数据</div>
@@ -1297,11 +1349,12 @@ onMounted(() => {
   grid-template-columns: minmax(0, 1fr) 150px auto;
   gap: 14px;
   align-items: center;
+  cursor: default;
 }
 
 .rank-item__copy {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  align-items: center;
   min-width: 0;
 }
 
@@ -1328,6 +1381,58 @@ onMounted(() => {
 
 .rank-item em {
   font-style: normal;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rank-item__meta {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
+}
+
+.rank-item__value {
+  color: var(--xboard-text-strong);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.rank-tooltip {
+  display: grid;
+  gap: 10px;
+  min-width: 188px;
+}
+
+.rank-tooltip__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.rank-tooltip__row span {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+}
+
+.rank-tooltip__row strong {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:global(.dashboard-rank-tooltip-popper) {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 16px !important;
+  background: rgba(6, 12, 24, 0.94) !important;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28) !important;
+  backdrop-filter: blur(18px);
+}
+
+:global(.dashboard-rank-tooltip-popper .el-popper__arrow::before) {
+  background: rgba(6, 12, 24, 0.94) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .status-grid {
@@ -1442,6 +1547,11 @@ onMounted(() => {
 
   .rank-item {
     grid-template-columns: 1fr;
+  }
+
+  .rank-item__meta {
+    justify-items: start;
+    text-align: left;
   }
 }
 

@@ -207,9 +207,35 @@ export function getOrderStatusMeta(status: number | null | undefined): OrderStat
   }
 }
 
-export function getCommissionStatusMeta(status: number | null | undefined, amount?: number | null): OrderStatusMeta {
-  if ((amount ?? 0) <= 0 && (status === null || status === undefined)) {
-    return { label: '-', tone: 'neutral' }
+interface CommissionStateTarget {
+  commission_status?: number | null
+  commission_balance?: number | null
+  actual_commission_balance?: number | null
+}
+
+export function hasOrderCommission(order?: CommissionStateTarget | null): boolean {
+  if (!order) {
+    return false
+  }
+
+  if (toAmount(order.commission_balance) > 0 || toAmount(order.actual_commission_balance) > 0) {
+    return true
+  }
+
+  return [1, 2, 3].includes(Number(order.commission_status ?? -1))
+}
+
+export function getCommissionStatusMeta(
+  status: number | null | undefined,
+  amount?: number | null,
+  actualAmount?: number | null,
+): OrderStatusMeta {
+  if (!hasOrderCommission({
+    commission_status: status,
+    commission_balance: amount,
+    actual_commission_balance: actualAmount,
+  })) {
+    return { label: '无佣金', tone: 'neutral' }
   }
 
   switch (status) {
@@ -222,7 +248,7 @@ export function getCommissionStatusMeta(status: number | null | undefined, amoun
     case 3:
       return { label: '无效', tone: 'danger' }
     default:
-      return { label: '未参与', tone: 'neutral' }
+      return { label: '待确认', tone: 'warning' }
   }
 }
 
@@ -315,14 +341,26 @@ export function canCancelOrder(order?: Pick<AdminOrderListItem, 'status'> | null
   return order?.status === 0
 }
 
-export function canUpdateCommissionStatus(order?: Pick<AdminOrderDetail, 'commission_balance' | 'commission_status'> | null): boolean {
+export function canUpdateCommissionStatus(
+  order?: Pick<AdminOrderDetail, 'commission_balance' | 'actual_commission_balance' | 'commission_status'> | null,
+): boolean {
   if (!order) {
     return false
   }
 
-  if ((order.commission_balance ?? 0) <= 0) {
+  if (!hasOrderCommission(order)) {
     return false
   }
 
   return order.commission_status !== 2
+}
+
+export function canQuickConfirmCommission(
+  order?: Pick<AdminOrderListItem, 'status' | 'commission_balance' | 'actual_commission_balance' | 'commission_status'> | null,
+): boolean {
+  if (!order) {
+    return false
+  }
+
+  return order.status === 3 && order.commission_status === 0 && hasOrderCommission(order)
 }

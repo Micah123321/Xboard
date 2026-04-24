@@ -72,6 +72,12 @@
   color: var(--xboard-text-secondary);
 }
 
+.filter-pill--accent {
+  border-color: rgba(0, 113, 227, 0.16);
+  background: rgba(0, 113, 227, 0.08);
+  color: #0071e3;
+}
+
 .filter-pill:hover,
 .toolbar-ghost:hover {
   color: #0071e3;
@@ -84,6 +90,10 @@
 
 .orders-alert {
   margin-bottom: -4px;
+}
+
+.orders-alert--info :deep(.el-alert__title) {
+  color: var(--xboard-text-strong);
 }
 
 .orders-table :deep(th.el-table__cell) {
@@ -108,6 +118,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.action-trigger {
+  justify-content: center;
+  min-width: 34px;
+  color: var(--xboard-text-secondary);
 }
 
 .plan-cell {

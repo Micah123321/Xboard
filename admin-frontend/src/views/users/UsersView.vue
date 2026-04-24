@@ -1,160 +1,68 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled, Plus, RefreshRight, Search } from '@element-plus/icons-vue'
-import { deleteUser, fetchUsers, getPlans, resetUserSecret, updateUser } from '@/api/admin'
-import type { AdminPlanOption, AdminUserListItem } from '@/types/api'
 import { formatDateTime, formatTraffic } from '@/utils/dashboard'
-import { buildUserFilters, getUserStatusMeta, getUserUsagePercent } from '@/utils/users'
+import { getUserStatusMeta, getUserUsagePercent } from '@/utils/users'
+import OrderAssignDrawer from '@/views/subscriptions/OrderAssignDrawer.vue'
+import TrafficLogDialog from '@/views/tickets/TrafficLogDialog.vue'
+import UserAdvancedFilterDialog from './UserAdvancedFilterDialog.vue'
+import UserBatchMailDialog from './UserBatchMailDialog.vue'
 import UserFormDrawer from './UserFormDrawer.vue'
+import { useUsersManagement } from './useUsersManagement'
 
-type DrawerMode = 'create' | 'edit'
-type UserAction = 'edit' | 'copy' | 'reset-secret' | 'toggle-ban' | 'delete'
+type UserAction =
+  | 'edit'
+  | 'assign-order'
+  | 'copy'
+  | 'reset-secret'
+  | 'view-orders'
+  | 'view-invites'
+  | 'view-traffic'
+  | 'reset-traffic'
+  | 'toggle-ban'
+  | 'delete'
 
-const loading = ref(false)
-const plansLoading = ref(false)
-const users = ref<AdminUserListItem[]>([])
-const plans = ref<AdminPlanOption[]>([])
-const total = ref(0)
-const current = ref(1)
-const pageSize = ref(20)
-const keyword = ref('')
-const statusFilter = ref('all')
-const planFilter = ref('all')
-
-const drawerVisible = ref(false)
-const drawerMode = ref<DrawerMode>('create')
-const activeUser = ref<AdminUserListItem | null>(null)
-
-const pageStats = computed(() => [
-  { label: '用户总数', value: String(total.value) },
-  { label: '当前页', value: String(current.value) },
-  { label: '已筛选套餐', value: planFilter.value === 'all' ? '全部' : '单套餐' },
-])
-
-async function loadPlans() {
-  plansLoading.value = true
-  try {
-    const response = await getPlans()
-    plans.value = response.data ?? []
-  } finally {
-    plansLoading.value = false
-  }
-}
-
-async function loadUsers() {
-  loading.value = true
-  try {
-    const response = await fetchUsers({
-      current: current.value,
-      pageSize: pageSize.value,
-      filter: buildUserFilters(keyword.value, statusFilter.value, planFilter.value),
-      sort: [{ id: 'id', desc: true }],
-    })
-
-    users.value = response.data
-    total.value = response.total
-  } finally {
-    loading.value = false
-  }
-}
-
-function openCreateDrawer() {
-  drawerMode.value = 'create'
-  activeUser.value = null
-  drawerVisible.value = true
-}
-
-function openEditDrawer(user: AdminUserListItem) {
-  drawerMode.value = 'edit'
-  activeUser.value = user
-  drawerVisible.value = true
-}
-
-async function copySubscribeUrl(user: AdminUserListItem) {
-  if (!navigator.clipboard?.writeText) {
-    ElMessage.warning('当前环境不支持复制，请手动复制订阅地址')
-    return
-  }
-
-  await navigator.clipboard.writeText(user.subscribe_url)
-  ElMessage.success('订阅地址已复制')
-}
-
-async function toggleBan(user: AdminUserListItem) {
-  const nextValue = !user.banned
-  const actionText = nextValue ? '封禁' : '恢复'
-
-  await ElMessageBox.confirm(`确认${actionText}用户 ${user.email} 吗？`, `${actionText}用户`, {
-    type: 'warning',
-  })
-
-  await updateUser({ id: user.id, banned: nextValue })
-  ElMessage.success(`用户已${actionText}`)
-  await loadUsers()
-}
-
-async function handleAction(action: UserAction, user: AdminUserListItem) {
-  if (action === 'edit') {
-    openEditDrawer(user)
-    return
-  }
-
-  if (action === 'copy') {
-    await copySubscribeUrl(user)
-    return
-  }
-
-  if (action === 'reset-secret') {
-    await ElMessageBox.confirm(`确认重置 ${user.email} 的 UUID 与订阅地址吗？`, '重置密钥', {
-      type: 'warning',
-    })
-    await resetUserSecret(user.id)
-    ElMessage.success('UUID 与订阅地址已重置')
-    await loadUsers()
-    return
-  }
-
-  if (action === 'toggle-ban') {
-    await toggleBan(user)
-    return
-  }
-
-  await ElMessageBox.confirm(`删除用户 ${user.email} 后无法恢复，确认继续吗？`, '删除用户', {
-    type: 'warning',
-  })
-  await deleteUser(user.id)
-  ElMessage.success('用户已删除')
-  await loadUsers()
-}
-
-function handleSearch() {
-  current.value = 1
-  void loadUsers()
-}
-
-function handleReset() {
-  keyword.value = ''
-  statusFilter.value = 'all'
-  planFilter.value = 'all'
-  current.value = 1
-  void loadUsers()
-}
-
-watch(pageSize, () => {
-  current.value = 1
-  void loadUsers()
-})
-
-watch(current, () => {
-  void loadUsers()
-})
-
-onMounted(() => {
-  void Promise.all([loadPlans(), loadUsers()]).catch(() => {
-    ElMessage.error('用户管理页面初始化失败')
-  })
-})
+const {
+  loading,
+  plansLoading,
+  errorMessage,
+  users,
+  plans,
+  total,
+  current,
+  pageSize,
+  keyword,
+  statusFilter,
+  planFilter,
+  advancedFilters,
+  advancedFilterVisible,
+  batchMailVisible,
+  batchMailSubmitting,
+  assignOrderVisible,
+  assignOrderEmail,
+  trafficLogVisible,
+  trafficLogUserId,
+  trafficLogUserEmail,
+  drawerVisible,
+  drawerMode,
+  activeUser,
+  selectedUsers,
+  pageStats,
+  appliedFilterSummaries,
+  batchTargetLabel,
+  batchActionDisabled,
+  refreshUsers,
+  handleSearch,
+  handleReset,
+  clearAdvancedFilters,
+  applyAdvancedFilters,
+  handleSelectionChange,
+  openCreateDrawer,
+  handleUserSaved,
+  handleAction,
+  handleBatchCommand,
+  submitBatchMail,
+  handleAssignOrderSuccess,
+} = useUsersManagement()
 </script>
 
 <template>
@@ -163,7 +71,7 @@ onMounted(() => {
       <div class="users-copy">
         <p class="users-kicker">Users</p>
         <h1>用户管理工作台。</h1>
-        <span>用一页完成搜索、筛选、编辑与账户维护，保留 Apple 风格的轻量信息层次。</span>
+        <span>现在可以在同一页完成快捷筛选、高级筛选、行级维护与批量操作，继续保持 Apple 风格的轻量运营节奏。</span>
       </div>
 
       <div class="hero-stats">
@@ -189,7 +97,7 @@ onMounted(() => {
             </template>
           </ElInput>
 
-          <ElSelect v-model="statusFilter" class="toolbar-select" placeholder="用户状态">
+          <ElSelect v-model="statusFilter" class="toolbar-select" placeholder="用户状态" @change="handleSearch">
             <ElOption label="全部状态" value="all" />
             <ElOption label="正常" value="active" />
             <ElOption label="封禁" value="banned" />
@@ -200,6 +108,7 @@ onMounted(() => {
             class="toolbar-select"
             :loading="plansLoading"
             placeholder="订阅计划"
+            @change="handleSearch"
           >
             <ElOption label="全部订阅" value="all" />
             <ElOption
@@ -209,13 +118,43 @@ onMounted(() => {
               :value="String(plan.id)"
             />
           </ElSelect>
+
+          <ElButton class="filter-pill" @click="advancedFilterVisible = true">
+            高级筛选
+            <span v-if="appliedFilterSummaries.length" class="filter-pill__count">
+              {{ appliedFilterSummaries.length }}
+            </span>
+          </ElButton>
         </div>
 
         <div class="toolbar-actions">
-          <ElButton @click="handleReset">
+          <span class="scope-hint">{{ batchTargetLabel }}</span>
+
+          <ElDropdown trigger="click" @command="handleBatchCommand">
+            <ElButton class="toolbar-ghost" :disabled="batchActionDisabled">
+              <ElIcon><MoreFilled /></ElIcon>
+              批量操作
+            </ElButton>
+            <template #dropdown>
+              <ElDropdownMenu>
+                <ElDropdownItem command="send-mail">发送邮件</ElDropdownItem>
+                <ElDropdownItem command="export-csv">导出 CSV</ElDropdownItem>
+                <ElDropdownItem command="ban">批量封禁</ElDropdownItem>
+                <ElDropdownItem command="restore">恢复正常</ElDropdownItem>
+              </ElDropdownMenu>
+            </template>
+          </ElDropdown>
+
+          <ElButton class="toolbar-ghost" @click="handleReset">
             <ElIcon><RefreshRight /></ElIcon>
             重置筛选
           </ElButton>
+
+          <ElButton class="toolbar-ghost" :loading="loading" @click="refreshUsers(false)">
+            <ElIcon><RefreshRight /></ElIcon>
+            刷新
+          </ElButton>
+
           <ElButton type="primary" @click="openCreateDrawer">
             <ElIcon><Plus /></ElIcon>
             创建用户
@@ -223,7 +162,44 @@ onMounted(() => {
         </div>
       </header>
 
-      <ElTable :data="users" v-loading="loading" class="users-table" row-key="id">
+      <div v-if="appliedFilterSummaries.length" class="filter-summary">
+        <span class="filter-summary__label">已生效筛选</span>
+        <ElTag
+          v-for="item in appliedFilterSummaries"
+          :key="item"
+          effect="plain"
+          round
+          class="filter-summary__tag"
+        >
+          {{ item }}
+        </ElTag>
+        <ElButton text class="filter-summary__clear" @click="clearAdvancedFilters">
+          清空高级筛选
+        </ElButton>
+      </div>
+
+      <ElAlert
+        v-if="errorMessage"
+        class="users-alert"
+        type="error"
+        :closable="false"
+        show-icon
+        :title="errorMessage"
+      >
+        <template #default>
+          <ElButton size="small" @click="refreshUsers(false)">重新加载</ElButton>
+        </template>
+      </ElAlert>
+
+      <ElTable
+        :data="users"
+        v-loading="loading"
+        class="users-table"
+        row-key="id"
+        empty-text="当前筛选条件下暂无用户"
+        @selection-change="handleSelectionChange"
+      >
+        <ElTableColumn type="selection" width="52" reserve-selection />
         <ElTableColumn prop="id" label="ID" width="92" />
         <ElTableColumn label="邮箱" min-width="220">
           <template #default="{ row }">
@@ -266,6 +242,14 @@ onMounted(() => {
             {{ formatTraffic(row.transfer_enable) }}
           </template>
         </ElTableColumn>
+        <ElTableColumn label="在线设备" width="118">
+          <template #default="{ row }">
+            <div class="stack-cell">
+              <strong>{{ row.online_count ?? 0 }}</strong>
+              <span>当前在线</span>
+            </div>
+          </template>
+        </ElTableColumn>
         <ElTableColumn label="余额" width="118">
           <template #default="{ row }">
             ¥{{ Number(row.balance || 0).toFixed(2) }}
@@ -285,8 +269,13 @@ onMounted(() => {
               <template #dropdown>
                 <ElDropdownMenu>
                   <ElDropdownItem command="edit">编辑</ElDropdownItem>
-                  <ElDropdownItem command="copy">复制订阅 URL</ElDropdownItem>
-                  <ElDropdownItem command="reset-secret">重置 UUID 及订阅 URL</ElDropdownItem>
+                  <ElDropdownItem command="assign-order">分配订单</ElDropdownItem>
+                  <ElDropdownItem command="copy">复制订阅URL</ElDropdownItem>
+                  <ElDropdownItem command="reset-secret">重置UUID及订阅URL</ElDropdownItem>
+                  <ElDropdownItem command="view-orders">TA的订单</ElDropdownItem>
+                  <ElDropdownItem command="view-invites">TA的邀请</ElDropdownItem>
+                  <ElDropdownItem command="view-traffic">TA的流量记录</ElDropdownItem>
+                  <ElDropdownItem command="reset-traffic">重置流量</ElDropdownItem>
                   <ElDropdownItem command="toggle-ban">
                     {{ row.banned ? '恢复正常' : '封禁用户' }}
                   </ElDropdownItem>
@@ -299,7 +288,7 @@ onMounted(() => {
       </ElTable>
 
       <footer class="table-footer">
-        <span>已加载 {{ users.length }} 条，共 {{ total }} 条</span>
+        <span>已选择 {{ selectedUsers.length }} 项，共 {{ total }} 项</span>
         <ElPagination
           v-model:current-page="current"
           v-model:page-size="pageSize"
@@ -316,163 +305,36 @@ onMounted(() => {
       :mode="drawerMode"
       :user="activeUser"
       :plans="plans"
-      @success="() => loadUsers()"
+      @success="handleUserSaved"
+    />
+
+    <UserAdvancedFilterDialog
+      v-model:visible="advancedFilterVisible"
+      :filters="advancedFilters"
+      :plans="plans"
+      @apply="applyAdvancedFilters"
+    />
+
+    <UserBatchMailDialog
+      v-model:visible="batchMailVisible"
+      :loading="batchMailSubmitting"
+      :target-label="batchTargetLabel"
+      @submit="submitBatchMail"
+    />
+
+    <OrderAssignDrawer
+      v-model:visible="assignOrderVisible"
+      :plans="plans"
+      :initial-email="assignOrderEmail"
+      @success="handleAssignOrderSuccess"
+    />
+
+    <TrafficLogDialog
+      v-model:visible="trafficLogVisible"
+      :user-id="trafficLogUserId"
+      :user-email="trafficLogUserEmail"
     />
   </div>
 </template>
 
-<style scoped>
-.users-page {
-  display: grid;
-  gap: 24px;
-}
-
-.users-hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 30px 32px;
-  border-radius: 28px;
-  background: #000000;
-}
-
-.users-copy {
-  display: grid;
-  gap: 10px;
-  max-width: 620px;
-}
-
-.users-kicker {
-  font-size: 11px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.68);
-}
-
-.users-copy h1 {
-  font-size: clamp(34px, 5vw, 52px);
-  line-height: 1.08;
-  letter-spacing: -0.28px;
-  color: #ffffff;
-}
-
-.users-copy span {
-  color: rgba(255, 255, 255, 0.72);
-  line-height: 1.47;
-}
-
-.hero-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  min-width: 360px;
-}
-
-.hero-stats article {
-  display: grid;
-  gap: 6px;
-  padding: 18px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.hero-stats span {
-  color: rgba(255, 255, 255, 0.64);
-  font-size: 12px;
-}
-
-.hero-stats strong {
-  color: #ffffff;
-  font-size: 22px;
-}
-
-.table-shell {
-  display: grid;
-  gap: 18px;
-  padding: 24px;
-  border-radius: 26px;
-  background: #ffffff;
-  box-shadow: var(--xboard-shadow);
-}
-
-.table-toolbar,
-.toolbar-fields,
-.toolbar-actions,
-.table-footer {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.table-toolbar,
-.table-footer {
-  justify-content: space-between;
-}
-
-.toolbar-fields {
-  flex: 1;
-  flex-wrap: wrap;
-}
-
-.toolbar-input {
-  width: min(360px, 100%);
-}
-
-.toolbar-select {
-  width: 160px;
-}
-
-.users-table :deep(th.el-table__cell) {
-  color: var(--xboard-text-secondary);
-  background: #fbfbfd;
-}
-
-.users-table :deep(.el-table__row td.el-table__cell) {
-  padding-top: 16px;
-  padding-bottom: 16px;
-}
-
-.email-cell,
-.stack-cell,
-.traffic-cell {
-  display: grid;
-  gap: 6px;
-}
-
-.email-cell strong,
-.stack-cell strong {
-  color: var(--xboard-text-strong);
-}
-
-.email-cell span,
-.stack-cell span,
-.table-footer span {
-  color: var(--xboard-text-muted);
-}
-
-.traffic-cell {
-  min-width: 132px;
-}
-
-.action-trigger {
-  font-size: 18px;
-}
-
-@media (max-width: 1080px) {
-  .users-hero,
-  .table-toolbar,
-  .table-footer {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .hero-stats {
-    min-width: 0;
-    grid-template-columns: 1fr;
-  }
-
-  .toolbar-actions {
-    justify-content: flex-end;
-  }
-}
-</style>
+<style scoped lang="scss" src="./UsersView.scss"></style>

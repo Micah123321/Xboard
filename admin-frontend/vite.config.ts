@@ -11,6 +11,7 @@ const uploadTarget = 'https://pic.535888.xyz'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const uploadAuthToken = env.DEV_UPLOAD_AUTH_TOKEN || ''
+  const buildOutDir = process.env.ADMIN_BUILD_OUT_DIR || env.ADMIN_BUILD_OUT_DIR || '../public/assets/admin'
 
   return {
   base: '/assets/admin/',
@@ -51,7 +52,7 @@ export default defineConfig(({ mode }) => {
     },
   },
   build: {
-    outDir: '../public/assets/admin',
+    outDir: buildOutDir,
     emptyOutDir: true,
   },
   }

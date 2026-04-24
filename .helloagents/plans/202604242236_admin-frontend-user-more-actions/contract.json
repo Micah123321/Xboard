@@ -1,0 +1,51 @@
+{
+  "updatedAt": "2026-04-24T14:36:00.000Z",
+  "version": 1,
+  "source": "manual",
+  "originCommand": "generic-r2",
+  "verifyMode": "test-first",
+  "reviewerFocus": [
+    "用户更多操作菜单是否按截图顺序与交互意图完成复刻",
+    "跨页筛选联动是否对用户可见且能明确清除"
+  ],
+  "testerFocus": [
+    "分配订单是否可直接预填邮箱打开抽屉",
+    "TA的订单是否跳转订单页并按 user_id 生效",
+    "TA的邀请是否形成可用的用户结果视图",
+    "TA的流量记录与重置流量是否都走真实链路"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "requirements.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": true,
+      "reason": "本轮要补齐用户更多操作菜单与多个复用弹层/跳转联动，需要确认用户页菜单密度、订单页筛选提示和弹窗挂载都符合既有后台设计契约。",
+      "screens": [
+        "#/users desktop",
+        "#/subscriptions/orders desktop"
+      ],
+      "states": [
+        "用户更多操作菜单展开态",
+        "用户页分配订单抽屉展开态",
+        "用户页流量记录弹窗展开态",
+        "订单页按指定用户过滤态"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

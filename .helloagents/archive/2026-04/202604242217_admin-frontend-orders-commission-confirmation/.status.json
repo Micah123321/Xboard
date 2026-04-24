@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 5,
+  "failed": 0,
+  "pending": 0,
+  "total": 5,
+  "done": 5,
+  "percent": 100,
+  "current": "订单页佣金状态修复、真实待确认筛选与单行确认菜单已完成",
+  "updated_at": "2026-04-24 22:26:00"
+}

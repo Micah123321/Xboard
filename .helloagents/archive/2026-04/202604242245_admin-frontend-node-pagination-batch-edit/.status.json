@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 5,
+  "failed": 0,
+  "pending": 0,
+  "total": 5,
+  "done": 5,
+  "percent": 100,
+  "current": "节点管理分页、置顶、批量修改与父子筛选已完成",
+  "updated_at": "2026-04-24 23:02:00"
+}

@@ -5,9 +5,13 @@
 - 提供 Vue3 管理端登录页、认证状态、路由守卫和主布局
 - 封装管理端统计/系统状态、用户管理、节点管理、套餐管理和系统配置接口
 - 渲染后台仪表盘、用户管理工作台、节点管理工作台、路由管理工作台、订阅套餐 / 订单 / 优惠券 / 礼品卡管理页、系统配置页、主题管理页、插件管理工作台、公告管理工作台、支付配置工作台，以及工单管理入口
+- 提供独立静态部署产物：支持通过 Docker 镜像发布到 GHCR，并在 compose 分支中以独立 `admin` 服务运行
 
 ## 行为规范
 
+- 默认构建输出仍为主仓 `public/assets/admin`；当 `ADMIN_BUILD_OUT_DIR` 存在时，构建输出需切换到外部指定目录，供容器镜像独立打包
+- 独立容器运行时通过 `Caddyfile` 把根路径重定向到 `/assets/admin/`，避免当前 `base: '/assets/admin/'` 资源前缀失效
+- 前端 GHCR 发布链路与 Laravel 主应用发布链路分离，避免把静态前端构建耦合进现有 PHP 镜像工作流
 - 登录成功后优先跳转 `redirect` 指定路由，否则回到 `/dashboard`
 - 受保护路由在未登录时会自动附加 `redirect` 查询参数
 - API 基础路径使用 `/api/v2/{secure_path}`，其中 `secure_path` 来自运行时配置
@@ -17,12 +21,20 @@
 - 仪表盘“节点流量排行 / 用户流量排行”均支持独立的 `10个 / 20个` 显示切换，长列表固定在面板内滚动，避免首页高度失控
 - `stat/getTrafficRank` 现支持 `limit=10|20`，前端会按当前排行面板的显示数量重新请求；24h 口径也继续显示涨跌百分比
 - `stat/getTrafficRank` 在 `24h` 口径下会按“昨天同日”统计做涨跌对比，避免日统计表因 `record_at=00:00` 被秒级窗口错位后全部回落为 `0%`
+- 排行项 hover 时会显示“当前流量 / 上期流量 / 变化率”详情卡；当前流量值固定右侧展示，避免长节点名挤压后不易识别
 - 仪表盘 Hero 区提供“刷新全部数据”入口，统一触发总览、趋势、排行和系统状态刷新，并在页面内展示最近一次刷新时间
-- 用户管理页通过真实后端 `user/fetch`、`user/update`、`user/generate`、`user/resetSecret`、`user/destroy` 与 `plan/fetch` 完成数据读写
+- 用户管理页通过真实后端 `user/fetch`、`user/update`、`user/generate`、`user/dumpCSV`、`user/sendMail`、`user/ban`、`user/resetSecret`、`user/destroy` 与 `plan/fetch` 完成数据读写
 - 新增用户时采用“先 generate，后按邮箱回查并 update”的两段式流程，以兼容后端基础创建接口
-- 节点管理页通过真实后端 `server/manage/getNodes`、`server/group/fetch` 与 `server/route/fetch` 获取列表 / 关联数据，并通过 `server/manage/save`、`server/manage/sort`、`server/manage/update`、`server/manage/copy`、`server/manage/drop` 完成新增、编辑、排序与行级操作
+- 用户管理页现已补齐高级筛选弹窗，支持按邮箱、用户 ID、订阅、流量、已用流量、在线设备、到期时间、UUID、Token、账号状态和备注组合筛选
+- 用户管理页新增勾选 + 批量操作工作流，支持“发送邮件 / 导出 CSV / 批量封禁 / 恢复正常”，作用范围按“已勾选用户 > 当前筛选结果 > 全部用户”自动判定
+- 批量恢复正常沿用 `user/ban` 现有接口，通过 `banned=0|1` 兼容，不额外引入重复路由
+- 用户管理页的“更多操作”菜单现已补齐 `分配订单 / TA的订单 / TA的邀请 / TA的流量记录 / 重置流量`；其中订单分配复用现有抽屉，用户订单跳转到订单页并自动按 `user_id` 过滤，邀请结果在当前用户页复用 `invite_user_id` 筛选视图
+- 用户流量重置优先复用 `traffic-reset/reset-user`，用户行级“重置流量”会走真实后端重置链路并在成功后刷新列表
+- 节点管理页通过真实后端 `server/manage/getNodes`、`server/group/fetch` 与 `server/route/fetch` 获取列表 / 关联数据，并通过 `server/manage/save`、`server/manage/sort`、`server/manage/update`、`server/manage/batchUpdate`、`server/manage/copy`、`server/manage/drop` 完成新增、编辑、排序、批量修改与行级操作
 - 节点新增 / 编辑采用统一中央大弹窗，支持 `Shadowsocks / VMess / Trojan / Hysteria / VLess / TUIC / SOCKS / Naive / HTTP / Mieru / AnyTLS` 11 种协议的首版动态配置表单
 - 节点排序采用本地草稿 + 上移 / 下移模式，保存时向 `server/manage/sort` 提交 `{ id, order }[]` 顺序 payload
+- 节点列表现支持本地分页、父/子节点筛选，以及跨分页稳定勾选；批量修改仅作用于已勾选节点，可统一更新 `host / group_ids / rate`
+- 节点行级菜单现已补齐“置顶节点”，会复用当前排序结果生成新的顺序 payload 并提交到 `server/manage/sort`
 - 权限组管理页使用真实后端 `server/group/fetch`、`server/group/save` 与 `server/group/drop`，支持关键字搜索、新增/编辑中央弹窗、删除确认，以及从节点数量列跳转到 `#/nodes?group={id}` 的筛选联动
 - 路由管理页使用真实后端 `server/route/fetch`、`server/route/save` 与 `server/route/drop`，支持路由列表、关键词搜索、新增/编辑中央弹窗、删除与动作值展示
 - 路由管理页的节点引用摘要由 `server/manage/getNodes` 返回的 `route_ids` 推导，不在前端伪造额外接口
@@ -34,6 +46,8 @@
 - 套餐说明编辑采用轻量 Markdown/HTML 编辑器与预览模式，不引入额外富文本依赖
 - 订单管理页使用真实后端 `order/fetch`、`order/detail`、`order/assign`、`order/paid`、`order/cancel` 与 `order/update`，支持订单列表、类型/周期/状态筛选、详情抽屉、手动分配、人工标记已支付与佣金状态维护
 - 订单金额、佣金金额与相关拆解字段以“分”为后端真相源，前端统一在 `src/utils/orders.ts` 中格式化为“元”展示，避免后台金额口径混乱
+- 订单管理页的佣金状态不再单看 `commission_status` 默认值；无真实佣金的订单统一显示“无佣金”，只有真实佣金订单才会参与“待确认 / 发放中 / 已发放 / 无效”状态流转
+- 订单页新增“确认佣金”工具栏菜单，佣金状态筛选会自动透传 `is_commission=true`，确保“真实待确认订单”不会混入无佣金记录；行级操作列可直接把真实待确认订单手动确认到“发放中”
 - 优惠券管理页使用真实后端 `coupon/fetch`、`coupon/generate`、`coupon/update` 与 `coupon/drop`，支持本地搜索、类型筛选、启停、删除与弹窗式新增/编辑
 - 礼品卡管理页使用真实后端 `gift-card/templates`、`gift-card/create-template`、`gift-card/update-template`、`gift-card/delete-template`、`gift-card/generate-codes`、`gift-card/codes`、`gift-card/toggle-code`、`gift-card/export-codes`、`gift-card/update-code`、`gift-card/delete-code`、`gift-card/usages`、`gift-card/statistics` 与 `gift-card/types`
 - 礼品卡工作台采用单页四页签结构，覆盖模板管理、兑换码管理、使用记录和统计数据；模板编辑使用分组式大抽屉，兑换码生成使用独立对话框
@@ -58,6 +72,7 @@
 
 ## 依赖关系
 
+- 依赖 `admin-frontend/Dockerfile`、`admin-frontend/Caddyfile` 与 `.github/workflows/admin-frontend-docker-publish.yml` 提供独立镜像发布能力
 - 依赖 `src/api/client.ts` 处理 axios 与认证头
 - 依赖 `src/utils/users.ts` 负责用户管理表单转换、筛选组装和状态计算
 - 依赖 `src/utils/plans.ts` 负责套餐价格、说明渲染、排序与表单转换

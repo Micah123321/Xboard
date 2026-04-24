@@ -664,6 +664,8 @@ export interface AdminUserListItem {
   discount: number | null
   speed_limit: number | null
   device_limit: number | null
+  online_count?: number | null
+  last_online_at?: number | null
   remarks: string | null
   banned: boolean
   is_admin: boolean
@@ -689,6 +691,25 @@ export interface AdminUserFetchParams {
   pageSize: number
   filter?: AdminUserFilter[]
   sort?: AdminUserSort[]
+}
+
+export interface AdminUserBulkScopePayload {
+  scope?: 'selected' | 'filtered' | 'all'
+  user_ids?: number[]
+  filter?: AdminUserFilter[]
+}
+
+export interface AdminUserBulkMailPayload extends AdminUserBulkScopePayload {
+  subject: string
+  content: string
+  sort?: string
+  sort_type?: 'ASC' | 'DESC'
+}
+
+export interface AdminUserBulkBanPayload extends AdminUserBulkScopePayload {
+  banned?: boolean | number
+  sort?: string
+  sort_type?: 'ASC' | 'DESC'
 }
 
 export interface AdminUserGeneratePayload {
@@ -870,6 +891,13 @@ export interface AdminNodeUpdatePayload {
   show?: boolean | number
   enabled?: boolean
   machine_id?: number | null
+}
+
+export interface AdminNodeBatchUpdatePayload {
+  ids: number[]
+  host?: string
+  rate?: number
+  group_ids?: number[]
 }
 
 export interface AdminNodeSavePayload {

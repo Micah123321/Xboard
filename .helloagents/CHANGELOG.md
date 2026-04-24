@@ -1,11 +1,46 @@
 # CHANGELOG
 
+## [0.5.9] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 为节点管理工作台补齐本地分页、父/子节点筛选、单节点置顶与仅对已勾选节点生效的批量修改，支持统一更新 `host / group_ids / rate`，并接通真实 `server/manage/batchUpdate` 后端链路 — by yinjianm
+  - 方案: [202604242245_admin-frontend-node-pagination-batch-edit](archive/2026-04/202604242245_admin-frontend-node-pagination-batch-edit/)
+  - 决策: admin-frontend-node-pagination-batch-edit#D001(节点分页采用前端本地分页), admin-frontend-node-pagination-batch-edit#D002(批量修改范围固定为已勾选节点), admin-frontend-node-pagination-batch-edit#D003(置顶节点复用 server/manage/sort)
+
+## [0.5.8] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 为 `admin-frontend` 新增独立 Docker 镜像与 GHCR 自动发布链路，支持通过 `ADMIN_BUILD_OUT_DIR` 切换到容器专用 `dist` 输出，并在 `compose` 分支新增独立 `admin` 服务拉取 `ghcr.io/cedar2025/xboard-admin-frontend:new` 暴露运行 — by yinjianm
+  - 方案: [202604242250_admin-frontend-ghcr-compose](plans/202604242250_admin-frontend-ghcr-compose/)
+  - 决策: admin-frontend-ghcr-compose#D001(前端镜像发布链路独立于后端 docker-publish), admin-frontend-ghcr-compose#D002(容器内统一重定向到 /assets/admin/), admin-frontend-ghcr-compose#D003(compose 分支采用独立 admin 服务并暴露 7002)
+
+## [0.5.7] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 为用户管理“更多操作”菜单补齐旧后台常用行级动作，新增分配订单、查看 TA 的订单、查看 TA 的邀请、查看 TA 的流量记录与重置流量，并接通订单页按用户过滤与真实 `traffic-reset/reset-user` 后端链路 — by yinjianm
+  - 方案: [202604242236_admin-frontend-user-more-actions](plans/202604242236_admin-frontend-user-more-actions/)
+  - 决策: admin-frontend-user-more-actions#D001(订单分配抽屉预填邮箱), admin-frontend-user-more-actions#D002(用户订单采用跳页 + user_id 过滤), admin-frontend-user-more-actions#D003(邀请结果复用当前用户页筛选视图)
+
+## [0.5.6] - 2026-04-24
+
+### 修复
+- **[admin-frontend]**: 修复订单管理页把无佣金订单误显示为“待确认”的问题；现在佣金状态会按真实佣金金额与发放链路判断，同时新增“确认佣金”菜单，可筛出真实待确认订单并在列表行级直接手动确认 — by yinjianm
+  - 方案: [202604242217_admin-frontend-orders-commission-confirmation](archive/2026-04/202604242217_admin-frontend-orders-commission-confirmation/)
+  - 决策: admin-frontend-orders-commission-confirmation#D001(真实佣金判定以金额和发放链路为准), admin-frontend-orders-commission-confirmation#D002(列表页新增确认佣金菜单与单行快捷确认)
+
+## [0.5.5] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 为用户管理工作台新增高级筛选与批量操作能力，支持多条件筛选、批量发送邮件、导出 CSV、批量封禁，以及对筛选结果执行“恢复正常” — by yinjianm
+  - 方案: [202604242200_admin-frontend-user-advanced-filter-batch-ops](plans/202604242200_admin-frontend-user-advanced-filter-batch-ops/)
+  - 决策: admin-frontend-user-advanced-filter-batch-ops#D001(高级筛选采用独立弹窗), admin-frontend-user-advanced-filter-batch-ops#D002(批量作用域按 selected > filtered > all 解析), admin-frontend-user-advanced-filter-batch-ops#D003(恢复正常沿用 user/ban 并扩展 banned=0|1)
+
 ## [0.5.4] - 2026-04-24
 
 ### 修复
-- **[admin-frontend]**: 修复仪表盘“节点流量排行 / 用户流量排行”在 `24h` 视图下涨跌始终显示 `0%` 的问题；后端现在会把单日排行改为精确对比昨天整日统计，避免 `record_at=00:00` 的日统计行被秒级窗口错位排除 — by yinjianm
+- **[admin-frontend]**: 修复仪表盘“节点流量排行 / 用户流量排行”在 `24h` 视图下涨跌始终显示 `0%` 的问题；后端现在会把单日排行改为精确对比昨天整日统计，前端同步补上悬浮详情卡，并把当前流量值右移强化显示 — by yinjianm
   - 方案: [202604241925_admin-frontend-dashboard-rank-24h-compare](plan/202604241925_admin-frontend-dashboard-rank-24h-compare/)
-  - 决策: admin-frontend-dashboard-rank-24h-compare#D001(仅修复 24h 与昨天对比逻辑，7天/30天 保持现状)
+  - 决策: admin-frontend-dashboard-rank-24h-compare#D001(仅修复 24h 与昨天对比逻辑，7天/30天 保持现状), admin-frontend-dashboard-rank-24h-compare#D002(排行项补充 hover 详情卡，并将当前流量右移显示)
 
 ## [0.5.3] - 2026-04-24
 

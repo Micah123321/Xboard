@@ -1,26 +1,26 @@
 # 恢复快照
 
 ## 主线目标
-继续推进 `admin-frontend` 的节点管理模块，完成“添加节点 / 编辑节点 / 排序”真实工作台交付。
+完成 `admin-frontend` 节点管理页的分页、单节点置顶、仅对已勾选节点生效的批量修改，以及父/子节点筛选。
 
 ## 正在做什么
-当前任务已完成，正在整理节点管理本轮的验证证据、知识库同步与交付摘要。
+当前任务已完成，已完成代码修改、构建验证、知识库同步与方案包归档。
 
 ## 关键上下文
-- 用户已在本轮选择“1”，确认按“全量协议首版”推进节点管理新增 / 编辑 / 排序。
-- 设计约束来自 `apple/DESIGN.md` 与 `.helloagents/DESIGN.md`，节点弹窗贴近用户截图，采用居中大弹窗 + 顶部协议选择 + 白色高密度表单。
-- 后端真相源为 `App\Http\Controllers\V2\Admin\Server\ManageController`、`App\Http\Requests\Admin\ServerSave` 与 `App\Models\Server`，当前可用接口为 `/server/manage/getNodes`、`/server/manage/save`、`/server/manage/sort`、`/server/manage/update`、`/server/manage/copy`、`/server/manage/drop`。
-- 已在 `admin-frontend` 中新增节点动态表单工具层、中央编辑弹窗与排序对话框，并让 `#/nodes` 接入真实新增 / 编辑 / 排序流程。
-- 当前方案包：`.helloagents/plans/202604241718_admin-frontend-node-management/`。
+- 用户在确认阶段选择了“1”，确认批量修改范围仅限已勾选节点，不扩展到当前筛选结果。
+- 节点页已补齐本地分页、父/子节点筛选、跨分页勾选恢复、行级“置顶节点”和批量修改弹窗。
+- 批量修改只会更新 `host / group_ids / rate`，不会改动端口、显隐状态和协议配置。
+- Laravel `ManageController::batchUpdate` 已扩展支持 `host / rate / group_ids` 三个字段。
+- 本轮方案包已归档到 `.helloagents/archive/2026-04/202604242245_admin-frontend-node-pagination-batch-edit/`。
 
 ## 下一步
-当前任务已完成；如继续同一业务域，可在现有节点工作台基础上补机器管理、批量操作或更深的协议高级配置。
+当前任务已完成；如继续同一业务域，可在节点管理基础上补批量显隐、批量启停、批量重置流量或后端真实分页。
 
 ## 阻塞项
 （无）
 
 ## 方案
-plans/202604241718_admin-frontend-node-management
+archive/2026-04/202604242245_admin-frontend-node-pagination-batch-edit
 
 ## 已标记技能
 frontend-design, hello-ui, hello-verify

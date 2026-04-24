@@ -227,6 +227,10 @@ class ManageController extends Controller
             'show' => 'nullable|integer|in:0,1',
             'enabled' => 'nullable|boolean',
             'machine_id' => 'nullable|integer',
+            'host' => 'sometimes|required|string',
+            'rate' => 'sometimes|required|numeric|min:0.01',
+            'group_ids' => 'sometimes|array',
+            'group_ids.*' => 'integer',
         ]);
 
         $ids = $params['ids'];
@@ -243,6 +247,15 @@ class ManageController extends Controller
         }
         if (array_key_exists('machine_id', $params)) {
             $update['machine_id'] = $params['machine_id'] ?: null;
+        }
+        if (array_key_exists('host', $params)) {
+            $update['host'] = trim((string) $params['host']);
+        }
+        if (array_key_exists('rate', $params)) {
+            $update['rate'] = (float) $params['rate'];
+        }
+        if (array_key_exists('group_ids', $params)) {
+            $update['group_ids'] = $params['group_ids'];
         }
 
         if (empty($update)) {

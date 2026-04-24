@@ -7,6 +7,8 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202604242245 | admin-frontend-node-pagination-batch-edit | implementation | admin-frontend | admin-frontend-node-pagination-batch-edit#D001,#D002,#D003 | ✅完成 |
+| 202604242217 | admin-frontend-orders-commission-confirmation | implementation | admin-frontend | admin-frontend-orders-commission-confirmation#D001,#D002 | ✅完成 |
 | 202604241703 | admin-frontend-gift-card-management | implementation | admin-frontend | admin-frontend-gift-card-management#D001,#D002,#D003 | ✅完成 |
 | 202604241659 | admin-frontend-node-group-management | implementation | admin-frontend | admin-frontend-node-group-management#D001,#D002,#D003 | ✅完成 |
 | 202604241655 | admin-frontend-sidebar-height-overflow | - | - | - | ✅完成 |
@@ -32,6 +34,8 @@
 ## 按月归档
 
 ### 2026-04
+- [202604242245_admin-frontend-node-pagination-batch-edit](./2026-04/202604242245_admin-frontend-node-pagination-batch-edit/) - 为节点管理工作台补齐本地分页、父/子节点筛选、单节点置顶，以及仅对已勾选节点生效的批量修改
+- [202604242217_admin-frontend-orders-commission-confirmation](./2026-04/202604242217_admin-frontend-orders-commission-confirmation/) - 修复订单页无佣金订单误显示为待确认的问题，并新增真实待确认佣金筛选与行级手动确认入口
 - [202604241703_admin-frontend-gift-card-management](./2026-04/202604241703_admin-frontend-gift-card-management/) - 开放“礼品卡管理”入口，交付模板管理、兑换码管理、使用记录与统计数据四页签工作台，并接入真实 gift-card 接口
 - [202604241659_admin-frontend-node-group-management](./2026-04/202604241659_admin-frontend-node-group-management/) - 将 `#/node-groups` 从占位页升级为真实权限组管理工作台，并补齐到 `#/nodes` 的权限组筛选联动
 - [202604241620_admin-frontend-order-management](./2026-04/202604241620_admin-frontend-order-management/) - 开放“订单管理”入口，交付真实订单列表、筛选、分配订单、详情抽屉、手动支付与佣金状态维护

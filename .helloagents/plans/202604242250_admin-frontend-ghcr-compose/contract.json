@@ -1,0 +1,40 @@
+{
+  "updatedAt": "2026-04-24T14:50:00.000Z",
+  "version": 1,
+  "source": "manual",
+  "originCommand": "generic-r2",
+  "verifyMode": "test-first",
+  "reviewerFocus": [
+    "admin-frontend 镜像链路是否与主应用镜像链路解耦且不互相污染",
+    "compose 分支新增 admin 服务后镜像名、端口和访问路径是否一致"
+  ],
+  "testerFocus": [
+    "vite 输出目录是否可在容器构建时切换到 dist",
+    "admin-frontend Dockerfile 是否能独立构建静态镜像",
+    "GitHub Actions workflow 与 compose.yaml 是否都能通过 YAML 解析"
+  ],
+  "ui": {
+    "required": false,
+    "designContract": false,
+    "sourcePriority": [
+      "requirements.md"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": false,
+      "reason": "",
+      "screens": [],
+      "states": []
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

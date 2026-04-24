@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, RefreshRight, Search, TopRight } from '@element-plus/icons-vue'
+import { CircleCheck, MoreFilled, Plus, RefreshRight, Search, TopRight } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   cancelOrder,
   fetchOrders,
@@ -17,6 +18,7 @@ import type {
   AdminTableSort,
 } from '@/types/api'
 import {
+  canQuickConfirmCommission,
   COMMISSION_STATUS_OPTIONS,
   ORDER_PERIOD_OPTIONS,
   ORDER_STATUS_OPTIONS,
@@ -38,9 +40,14 @@ import {
 import OrderAssignDrawer from './OrderAssignDrawer.vue'
 import OrderDetailDrawer from './OrderDetailDrawer.vue'
 
+type CommissionWorkbenchMode = 'all' | 'pending' | 'commission'
+type OrderRowAction = 'detail' | 'confirm-commission'
+
 const loading = ref(false)
 const metaLoading = ref(false)
 const errorMessage = ref('')
+const route = useRoute()
+const router = useRouter()
 
 const orders = ref<AdminOrderListItem[]>([])
 const plans = ref<AdminPlanListItem[]>([])
@@ -53,6 +60,7 @@ const typeFilter = ref<OrderFilterValue<number>>('all')
 const periodFilter = ref<OrderFilterValue<OrderPeriodKey>>('all')
 const statusFilter = ref<OrderFilterValue<number>>('all')
 const commissionFilter = ref<OrderFilterValue<number>>('all')
+const commissionWorkbench = ref<CommissionWorkbenchMode>('all')
 const sortState = ref<AdminTableSort>({ id: 'created_at', desc: true })
 
 const assignVisible = ref(false)
@@ -62,6 +70,7 @@ const detailOrder = ref<AdminOrderDetail | null>(null)
 const paying = ref(false)
 const cancelling = ref(false)
 const updatingCommission = ref(false)
+const quickConfirmTradeNo = ref('')
 
 const filterButtonLabels = computed(() => ({
   type: typeFilter.value === 'all' ? '类型' : `类型 · ${getOrderFilterLabel(typeFilter.value)}`,
@@ -71,6 +80,54 @@ const filterButtonLabels = computed(() => ({
     ? '佣金状态'
     : `佣金状态 · ${getCommissionStatusFilterLabel(commissionFilter.value)}`,
 }))
+
+const scopedUserId = computed(() => {
+  const raw = route.query.user_id
+  const value = Array.isArray(raw) ? raw[0] : raw
+  const numeric = Number(value)
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null
+})
+
+const scopedUserEmail = computed(() => {
+  const raw = route.query.user_email
+  const value = Array.isArray(raw) ? raw[0] : raw
+  return typeof value === 'string' ? value : ''
+})
+
+const scopedUserFilters = computed(() => (
+  scopedUserId.value
+    ? [{ id: 'user_id', value: [scopedUserId.value] }]
+    : []
+))
+
+const scopedUserNotice = computed(() => (
+  scopedUserId.value
+    ? `当前仅展示 ${scopedUserEmail.value || `用户 #${scopedUserId.value}`} 的订单。`
+    : ''
+))
+
+const commissionWorkbenchLabel = computed(() => {
+  switch (commissionWorkbench.value) {
+    case 'pending':
+      return '确认佣金 · 待确认'
+    case 'commission':
+      return '确认佣金 · 全部佣金'
+    default:
+      return '确认佣金'
+  }
+})
+
+const commissionWorkbenchNotice = computed(() => {
+  if (commissionWorkbench.value === 'pending') {
+    return '当前仅展示真实待确认佣金订单，可在操作列直接确认。'
+  }
+
+  if (commissionWorkbench.value === 'commission' || commissionFilter.value !== 'all') {
+    return '当前仅展示真实佣金订单，佣金状态筛选不会再混入无佣金数据。'
+  }
+
+  return ''
+})
 
 async function loadPlans() {
   metaLoading.value = true
@@ -91,14 +148,18 @@ async function loadOrders() {
     const response = await fetchOrders({
       current: current.value,
       pageSize: pageSize.value,
-      filter: buildOrderFetchFilters({
-        keyword: keyword.value,
-        type: typeFilter.value,
-        period: periodFilter.value,
-        status: statusFilter.value,
-        commissionStatus: commissionFilter.value,
-      }),
+      filter: [
+        ...buildOrderFetchFilters({
+          keyword: keyword.value,
+          type: typeFilter.value,
+          period: periodFilter.value,
+          status: statusFilter.value,
+          commissionStatus: commissionFilter.value,
+        }),
+        ...scopedUserFilters.value,
+      ],
       sort: sortState.value ? [sortState.value] : undefined,
+      is_commission: commissionWorkbench.value !== 'all' || commissionFilter.value !== 'all',
     })
 
     orders.value = response.data ?? []
@@ -134,6 +195,26 @@ function handleDropdownSelect(kind: 'type' | 'period' | 'status' | 'commission',
 
   if (kind === 'commission') {
     commissionFilter.value = value === 'all' ? 'all' : Number(value)
+    commissionWorkbench.value = commissionFilter.value === 'all'
+      ? 'all'
+      : commissionFilter.value === 0
+        ? 'pending'
+        : 'commission'
+  }
+
+  refreshOrders(true)
+}
+
+function handleCommissionWorkbench(command: string) {
+  if (command === 'pending') {
+    commissionWorkbench.value = 'pending'
+    commissionFilter.value = 0
+  } else if (command === 'commission') {
+    commissionWorkbench.value = 'commission'
+    commissionFilter.value = 'all'
+  } else {
+    commissionWorkbench.value = 'all'
+    commissionFilter.value = 'all'
   }
 
   refreshOrders(true)
@@ -145,7 +226,15 @@ function clearFilters() {
   periodFilter.value = 'all'
   statusFilter.value = 'all'
   commissionFilter.value = 'all'
+  commissionWorkbench.value = 'all'
   sortState.value = { id: 'created_at', desc: true }
+  if (scopedUserId.value) {
+    void router.replace({ name: 'SubscriptionOrders' }).finally(() => {
+      refreshOrders(true)
+    })
+    return
+  }
+
   refreshOrders(true)
 }
 
@@ -237,6 +326,53 @@ async function handleCommissionStatusUpdate(value: number) {
   }
 }
 
+function isRowActionWorking(order: Pick<AdminOrderListItem, 'trade_no'>) {
+  return quickConfirmTradeNo.value === order.trade_no
+}
+
+async function handleQuickConfirmCommission(order: AdminOrderListItem) {
+  if (!canQuickConfirmCommission(order)) {
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确认将订单 ${order.trade_no} 的佣金状态更新为“发放中”吗？`,
+      '确认佣金',
+      { type: 'warning' },
+    )
+
+    quickConfirmTradeNo.value = order.trade_no
+    await updateOrderCommissionStatus(order.trade_no, 1)
+    ElMessage.success('佣金已确认，状态已更新为发放中')
+
+    const shouldReloadDetail = detailOrder.value?.trade_no === order.trade_no
+    await Promise.all([
+      loadOrders(),
+      shouldReloadDetail ? reloadDetail() : Promise.resolve(),
+    ])
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') {
+      return
+    }
+
+    ElMessage.error(error instanceof Error ? error.message : '佣金确认失败')
+  } finally {
+    quickConfirmTradeNo.value = ''
+  }
+}
+
+async function handleRowAction(command: OrderRowAction, order: AdminOrderListItem) {
+  if (command === 'detail') {
+    await openDetail(order)
+    return
+  }
+
+  if (command === 'confirm-commission') {
+    await handleQuickConfirmCommission(order)
+  }
+}
+
 function handleAssignSuccess() {
   assignVisible.value = false
   refreshOrders(true)
@@ -259,6 +395,13 @@ function handleSortChange(payload: { prop: string; order: 'ascending' | 'descend
 watch([current, pageSize], () => {
   void loadOrders()
 })
+
+watch(
+  () => [route.query.user_id, route.query.user_email],
+  () => {
+    refreshOrders(true)
+  },
+)
 
 onMounted(() => {
   void Promise.all([loadPlans(), loadOrders()]).catch(() => {
@@ -372,6 +515,20 @@ onMounted(() => {
               </ElDropdownMenu>
             </template>
           </ElDropdown>
+
+          <ElDropdown trigger="click" @command="handleCommissionWorkbench">
+            <ElButton class="filter-pill filter-pill--accent">
+              <ElIcon><CircleCheck /></ElIcon>
+              {{ commissionWorkbenchLabel }}
+            </ElButton>
+            <template #dropdown>
+              <ElDropdownMenu>
+                <ElDropdownItem command="pending">真实待确认订单</ElDropdownItem>
+                <ElDropdownItem command="commission">全部佣金订单</ElDropdownItem>
+                <ElDropdownItem command="clear" divided>清空佣金筛选</ElDropdownItem>
+              </ElDropdownMenu>
+            </template>
+          </ElDropdown>
         </div>
 
         <div class="toolbar-right">
@@ -395,6 +552,32 @@ onMounted(() => {
       >
         <template #default>
           <ElButton size="small" @click="refreshOrders(false)">重新加载</ElButton>
+        </template>
+      </ElAlert>
+
+      <ElAlert
+        v-if="!errorMessage && scopedUserNotice"
+        class="orders-alert orders-alert--info"
+        type="info"
+        :closable="false"
+        show-icon
+        :title="scopedUserNotice"
+      >
+        <template #default>
+          <ElButton size="small" @click="clearFilters">查看全部订单</ElButton>
+        </template>
+      </ElAlert>
+
+      <ElAlert
+        v-if="!errorMessage && commissionWorkbenchNotice"
+        class="orders-alert orders-alert--info"
+        type="info"
+        :closable="false"
+        show-icon
+        :title="commissionWorkbenchNotice"
+      >
+        <template #default>
+          <ElButton size="small" @click="handleCommissionWorkbench('clear')">清空佣金筛选</ElButton>
         </template>
       </ElAlert>
 
@@ -461,9 +644,9 @@ onMounted(() => {
 
         <ElTableColumn prop="commission_status" label="佣金状态" min-width="150" sortable="custom">
           <template #default="{ row }">
-            <span class="status-pill" :class="`is-${getCommissionStatusMeta(row.commission_status, row.commission_balance).tone}`">
+            <span class="status-pill" :class="`is-${getCommissionStatusMeta(row.commission_status, row.commission_balance, row.actual_commission_balance).tone}`">
               <span class="status-dot" />
-              {{ getCommissionStatusMeta(row.commission_status, row.commission_balance).label }}
+              {{ getCommissionStatusMeta(row.commission_status, row.commission_balance, row.actual_commission_balance).label }}
             </span>
           </template>
         </ElTableColumn>
@@ -471,6 +654,28 @@ onMounted(() => {
         <ElTableColumn prop="created_at" label="创建时间" min-width="180" sortable="custom">
           <template #default="{ row }">
             <span>{{ formatOrderDateTime(row.created_at) }}</span>
+          </template>
+        </ElTableColumn>
+
+        <ElTableColumn label="操作" width="96" fixed="right">
+          <template #default="{ row }">
+            <ElDropdown trigger="click" @command="(command) => handleRowAction(command as OrderRowAction, row)">
+              <ElButton text class="action-trigger" :loading="isRowActionWorking(row)">
+                <ElIcon><MoreFilled /></ElIcon>
+              </ElButton>
+              <template #dropdown>
+                <ElDropdownMenu>
+                  <ElDropdownItem command="detail">查看详情</ElDropdownItem>
+                  <ElDropdownItem
+                    v-if="canQuickConfirmCommission(row)"
+                    command="confirm-commission"
+                    divided
+                  >
+                    确认佣金
+                  </ElDropdownItem>
+                </ElDropdownMenu>
+              </template>
+            </ElDropdown>
           </template>
         </ElTableColumn>
       </ElTable>

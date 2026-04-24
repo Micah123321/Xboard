@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { TableInstance } from 'element-plus'
 import {
   Connection,
   MoreFilled,
@@ -11,14 +12,22 @@ import {
   User,
 } from '@element-plus/icons-vue'
 import {
+  batchUpdateNodes,
   copyNode,
   deleteNode,
   fetchNodes,
   fetchNodeRoutes,
   getServerGroups,
+  sortNodes,
   updateNode,
 } from '@/api/admin'
-import type { AdminNodeItem, AdminNodeRouteItem, AdminServerGroupItem } from '@/types/api'
+import type {
+  AdminNodeBatchUpdatePayload,
+  AdminNodeItem,
+  AdminNodeRouteItem,
+  AdminServerGroupItem,
+} from '@/types/api'
+import NodeBatchEditDialog from './NodeBatchEditDialog.vue'
 import NodeEditorDialog from './NodeEditorDialog.vue'
 import NodeSortDialog from './NodeSortDialog.vue'
 import {
@@ -32,14 +41,17 @@ import {
   getNodeIdLabel,
   getNodeStatusMeta,
   getNodeTypeLabel,
+  type NodeRelationFilter,
 } from '@/utils/nodes'
 import { sortNodesByOrder } from '@/utils/nodeEditor'
 
-type NodeAction = 'edit' | 'copy' | 'delete'
+type NodeAction = 'edit' | 'copy' | 'pin-top' | 'delete'
 type NodeDialogMode = 'create' | 'edit'
+type NodeBatchEditPayload = Omit<AdminNodeBatchUpdatePayload, 'ids'>
 
 const route = useRoute()
 const router = useRouter()
+const tableRef = ref<TableInstance>()
 const loading = ref(false)
 const errorMessage = ref('')
 const nodes = ref<AdminNodeItem[]>([])
@@ -48,29 +60,54 @@ const routes = ref<AdminNodeRouteItem[]>([])
 const keyword = ref('')
 const typeFilter = ref('all')
 const groupFilter = ref('all')
+const relationFilter = ref<NodeRelationFilter>('all')
+const currentPage = ref(1)
+const pageSize = ref(20)
+const selectedNodeIds = ref<number[]>([])
 const switchingIds = ref<number[]>([])
 const workingIds = ref<number[]>([])
 const editorVisible = ref(false)
 const editorMode = ref<NodeDialogMode>('create')
 const activeNode = ref<AdminNodeItem | null>(null)
 const sortDialogVisible = ref(false)
+const batchEditVisible = ref(false)
+const batchSubmitting = ref(false)
 
 const filteredNodes = computed(() => sortNodesByOrder(filterNodes(
   nodes.value,
   keyword.value,
   typeFilter.value,
   groupFilter.value,
+  relationFilter.value,
 )))
 
+const paginatedNodes = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredNodes.value.slice(start, start + pageSize.value)
+})
+
+const selectedNodes = computed(() => nodes.value.filter((node) => selectedNodeIds.value.includes(node.id)))
 const typeOptions = computed(() => buildNodeTypeOptions(nodes.value))
-const hasActiveFilters = computed(() => keyword.value !== '' || typeFilter.value !== 'all' || groupFilter.value !== 'all')
+const hasSelectedNodes = computed(() => selectedNodes.value.length > 0)
+const hasActiveFilters = computed(() => (
+  keyword.value !== ''
+  || typeFilter.value !== 'all'
+  || groupFilter.value !== 'all'
+  || relationFilter.value !== 'all'
+))
 
 const summaryCards = computed(() => [
   { label: '节点总数', value: String(nodes.value.length) },
   { label: '在线节点', value: String(countOnlineNodes(nodes.value)) },
   { label: '显示中', value: String(countVisibleNodes(nodes.value)) },
-  { label: '当前结果', value: String(filteredNodes.value.length) },
+  { label: '已勾选', value: String(selectedNodes.value.length) },
 ])
+
+const batchTargetLabel = computed(() => (
+  hasSelectedNodes.value
+    ? `当前已选 ${selectedNodes.value.length} 个节点`
+    : '批量修改仅作用于已勾选节点'
+))
 
 function getRouteGroupQuery(): string {
   const rawValue = route.query.group
@@ -88,6 +125,7 @@ function applyRouteGroupFilter() {
 
   const exists = groups.value.some((group) => String(group.id) === groupValue)
   groupFilter.value = exists ? groupValue : 'all'
+  currentPage.value = 1
 }
 
 function markPending(list: typeof switchingIds, id: number, pending: boolean) {
@@ -125,6 +163,34 @@ function openSortEditor() {
   sortDialogVisible.value = true
 }
 
+function setCurrentPageInRange() {
+  const totalPages = Math.max(1, Math.ceil(filteredNodes.value.length / pageSize.value))
+  if (currentPage.value > totalPages) {
+    currentPage.value = totalPages
+  }
+}
+
+function pruneSelection() {
+  const validIds = new Set(nodes.value.map((node) => node.id))
+  selectedNodeIds.value = selectedNodeIds.value.filter((id) => validIds.has(id))
+}
+
+function syncTableSelection() {
+  nextTick(() => {
+    const table = tableRef.value
+    if (!table) {
+      return
+    }
+
+    table.clearSelection()
+    paginatedNodes.value.forEach((node) => {
+      if (selectedNodeIds.value.includes(node.id)) {
+        table.toggleRowSelection(node, true)
+      }
+    })
+  })
+}
+
 async function loadNodeBoard() {
   loading.value = true
   errorMessage.value = ''
@@ -139,7 +205,10 @@ async function loadNodeBoard() {
     nodes.value = sortNodesByOrder(nodesResponse.data ?? [])
     groups.value = groupsResponse.data ?? []
     routes.value = routesResponse.data ?? []
+    pruneSelection()
     applyRouteGroupFilter()
+    setCurrentPageInRange()
+    syncTableSelection()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '节点数据加载失败'
   } finally {
@@ -151,10 +220,65 @@ function handleReset() {
   keyword.value = ''
   typeFilter.value = 'all'
   groupFilter.value = 'all'
+  relationFilter.value = 'all'
+  currentPage.value = 1
 }
 
 function openNodeGroupManagement() {
   void router.push('/node-groups')
+}
+
+function handleSelectionChange(selection: AdminNodeItem[]) {
+  const currentPageIds = paginatedNodes.value.map((item) => item.id)
+  const selectionIds = selection.map((item) => item.id)
+  const persistedIds = selectedNodeIds.value.filter((id) => !currentPageIds.includes(id))
+  selectedNodeIds.value = [...new Set([...persistedIds, ...selectionIds])]
+}
+
+function clearSelection() {
+  selectedNodeIds.value = []
+  syncTableSelection()
+}
+
+function openBatchEditor() {
+  if (!hasSelectedNodes.value) {
+    ElMessage.warning('请先勾选需要批量修改的节点')
+    return
+  }
+
+  batchEditVisible.value = true
+}
+
+async function handleBatchSubmit(payload: NodeBatchEditPayload) {
+  const updatePayload: AdminNodeBatchUpdatePayload = {
+    ids: [...selectedNodeIds.value],
+    host: payload.host,
+    rate: payload.rate,
+    group_ids: payload.group_ids,
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确认批量修改 ${selectedNodeIds.value.length} 个节点吗？本次只会更新已启用的字段。`,
+      '批量修改节点',
+      { type: 'warning' },
+    )
+
+    batchSubmitting.value = true
+    await batchUpdateNodes(updatePayload)
+    batchEditVisible.value = false
+    clearSelection()
+    ElMessage.success(`已批量更新 ${updatePayload.ids.length} 个节点`)
+    await loadNodeBoard()
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') {
+      return
+    }
+
+    ElMessage.error(error instanceof Error ? error.message : '批量修改失败')
+  } finally {
+    batchSubmitting.value = false
+  }
 }
 
 async function handleToggleShow(node: AdminNodeItem, nextValue: boolean) {
@@ -180,9 +304,39 @@ async function handleToggleShow(node: AdminNodeItem, nextValue: boolean) {
   }
 }
 
+async function handlePinTop(node: AdminNodeItem) {
+  const orderedNodes = sortNodesByOrder(nodes.value)
+  if (orderedNodes[0]?.id === node.id) {
+    ElMessage.info('当前节点已经在列表顶部')
+    return
+  }
+
+  markPending(workingIds, node.id, true)
+
+  try {
+    const nextOrder = [node, ...orderedNodes.filter((item) => item.id !== node.id)]
+    await sortNodes(nextOrder.map((item, index) => ({
+      id: item.id,
+      order: index + 1,
+    })))
+    currentPage.value = 1
+    ElMessage.success(`已将“${node.name}”置顶`)
+    await loadNodeBoard()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '节点置顶失败')
+  } finally {
+    markPending(workingIds, node.id, false)
+  }
+}
+
 async function handleAction(action: NodeAction, node: AdminNodeItem) {
   if (action === 'edit') {
     openEditEditor(node)
+    return
+  }
+
+  if (action === 'pin-top') {
+    await handlePinTop(node)
     return
   }
 
@@ -226,6 +380,32 @@ watch(
     applyRouteGroupFilter()
   },
 )
+
+watch([keyword, typeFilter, groupFilter, relationFilter], () => {
+  currentPage.value = 1
+})
+
+watch(pageSize, () => {
+  currentPage.value = 1
+})
+
+watch(
+  () => filteredNodes.value.length,
+  () => {
+    setCurrentPageInRange()
+  },
+)
+
+watch(
+  () => [
+    paginatedNodes.value.map((item) => item.id).join(','),
+    selectedNodeIds.value.join(','),
+  ],
+  () => {
+    syncTableSelection()
+  },
+  { flush: 'post' },
+)
 </script>
 
 <template>
@@ -235,7 +415,7 @@ watch(
         <p class="nodes-kicker">Nodes</p>
         <h1>节点管理</h1>
         <span>
-          管理所有节点，包括添加、筛选、显隐控制、复制和删除等首批运营动作。
+          现在可以在同一页完成节点筛选、分页浏览、单行置顶、批量修改，以及新增、编辑、显隐和删除等运营动作。
         </span>
       </div>
 
@@ -285,9 +465,17 @@ watch(
               :value="String(group.id)"
             />
           </ElSelect>
+
+          <ElSelect v-model="relationFilter" class="toolbar-select" placeholder="节点关系">
+            <ElOption label="全部节点" value="all" />
+            <ElOption label="父节点" value="parent" />
+            <ElOption label="子节点" value="child" />
+          </ElSelect>
         </div>
 
         <div class="toolbar-actions">
+          <span class="scope-hint">{{ batchTargetLabel }}</span>
+          <ElButton :disabled="!hasSelectedNodes" @click="openBatchEditor">批量修改</ElButton>
           <ElButton @click="openNodeGroupManagement">管理权限组</ElButton>
           <ElButton @click="handleReset" :disabled="!hasActiveFilters">
             <ElIcon><RefreshRight /></ElIcon>
@@ -296,6 +484,11 @@ watch(
           <ElButton @click="openSortEditor">编辑排序</ElButton>
         </div>
       </header>
+
+      <div v-if="hasSelectedNodes" class="selection-summary">
+        <span class="selection-summary__label">已勾选 {{ selectedNodes.length }} 个节点，批量修改只会作用于这些节点。</span>
+        <ElButton text @click="clearSelection">清空勾选</ElButton>
+      </div>
 
       <ElAlert
         v-if="errorMessage"
@@ -311,11 +504,14 @@ watch(
       </ElAlert>
 
       <ElTable
-        :data="filteredNodes"
+        ref="tableRef"
+        :data="paginatedNodes"
         v-loading="loading"
         row-key="id"
         class="nodes-table"
+        @selection-change="handleSelectionChange"
       >
+        <ElTableColumn type="selection" width="52" reserve-selection />
         <ElTableColumn label="节点ID" width="132">
           <template #default="{ row }">
             <ElTag
@@ -420,8 +616,9 @@ watch(
                 <ElIcon><MoreFilled /></ElIcon>
               </ElButton>
               <template #dropdown>
-                  <ElDropdownMenu>
+                <ElDropdownMenu>
                   <ElDropdownItem command="edit">编辑节点</ElDropdownItem>
+                  <ElDropdownItem command="pin-top">置顶节点</ElDropdownItem>
                   <ElDropdownItem command="copy">复制节点</ElDropdownItem>
                   <ElDropdownItem command="delete" divided>删除节点</ElDropdownItem>
                 </ElDropdownMenu>
@@ -446,10 +643,19 @@ watch(
       </ElTable>
 
       <footer class="board-footer">
-        <span>已显示 {{ filteredNodes.length }} / {{ nodes.length }} 个节点</span>
+        <span>第 {{ currentPage }} 页 · 已显示 {{ paginatedNodes.length }} / {{ filteredNodes.length }} 个节点</span>
+        <ElPagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="total, sizes, prev, pager, next"
+          :total="filteredNodes.length"
+          background
+          class="footer-pagination"
+        />
         <div class="footer-hint">
           <ElIcon><Connection /></ElIcon>
-          <span>节点新增、编辑与排序已在当前工作台内接入真实流程。</span>
+          <span>节点新增、编辑、置顶、排序与批量修改已收敛到同一工作台。</span>
         </div>
       </footer>
     </section>
@@ -468,6 +674,14 @@ watch(
       v-model:visible="sortDialogVisible"
       :nodes="nodes"
       @success="() => loadNodeBoard()"
+    />
+
+    <NodeBatchEditDialog
+      v-model:visible="batchEditVisible"
+      :groups="groups"
+      :selected-count="selectedNodes.length"
+      :loading="batchSubmitting"
+      @submit="handleBatchSubmit"
     />
   </div>
 </template>
@@ -550,7 +764,8 @@ watch(
 .toolbar-fields,
 .toolbar-actions,
 .board-footer,
-.footer-hint {
+.footer-hint,
+.selection-summary {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -576,6 +791,21 @@ watch(
 
 .board-alert {
   border-radius: 16px;
+}
+
+.scope-hint,
+.selection-summary__label {
+  color: var(--xboard-text-muted);
+  line-height: 1.5;
+}
+
+.selection-summary {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: #fbfbfd;
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .nodes-table :deep(th.el-table__cell) {
@@ -667,6 +897,10 @@ watch(
   flex-wrap: wrap;
 }
 
+.footer-pagination {
+  margin-left: auto;
+}
+
 .footer-hint {
   justify-content: flex-end;
   color: var(--xboard-text-muted);
@@ -675,7 +909,8 @@ watch(
 @media (max-width: 1180px) {
   .nodes-hero,
   .board-toolbar,
-  .board-footer {
+  .board-footer,
+  .selection-summary {
     flex-direction: column;
     align-items: stretch;
   }
@@ -687,6 +922,7 @@ watch(
 
   .toolbar-actions {
     justify-content: flex-end;
+    flex-wrap: wrap;
   }
 }
 
