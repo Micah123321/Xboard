@@ -116,6 +116,23 @@ export interface QueueStats {
   wait?: QueueWaitEntry[]
 }
 
+export interface AdminQueueFailedJob {
+  id?: number | string | null
+  uuid?: string | null
+  name?: string | null
+  queue?: string | null
+  connection?: string | null
+  exception?: string | null
+  failed_at?: number | string | null
+  payload?: unknown
+  [key: string]: unknown
+}
+
+export interface AdminQueueFailedJobResult extends AdminPaginationResult<AdminQueueFailedJob> {
+  current?: number
+  page_size?: number
+}
+
 export interface AdminPaginationResult<T> {
   data: T[]
   total: number
@@ -124,6 +141,11 @@ export interface AdminPaginationResult<T> {
 export interface AdminGroupOption {
   id: number
   name: string
+}
+
+export interface AdminServerGroupItem extends AdminGroupOption {
+  users_count?: number
+  server_count?: number
 }
 
 export interface AdminPlanOption {
@@ -135,6 +157,65 @@ export interface AdminPlanOption {
   users_count?: number
   active_users_count?: number
   group?: AdminGroupOption | null
+}
+
+export type AdminConfigGroupKey =
+  | 'invite'
+  | 'site'
+  | 'subscribe'
+  | 'frontend'
+  | 'server'
+  | 'email'
+  | 'telegram'
+  | 'app'
+  | 'safe'
+  | 'subscribe_template'
+
+export type AdminConfigGroupValue = Record<string, unknown>
+
+export type AdminConfigMappings = Partial<Record<AdminConfigGroupKey, AdminConfigGroupValue>>
+
+export interface AdminPlanPriceMap {
+  monthly?: number | null
+  quarterly?: number | null
+  half_yearly?: number | null
+  yearly?: number | null
+  two_yearly?: number | null
+  three_yearly?: number | null
+  onetime?: number | null
+  reset_traffic?: number | null
+  [key: string]: number | null | undefined
+}
+
+export interface AdminPlanListItem extends AdminPlanOption {
+  show: boolean
+  renew: boolean
+  sell: boolean
+  prices?: AdminPlanPriceMap | null
+  tags?: string[] | null
+  content?: string | null
+  reset_traffic_method?: number | null
+  capacity_limit?: number | null
+  device_limit?: number | null
+  speed_limit?: number | null
+  sort: number
+  created_at: number
+  updated_at: number
+}
+
+export interface AdminPlanSavePayload {
+  id?: number
+  name: string
+  content?: string
+  reset_traffic_method?: number | null
+  transfer_enable: number
+  prices?: AdminPlanPriceMap
+  group_id?: number | null
+  speed_limit?: number | null
+  device_limit?: number | null
+  capacity_limit?: number | null
+  tags?: string[]
+  force_update?: boolean
 }
 
 export interface AdminUserRef {
@@ -282,6 +363,50 @@ export interface AdminTrafficLogItem {
 
 export interface AdminTrafficLogResult extends AdminPaginationResult<AdminTrafficLogItem> {
   summary: TrafficAmount
+}
+
+export interface AdminNodeParentRef {
+  id: number
+  name: string
+}
+
+export interface AdminNodeMetrics {
+  active_connections?: number
+  active_users?: number
+  kernel_status?: boolean
+  updated_at?: number
+}
+
+export interface AdminNodeItem {
+  id: number
+  name: string
+  type: string
+  host: string
+  port: number | string | null
+  server_port?: number | null
+  group_ids?: Array<number | string> | null
+  route_ids?: Array<number | string> | null
+  show: boolean
+  enabled?: boolean
+  parent_id?: number | null
+  rate?: number | null
+  sort?: number | null
+  online: number
+  online_conn: number
+  is_online: number
+  available_status: number
+  last_check_at?: number | null
+  last_push_at?: number | null
+  metrics?: AdminNodeMetrics | null
+  groups?: AdminServerGroupItem[]
+  parent?: AdminNodeParentRef | null
+}
+
+export interface AdminNodeUpdatePayload {
+  id: number
+  show?: boolean | number
+  enabled?: boolean
+  machine_id?: number | null
 }
 
 declare global {

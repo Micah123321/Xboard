@@ -1,7 +1,14 @@
 import { adminClient } from './client'
 import type {
+  AdminConfigGroupKey,
+  AdminConfigMappings,
+  AdminNodeItem,
+  AdminNodeUpdatePayload,
+  AdminQueueFailedJobResult,
   AdminPaginationResult,
-  AdminPlanOption,
+  AdminPlanListItem,
+  AdminPlanSavePayload,
+  AdminServerGroupItem,
   AdminTicketDetail,
   AdminTicketFetchParams,
   AdminTicketListItem,
@@ -63,6 +70,7 @@ export function getTrafficRank(params: {
   type: 'node' | 'user'
   startTime: number
   endTime: number
+  limit?: 10 | 20
 }): Promise<TrafficRankResponse> {
   return adminClient
     .get<TrafficRankResponse>('/stat/getTrafficRank', {
@@ -70,6 +78,7 @@ export function getTrafficRank(params: {
         type: params.type,
         start_time: params.startTime,
         end_time: params.endTime,
+        limit: params.limit,
       },
     })
     .then((res) => res.data)
@@ -83,8 +92,79 @@ export function getQueueStats(): Promise<ApiResponse<QueueStats>> {
   return unwrap<QueueStats>('/system/getQueueStats')
 }
 
-export function getPlans(): Promise<ApiResponse<AdminPlanOption[]>> {
-  return unwrap<AdminPlanOption[]>('/plan/fetch')
+export function getHorizonFailedJobs(params: {
+  current?: number
+  pageSize?: number
+} = {}): Promise<AdminQueueFailedJobResult> {
+  return adminClient
+    .get<AdminQueueFailedJobResult>('/system/getHorizonFailedJobs', {
+      params: {
+        current: params.current,
+        page_size: params.pageSize,
+      },
+    })
+    .then((res) => res.data)
+}
+
+export function getPlans(): Promise<ApiResponse<AdminPlanListItem[]>> {
+  return unwrap<AdminPlanListItem[]>('/plan/fetch')
+}
+
+export function fetchAdminConfig(key?: AdminConfigGroupKey): Promise<ApiResponse<AdminConfigMappings>> {
+  return unwrap<AdminConfigMappings>('/config/fetch', key ? { key } : undefined)
+}
+
+export function saveAdminConfig(payload: Record<string, unknown>): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/config/save', payload)
+}
+
+export function testAdminMail(): Promise<ApiResponse<Record<string, unknown>>> {
+  return unwrapPost<Record<string, unknown>>('/config/testSendMail', {})
+}
+
+export function setTelegramWebhook(payload: {
+  telegram_bot_token?: string
+} = {}): Promise<ApiResponse<Record<string, unknown>>> {
+  return unwrapPost<Record<string, unknown>>('/config/setTelegramWebhook', payload)
+}
+
+export function savePlan(payload: AdminPlanSavePayload): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/plan/save', payload as unknown as Record<string, unknown>)
+}
+
+export function updatePlan(id: number, payload: Partial<Pick<AdminPlanListItem, 'show' | 'renew' | 'sell'>>): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/plan/update', {
+    id,
+    ...payload,
+  })
+}
+
+export function deletePlan(id: number): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/plan/drop', { id })
+}
+
+export function sortPlans(ids: number[]): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/plan/sort', { ids })
+}
+
+export function getServerGroups(): Promise<ApiResponse<AdminServerGroupItem[]>> {
+  return unwrap<AdminServerGroupItem[]>('/server/group/fetch')
+}
+
+export function fetchNodes(): Promise<ApiResponse<AdminNodeItem[]>> {
+  return unwrap<AdminNodeItem[]>('/server/manage/getNodes')
+}
+
+export function updateNode(payload: AdminNodeUpdatePayload): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/server/manage/update', payload as unknown as Record<string, unknown>)
+}
+
+export function copyNode(id: number): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/server/manage/copy', { id })
+}
+
+export function deleteNode(id: number): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/server/manage/drop', { id })
 }
 
 export function fetchUsers(params: AdminUserFetchParams): Promise<AdminPaginationResult<AdminUserListItem>> {

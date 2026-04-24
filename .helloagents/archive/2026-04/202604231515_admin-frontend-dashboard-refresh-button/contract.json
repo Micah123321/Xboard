@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "source": "~auto",
+  "originCommand": "auto",
+  "verifyMode": "test-first",
+  "reviewerFocus": [],
+  "testerFocus": [
+    "Hero 区刷新按钮是否触发整页数据刷新",
+    "刷新中是否有明确状态反馈并阻止重复点击",
+    "Dashboard 页面构建后是否保持现有 Apple 风格层级"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "proposal.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": true,
+      "reason": "本轮为 Dashboard 顶部新增显式操作按钮，需要确认视觉风格与交互状态一致。",
+      "screens": [
+        "dashboard desktop",
+        "dashboard mobile"
+      ],
+      "states": [
+        "refresh idle",
+        "refresh loading"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

@@ -36,6 +36,8 @@ export interface TrendChartModel {
   labels: ChartLabelPoint[]
 }
 
+export type TrendMetric = 'amount' | 'count'
+
 const TREND_WIDTH = 760
 const TREND_HEIGHT = 260
 const PADDING_X = 24
@@ -95,6 +97,10 @@ export function formatCompactNumber(value: number): string {
     notation: value >= 10_000 ? 'compact' : 'standard',
     maximumFractionDigits: value >= 10_000 ? 1 : 0,
   }).format(value || 0)
+}
+
+export function formatCountLabel(value: number): string {
+  return `${formatCompactNumber(Math.max(0, Math.round(value || 0)))} 笔`
 }
 
 export function formatTraffic(bytes: number): string {
@@ -159,7 +165,10 @@ function getVisibleLabels(points: TrendChartPoint[]): ChartLabelPoint[] {
     }))
 }
 
-export function buildTrendChart(points: OrderTrendPoint[]): TrendChartModel {
+export function buildTrendChart(
+  points: OrderTrendPoint[],
+  options: { metric?: TrendMetric } = {},
+): TrendChartModel {
   if (!points.length) {
     return {
       path: '',
@@ -170,7 +179,11 @@ export function buildTrendChart(points: OrderTrendPoint[]): TrendChartModel {
     }
   }
 
-  const values = points.map((point) => Math.max(0, toNumber(point.paid_total)))
+  const metric = options.metric ?? 'amount'
+  const values = points.map((point) => {
+    const value = metric === 'count' ? point.paid_count : point.paid_total
+    return Math.max(0, toNumber(value))
+  })
   const maxValue = Math.max(...values, 1)
   const innerWidth = TREND_WIDTH - PADDING_X * 2
   const innerHeight = TREND_HEIGHT - PADDING_TOP - PADDING_BOTTOM
@@ -197,7 +210,9 @@ export function buildTrendChart(points: OrderTrendPoint[]): TrendChartModel {
     : ''
 
   const gridLines = [1, 0.75, 0.5, 0.25, 0].map((ratio) => ({
-    label: formatCompactCurrency(maxValue * ratio),
+    label: metric === 'count'
+      ? formatCountLabel(maxValue * ratio)
+      : formatCompactCurrency(maxValue * ratio),
     y: PADDING_TOP + innerHeight - innerHeight * ratio,
   }))
 

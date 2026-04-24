@@ -1,0 +1,55 @@
+{
+  "updatedAt": "2026-04-23T15:35:17.621Z",
+  "version": 1,
+  "source": "~auto",
+  "originCommand": "plan",
+  "verifyMode": "review-first",
+  "reviewerFocus": [
+    "系统管理侧边栏分组是否清晰且与现有 Apple 风格后台一致",
+    "系统配置页的左侧分组导航与右侧长表单结构是否清晰可读",
+    "其余系统管理入口是否被透明标注为后续接入"
+  ],
+  "testerFocus": [
+    "系统管理新路由是否可以正常进入",
+    "系统配置页是否真实连接 /config/fetch 与 /config/save",
+    "保存反馈与辅助按钮是否存在真实数据流"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "plan.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": true,
+      "reason": "系统管理属于整页新建后台视图，需要确认导航、系统配置长表单层级与占位页结构在浏览器中符合 Apple 风格契约",
+      "screens": [
+        "#/system/config desktop",
+        "#/system/plugins desktop",
+        "#/system/themes desktop",
+        "#/system/notices desktop",
+        "#/system/payments desktop",
+        "#/system/knowledge desktop"
+      ],
+      "states": [
+        "系统配置默认加载完成态",
+        "系统配置保存态",
+        "系统配置错误/重试态",
+        "系统模块占位态"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

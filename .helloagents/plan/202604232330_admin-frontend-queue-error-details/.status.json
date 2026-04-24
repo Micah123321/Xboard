@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 6,
+  "failed": 0,
+  "pending": 0,
+  "total": 6,
+  "done": 6,
+  "percent": 100,
+  "current": "失败作业详情入口、弹窗与构建验证已完成",
+  "updated_at": "2026-04-23 23:38:00"
+}

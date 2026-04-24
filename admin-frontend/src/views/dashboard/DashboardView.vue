@@ -7,6 +7,7 @@ import {
   DataAnalysis,
   Discount,
   Download,
+  RefreshRight,
   Tickets,
   Upload,
   User,
@@ -29,6 +30,7 @@ import type {
 } from '@/types/api'
 import {
   buildTrendChart,
+  formatCountLabel,
   formatCompactNumber,
   formatCurrency,
   formatDateTime,
@@ -37,9 +39,11 @@ import {
   getDateRangeFromPreset,
   getQueueWaitName,
   getQueueWaitSeconds,
+  type TrendMetric,
   type TimePreset,
 } from '@/utils/dashboard'
 import { useAppStore } from '@/stores/app'
+import QueueFailedJobsDialog from './QueueFailedJobsDialog.vue'
 
 interface MetricCard {
   key: string
@@ -56,7 +60,9 @@ const booting = ref(true)
 const trendLoading = ref(false)
 const rankLoading = ref(false)
 const systemLoading = ref(false)
+const lastRefreshedAt = ref<string | null>(null)
 const trendPreset = ref<TimePreset>('30d')
+const trendMetric = ref<TrendMetric>('amount')
 const rankPreset = ref<TimePreset>('1d')
 
 const overview = ref<DashboardStats | null>(null)
@@ -66,6 +72,7 @@ const nodeRanks = ref<TrafficRankItem[]>([])
 const userRanks = ref<TrafficRankItem[]>([])
 const systemStatus = ref<SystemStatus | null>(null)
 const queueStats = ref<QueueStats | null>(null)
+const failedJobsDialogVisible = ref(false)
 
 const trendPresetOptions = [
   { label: '7天', value: '7d' },
@@ -73,11 +80,26 @@ const trendPresetOptions = [
   { label: '90天', value: '90d' },
 ] as const
 
+const trendMetricOptions = [
+  { label: '按金额', value: 'amount' },
+  { label: '按数量', value: 'count' },
+] as const
+
 const rankPresetOptions = [
   { label: '24h', value: '1d' },
   { label: '7天', value: '7d' },
   { label: '30天', value: '30d' },
 ] as const
+
+const rankDisplayOptions = [
+  { label: '10个', value: 10 },
+  { label: '20个', value: 20 },
+] as const
+
+type RankDisplayCount = (typeof rankDisplayOptions)[number]['value']
+
+const nodeRankLimit = ref<RankDisplayCount>(10)
+const userRankLimit = ref<RankDisplayCount>(10)
 
 const dashboardStats = computed<DashboardStats>(() => overview.value ?? {
   todayIncome: 0,
@@ -195,7 +217,97 @@ const heroSummary = computed(() => [
   },
 ])
 
-const trendChart = computed(() => buildTrendChart(trendList.value))
+const refreshButtonDisabled = computed(() => (
+  booting.value
+  || trendLoading.value
+  || rankLoading.value
+  || systemLoading.value
+))
+
+const refreshStatusText = computed(() => {
+  if (booting.value) return '正在同步全部数据'
+  return '数据已同步'
+})
+
+const refreshStatusMeta = computed(() => {
+  if (booting.value) return '统计、趋势、排行与系统状态正在刷新'
+  if (!lastRefreshedAt.value) return '首次加载完成后可再次刷新'
+  return `上次刷新 ${formatDateTime(lastRefreshedAt.value)}`
+})
+
+const trendChart = computed(() => buildTrendChart(trendList.value, {
+  metric: trendMetric.value,
+}))
+
+const trendAverageCount = computed(() => {
+  if (!trendList.value.length) return 0
+  const total = trendList.value.reduce((sum, point) => sum + point.paid_count, 0)
+  return total / trendList.value.length
+})
+
+const trendPeakCount = computed(() => {
+  if (!trendList.value.length) return 0
+  return Math.max(...trendList.value.map((point) => point.paid_count))
+})
+
+const trendSummaryCards = computed(() => {
+  const summary = trendSummary.value
+  if (!summary) {
+    return trendMetric.value === 'count'
+      ? [
+          { label: '成交订单', value: formatCountLabel(0), detail: '总成交额 ¥0.00' },
+          { label: '佣金订单', value: formatCountLabel(0), detail: '占成交 0.0%' },
+          { label: '日均成交', value: formatCountLabel(0), detail: '峰值 0 笔' },
+        ]
+      : [
+          { label: '成交总额', value: formatCurrency(0), detail: '共 0 笔' },
+          { label: '佣金支出', value: formatCurrency(0), detail: '佣金率 0.0%' },
+          { label: '订单均价', value: formatCurrency(0), detail: '单笔均值' },
+        ]
+  }
+
+  if (trendMetric.value === 'count') {
+    const commissionShare = summary.paid_count
+      ? (summary.commission_count / summary.paid_count) * 100
+      : 0
+
+    return [
+      {
+        label: '成交订单',
+        value: formatCountLabel(summary.paid_count),
+        detail: `总成交额 ${formatCurrency(summary.paid_total)}`,
+      },
+      {
+        label: '佣金订单',
+        value: formatCountLabel(summary.commission_count),
+        detail: `占成交 ${formatPercent(commissionShare, false)}`,
+      },
+      {
+        label: '日均成交',
+        value: formatCountLabel(trendAverageCount.value),
+        detail: `峰值 ${formatCountLabel(trendPeakCount.value)}`,
+      },
+    ]
+  }
+
+  return [
+    {
+      label: '成交总额',
+      value: formatCurrency(summary.paid_total),
+      detail: `共 ${formatCompactNumber(summary.paid_count)} 笔`,
+    },
+    {
+      label: '佣金支出',
+      value: formatCurrency(summary.commission_total),
+      detail: `佣金率 ${formatPercent(summary.commission_rate ?? 0, false)}`,
+    },
+    {
+      label: '订单均价',
+      value: formatCurrency(summary.avg_paid_amount),
+      detail: '单笔均值',
+    },
+  ]
+})
 
 const latestTrendPoint = computed(() => {
   if (!trendList.value.length) return null
@@ -203,12 +315,22 @@ const latestTrendPoint = computed(() => {
 })
 
 const trendSnapshot = computed(() => {
-  if (!latestTrendPoint.value) return null
+  const point = latestTrendPoint.value
+  if (!point) return null
+
   return {
-    date: latestTrendPoint.value.date,
-    orderAmount: formatCurrency(latestTrendPoint.value.paid_total),
-    commissionAmount: formatCurrency(latestTrendPoint.value.commission_total),
-    orderCount: latestTrendPoint.value.paid_count,
+    date: point.date,
+    items: trendMetric.value === 'count'
+      ? [
+          { label: '成交订单', value: formatCountLabel(point.paid_count) },
+          { label: '佣金订单', value: formatCountLabel(point.commission_count) },
+          { label: '成交总额', value: formatCurrency(point.paid_total) },
+        ]
+      : [
+          { label: '收入', value: formatCurrency(point.paid_total) },
+          { label: '佣金', value: formatCurrency(point.commission_total) },
+          { label: '订单', value: formatCountLabel(point.paid_count) },
+        ],
   }
 })
 
@@ -231,6 +353,9 @@ const queueHealthRows = computed(() => [
     value: formatCompactNumber(queueStats.value?.processes ?? 0),
   },
 ])
+
+const displayedNodeRanks = computed(() => nodeRanks.value.slice(0, nodeRankLimit.value))
+const displayedUserRanks = computed(() => userRanks.value.slice(0, userRankLimit.value))
 
 const systemRows = computed(() => [
   {
@@ -305,11 +430,13 @@ async function loadRankings() {
         type: 'node',
         startTime: range.startTime,
         endTime: range.endTime,
+        limit: nodeRankLimit.value,
       }),
       getTrafficRank({
         type: 'user',
         startTime: range.startTime,
         endTime: range.endTime,
+        limit: userRankLimit.value,
       }),
     ])
 
@@ -320,35 +447,52 @@ async function loadRankings() {
   }
 }
 
-async function refreshDashboard() {
+async function refreshDashboard(options: { silentSuccess?: boolean } = {}) {
   booting.value = true
-  const results = await Promise.allSettled([
-    loadOverviewPanels(),
-    loadTrend(),
-    loadRankings(),
-  ])
+  try {
+    const results = await Promise.allSettled([
+      loadOverviewPanels(),
+      loadTrend(),
+      loadRankings(),
+    ])
 
-  if (results.some((item) => item.status === 'rejected')) {
-    ElMessage.error('部分仪表盘数据加载失败，请稍后重试')
+    if (results.some((item) => item.status === 'rejected')) {
+      ElMessage.error('部分仪表盘数据加载失败，请稍后重试')
+      return
+    }
+
+    lastRefreshedAt.value = new Date().toISOString()
+    if (!options.silentSuccess) {
+      ElMessage.success('仪表盘数据已刷新')
+    }
+  } finally {
+    booting.value = false
   }
+}
 
-  booting.value = false
+function handleRefresh() {
+  if (refreshButtonDisabled.value) return
+  void refreshDashboard()
 }
 
 function rankBarWidth(index: number): string {
   return `${Math.max(28, 100 - index * 12)}%`
 }
 
+function rankScrollClass(limit: RankDisplayCount): string {
+  return limit === 20 ? 'rank-scroll rank-scroll--extended' : 'rank-scroll'
+}
+
 watch(trendPreset, () => {
   void loadTrend().catch(() => ElMessage.error('趋势数据刷新失败'))
 })
 
-watch(rankPreset, () => {
+watch([rankPreset, nodeRankLimit, userRankLimit], () => {
   void loadRankings().catch(() => ElMessage.error('排行数据刷新失败'))
 })
 
 onMounted(() => {
-  void refreshDashboard()
+  void refreshDashboard({ silentSuccess: true })
 })
 </script>
 
@@ -365,8 +509,23 @@ onMounted(() => {
 
       <div class="dashboard-hero-side">
         <div class="hero-status">
-          <span>{{ booting ? '正在同步数据' : '数据已同步' }}</span>
-          <strong>/{{ app.securePath || 'admin' }}</strong>
+          <div class="hero-status__copy">
+            <span>{{ refreshStatusText }}</span>
+            <strong>/{{ app.securePath || 'admin' }}</strong>
+            <p>{{ refreshStatusMeta }}</p>
+          </div>
+
+          <button
+            type="button"
+            class="dashboard-refresh-button"
+            :disabled="refreshButtonDisabled"
+            @click="handleRefresh"
+          >
+            <ElIcon class="dashboard-refresh-button__icon" :class="{ spinning: booting }">
+              <RefreshRight />
+            </ElIcon>
+            <span>{{ booting ? '正在刷新全部数据' : '刷新全部数据' }}</span>
+          </button>
         </div>
 
         <div class="hero-highlights">
@@ -416,35 +575,46 @@ onMounted(() => {
             </p>
           </div>
 
-          <div class="filter-group">
-            <button
-              v-for="option in trendPresetOptions"
-              :key="option.value"
-              type="button"
-              class="filter-pill"
-              :class="{ active: option.value === trendPreset }"
-              @click="trendPreset = option.value"
-            >
-              {{ option.label }}
-            </button>
+          <div class="panel-actions">
+            <div class="filter-group filter-group--segmented" aria-label="趋势口径切换">
+              <button
+                v-for="option in trendMetricOptions"
+                :key="option.value"
+                type="button"
+                class="filter-pill"
+                :class="{ active: option.value === trendMetric }"
+                :aria-pressed="option.value === trendMetric"
+                @click="trendMetric = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+
+            <div class="filter-group">
+              <button
+                v-for="option in trendPresetOptions"
+                :key="option.value"
+                type="button"
+                class="filter-pill"
+                :class="{ active: option.value === trendPreset }"
+                :aria-pressed="option.value === trendPreset"
+                @click="trendPreset = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
           </div>
         </header>
 
         <div class="trend-summary">
-          <article class="trend-stat">
-            <span>成交总额</span>
-            <strong>{{ formatCurrency(trendSummary?.paid_total ?? 0) }}</strong>
-            <p>共 {{ formatCompactNumber(trendSummary?.paid_count ?? 0) }} 笔</p>
-          </article>
-          <article class="trend-stat">
-            <span>佣金支出</span>
-            <strong>{{ formatCurrency(trendSummary?.commission_total ?? 0) }}</strong>
-            <p>佣金率 {{ formatPercent(trendSummary?.commission_rate ?? 0, false) }}</p>
-          </article>
-          <article class="trend-stat">
-            <span>订单均价</span>
-            <strong>{{ formatCurrency(trendSummary?.avg_paid_amount ?? 0) }}</strong>
-            <p>单笔均值</p>
+          <article
+            v-for="card in trendSummaryCards"
+            :key="card.label"
+            class="trend-stat"
+          >
+            <span>{{ card.label }}</span>
+            <strong>{{ card.value }}</strong>
+            <p>{{ card.detail }}</p>
           </article>
         </div>
 
@@ -490,17 +660,12 @@ onMounted(() => {
             <span>最近记录</span>
             <strong>{{ trendSnapshot.date }}</strong>
           </div>
-          <div>
-            <span>收入</span>
-            <strong>{{ trendSnapshot.orderAmount }}</strong>
-          </div>
-          <div>
-            <span>佣金</span>
-            <strong>{{ trendSnapshot.commissionAmount }}</strong>
-          </div>
-          <div>
-            <span>订单</span>
-            <strong>{{ trendSnapshot.orderCount }} 笔</strong>
+          <div
+            v-for="item in trendSnapshot.items"
+            :key="item.label"
+          >
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
           </div>
         </div>
       </article>
@@ -513,6 +678,20 @@ onMounted(() => {
             <p class="panel-description panel-description--dark">
               队列、调度器和关键系统状态。
             </p>
+          </div>
+
+          <div class="panel-actions panel-actions--dark">
+            <button
+              type="button"
+              class="system-action-button"
+              aria-haspopup="dialog"
+              @click="failedJobsDialogVisible = true"
+            >
+              查看报错详情
+            </button>
+            <span class="system-panel__meta">
+              当前失败 {{ formatCompactNumber(queueStats?.failedJobs ?? 0) }} 条
+            </span>
           </div>
         </header>
 
@@ -541,35 +720,62 @@ onMounted(() => {
             <h2>节点流量排行</h2>
           </div>
 
-          <div class="filter-group">
-            <button
-              v-for="option in rankPresetOptions"
-              :key="`node-${option.value}`"
-              type="button"
-              class="filter-pill"
-              :class="{ active: option.value === rankPreset }"
-              @click="rankPreset = option.value"
-            >
-              {{ option.label }}
-            </button>
+          <div class="panel-actions">
+            <div class="filter-group">
+              <button
+                v-for="option in rankPresetOptions"
+                :key="`node-${option.value}`"
+                type="button"
+                class="filter-pill"
+                :class="{ active: option.value === rankPreset }"
+                :aria-pressed="option.value === rankPreset"
+                @click="rankPreset = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+
+            <div class="filter-group filter-group--segmented" aria-label="节点排行显示数量">
+              <button
+                v-for="option in rankDisplayOptions"
+                :key="`node-limit-${option.value}`"
+                type="button"
+                class="filter-pill"
+                :class="{ active: option.value === nodeRankLimit }"
+                :aria-pressed="option.value === nodeRankLimit"
+                @click="nodeRankLimit = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
           </div>
         </header>
 
         <div class="panel-state" v-if="rankLoading">排行数据同步中…</div>
-        <div v-if="nodeRanks.length" class="rank-list">
-          <div v-for="(item, index) in nodeRanks.slice(0, 6)" :key="item.id" class="rank-item">
-            <div class="rank-item__copy">
-              <strong>{{ item.name }}</strong>
-              <span>{{ formatTraffic(item.value) }}</span>
+        <div
+          v-else-if="nodeRanks.length"
+          :class="rankScrollClass(nodeRankLimit)"
+        >
+          <div class="rank-list">
+            <div
+              v-for="(item, index) in displayedNodeRanks"
+              :key="item.id"
+              class="rank-item"
+            >
+              <div class="rank-item__copy">
+                <strong>{{ item.name }}</strong>
+                <span>{{ formatTraffic(item.value) }}</span>
+              </div>
+              <div class="rank-item__bar">
+                <span :style="{ width: rankBarWidth(index) }" />
+              </div>
+              <em :class="Number(item.change) >= 0 ? 'positive' : 'negative'">
+                {{ formatPercent(item.change) }}
+              </em>
             </div>
-            <div class="rank-item__bar">
-              <span :style="{ width: rankBarWidth(index) }" />
-            </div>
-            <em :class="Number(item.change) >= 0 ? 'positive' : 'negative'">
-              {{ formatPercent(item.change) }}
-            </em>
           </div>
         </div>
+        <div v-else class="panel-state">暂无节点排行数据</div>
       </article>
 
       <article class="panel rank-panel">
@@ -579,37 +785,66 @@ onMounted(() => {
             <h2>用户流量排行</h2>
           </div>
 
-          <div class="filter-group">
-            <button
-              v-for="option in rankPresetOptions"
-              :key="`user-${option.value}`"
-              type="button"
-              class="filter-pill"
-              :class="{ active: option.value === rankPreset }"
-              @click="rankPreset = option.value"
-            >
-              {{ option.label }}
-            </button>
+          <div class="panel-actions">
+            <div class="filter-group">
+              <button
+                v-for="option in rankPresetOptions"
+                :key="`user-${option.value}`"
+                type="button"
+                class="filter-pill"
+                :class="{ active: option.value === rankPreset }"
+                :aria-pressed="option.value === rankPreset"
+                @click="rankPreset = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+
+            <div class="filter-group filter-group--segmented" aria-label="用户排行显示数量">
+              <button
+                v-for="option in rankDisplayOptions"
+                :key="`user-limit-${option.value}`"
+                type="button"
+                class="filter-pill"
+                :class="{ active: option.value === userRankLimit }"
+                :aria-pressed="option.value === userRankLimit"
+                @click="userRankLimit = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
           </div>
         </header>
 
         <div class="panel-state" v-if="rankLoading">排行数据同步中…</div>
-        <div v-if="userRanks.length" class="rank-list">
-          <div v-for="(item, index) in userRanks.slice(0, 6)" :key="item.id" class="rank-item">
-            <div class="rank-item__copy">
-              <strong>{{ item.name }}</strong>
-              <span>{{ formatTraffic(item.value) }}</span>
+        <div
+          v-else-if="userRanks.length"
+          :class="rankScrollClass(userRankLimit)"
+        >
+          <div class="rank-list">
+            <div
+              v-for="(item, index) in displayedUserRanks"
+              :key="item.id"
+              class="rank-item"
+            >
+              <div class="rank-item__copy">
+                <strong>{{ item.name }}</strong>
+                <span>{{ formatTraffic(item.value) }}</span>
+              </div>
+              <div class="rank-item__bar">
+                <span :style="{ width: rankBarWidth(index) }" />
+              </div>
+              <em :class="Number(item.change) >= 0 ? 'positive' : 'negative'">
+                {{ formatPercent(item.change) }}
+              </em>
             </div>
-            <div class="rank-item__bar">
-              <span :style="{ width: rankBarWidth(index) }" />
-            </div>
-            <em :class="Number(item.change) >= 0 ? 'positive' : 'negative'">
-              {{ formatPercent(item.change) }}
-            </em>
           </div>
         </div>
+        <div v-else class="panel-state">暂无用户排行数据</div>
       </article>
     </section>
+
+    <QueueFailedJobsDialog v-model:visible="failedJobsDialogVisible" />
   </div>
 </template>
 
@@ -667,16 +902,66 @@ onMounted(() => {
 .hero-status {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   color: rgba(255, 255, 255, 0.72);
+}
+
+.hero-status__copy {
+  display: grid;
+  gap: 6px;
 }
 
 .hero-status strong {
   color: #ffffff;
   font-size: 14px;
   font-weight: 600;
+}
+
+.hero-status__copy p {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.dashboard-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  padding: 11px 18px;
+  min-height: 44px;
+  cursor: pointer;
+  transition: transform 180ms ease, background-color 180ms ease, border-color 180ms ease;
+}
+
+.dashboard-refresh-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.dashboard-refresh-button:focus-visible {
+  outline: 2px solid rgba(0, 113, 227, 0.88);
+  outline-offset: 2px;
+}
+
+.dashboard-refresh-button:disabled {
+  cursor: wait;
+  opacity: 0.78;
+}
+
+.dashboard-refresh-button__icon {
+  font-size: 15px;
+}
+
+.dashboard-refresh-button__icon.spinning {
+  animation: dashboard-refresh-spin 0.9s linear infinite;
 }
 
 .hero-highlights {
@@ -806,6 +1091,16 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.panel-actions {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.panel-actions--dark {
+  align-items: end;
+}
+
 .panel-header h2 {
   margin: 0;
   font-size: 32px;
@@ -823,10 +1118,45 @@ onMounted(() => {
   color: rgba(255, 255, 255, 0.72);
 }
 
+.system-action-button {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.system-action-button:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.system-action-button:focus-visible {
+  outline: 2px solid rgba(41, 151, 255, 0.72);
+  outline-offset: 2px;
+}
+
+.system-action-button:active {
+  transform: translateY(1px);
+}
+
+.system-panel__meta {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+}
+
 .filter-group {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.filter-group--segmented {
+  padding: 4px;
+  border-radius: 999px;
+  background: #f5f5f7;
 }
 
 .filter-pill {
@@ -836,12 +1166,18 @@ onMounted(() => {
   padding: 10px 14px;
   color: var(--xboard-text-secondary);
   cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
 }
 
 .filter-pill.active {
   color: #0071e3;
   border-color: rgba(0, 113, 227, 0.22);
   background: rgba(0, 113, 227, 0.08);
+}
+
+.filter-pill:focus-visible {
+  outline: 2px solid rgba(0, 113, 227, 0.36);
+  outline-offset: 2px;
 }
 
 .trend-summary {
@@ -926,6 +1262,34 @@ onMounted(() => {
 .status-grid {
   display: grid;
   gap: 14px;
+}
+
+.rank-scroll {
+  max-height: 368px;
+  overflow-y: auto;
+  padding-right: 6px;
+  margin-right: -6px;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 113, 227, 0.22) transparent;
+}
+
+.rank-scroll--extended {
+  max-height: 516px;
+}
+
+.rank-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.rank-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rank-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(0, 113, 227, 0.22);
 }
 
 .rank-item {
@@ -1048,6 +1412,25 @@ onMounted(() => {
     padding: 28px 24px;
   }
 
+  .hero-status,
+  .panel-actions {
+    width: 100%;
+  }
+
+  .hero-status {
+    flex-direction: column;
+  }
+
+  .dashboard-refresh-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .rank-scroll,
+  .rank-scroll--extended {
+    max-height: 460px;
+  }
+
   .metrics-grid,
   .content-grid,
   .rank-grid,
@@ -1059,6 +1442,16 @@ onMounted(() => {
 
   .rank-item {
     grid-template-columns: 1fr;
+  }
+}
+
+@keyframes dashboard-refresh-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

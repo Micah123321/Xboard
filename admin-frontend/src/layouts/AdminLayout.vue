@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import {
+  Connection,
   Odometer,
   Tickets,
   SwitchButton,
@@ -11,6 +12,19 @@ import {
   Expand,
   User,
   UserFilled,
+  Lock,
+  Share,
+  ShoppingBag,
+  CollectionTag,
+  Document,
+  Discount,
+  Present,
+  Setting,
+  Box,
+  Brush,
+  Bell,
+  CreditCard,
+  Reading,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -23,13 +37,43 @@ const sidebarWidth = computed(() => app.sidebarCollapsed ? '72px' : '220px')
 const currentTitle = computed(() => String(route.meta.title || '控制台'))
 const currentKicker = computed(() => String(route.meta.kicker || 'Xboard Admin'))
 
-const menuItems = [
+type MenuItem = {
+  index: string
+  title: string
+  icon: unknown
+  disabled?: boolean
+  badge?: string
+}
+
+const menuItems: MenuItem[] = [
   { index: '/dashboard', title: '仪表盘', icon: Odometer },
 ]
 
-const managementItems = [
+const nodeManagementItems: MenuItem[] = [
+  { index: '/nodes', title: '节点管理', icon: Connection },
+  { index: '/node-groups', title: '权限组管理', icon: Lock },
+  { index: '/node-routes', title: '路由管理', icon: Share },
+]
+
+const managementItems: MenuItem[] = [
   { index: '/users', title: '用户管理', icon: User },
   { index: '/tickets', title: '工单管理', icon: Tickets },
+]
+
+const subscriptionItems: MenuItem[] = [
+  { index: '/subscriptions/plans', title: '套餐管理', icon: CollectionTag },
+  { index: '/subscriptions/orders', title: '订单管理', icon: Document, disabled: true, badge: '即将开放' },
+  { index: '/subscriptions/coupons', title: '优惠券管理', icon: Discount, disabled: true, badge: '即将开放' },
+  { index: '/subscriptions/gift-cards', title: '礼品卡管理', icon: Present, disabled: true, badge: '即将开放' },
+]
+
+const systemManagementItems: MenuItem[] = [
+  { index: '/system/config', title: '系统配置', icon: Setting },
+  { index: '/system/plugins', title: '插件管理', icon: Box },
+  { index: '/system/themes', title: '主题配置', icon: Brush },
+  { index: '/system/notices', title: '公告管理', icon: Bell },
+  { index: '/system/payments', title: '支付配置', icon: CreditCard },
+  { index: '/system/knowledge', title: '知识库管理', icon: Reading },
 ]
 
 function syncViewport() {
@@ -74,7 +118,7 @@ onBeforeUnmount(() => {
 
       <ElMenu
         :default-active="route.path"
-        :default-openeds="['management']"
+        :default-openeds="['node-management', 'management', 'subscription', 'system-management']"
         :collapse="app.sidebarCollapsed"
         :collapse-transition="false"
         router
@@ -90,6 +134,22 @@ onBeforeUnmount(() => {
             <template #title>{{ item.title }}</template>
           </ElMenuItem>
 
+          <ElSubMenu index="node-management">
+            <template #title>
+              <ElIcon><Connection /></ElIcon>
+              <span>节点管理</span>
+            </template>
+
+            <ElMenuItem
+              v-for="item in nodeManagementItems"
+              :key="item.index"
+              :index="item.index"
+            >
+              <ElIcon><component :is="item.icon" /></ElIcon>
+              <template #title>{{ item.title }}</template>
+            </ElMenuItem>
+          </ElSubMenu>
+
           <ElSubMenu index="management">
             <template #title>
               <ElIcon><UserFilled /></ElIcon>
@@ -98,6 +158,44 @@ onBeforeUnmount(() => {
 
             <ElMenuItem
               v-for="item in managementItems"
+              :key="item.index"
+              :index="item.index"
+            >
+              <ElIcon><component :is="item.icon" /></ElIcon>
+              <template #title>{{ item.title }}</template>
+            </ElMenuItem>
+          </ElSubMenu>
+
+          <ElSubMenu index="subscription">
+            <template #title>
+              <ElIcon><ShoppingBag /></ElIcon>
+              <span>订阅管理</span>
+            </template>
+
+            <ElMenuItem
+              v-for="item in subscriptionItems"
+              :key="item.index"
+              :index="item.index"
+              :disabled="item.disabled"
+            >
+              <ElIcon><component :is="item.icon" /></ElIcon>
+              <template #title>
+                <span class="menu-title">{{ item.title }}</span>
+                <span v-if="item.badge && !app.sidebarCollapsed" class="menu-badge">
+                  {{ item.badge }}
+                </span>
+              </template>
+            </ElMenuItem>
+          </ElSubMenu>
+
+          <ElSubMenu index="system-management">
+            <template #title>
+              <ElIcon><Setting /></ElIcon>
+              <span>系统管理</span>
+            </template>
+
+            <ElMenuItem
+              v-for="item in systemManagementItems"
               :key="item.index"
               :index="item.index"
             >
@@ -224,6 +322,31 @@ onBeforeUnmount(() => {
 
 .admin-menu :deep(.el-sub-menu .el-menu-item) {
   margin-left: 8px;
+}
+
+.admin-menu :deep(.el-menu-item.is-disabled) {
+  opacity: 0.72;
+}
+
+.menu-title {
+  display: inline-flex;
+  align-items: center;
+}
+
+.menu-badge {
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(0, 113, 227, 0.08);
+  color: #0071e3;
+  font-size: 11px;
+}
+
+.admin-menu :deep(.el-sub-menu.is-opened > .el-sub-menu__title) {
+  color: var(--xboard-text-strong);
 }
 
 .admin-stage {

@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 6,
+  "failed": 0,
+  "pending": 0,
+  "total": 6,
+  "done": 6,
+  "percent": 100,
+  "current": "套餐管理页面与订阅管理侧边栏已完成，等待用户验收",
+  "updated_at": "2026-04-23 23:56:00"
+}

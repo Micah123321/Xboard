@@ -24,6 +24,19 @@
   - `user/resetSecret`
   - `user/destroy`
   - `plan/fetch`
+- 管理端节点管理现已接入:
+  - `server/manage/getNodes`
+  - `server/group/fetch`
+  - `server/manage/update`
+  - `server/manage/copy`
+  - `server/manage/drop`
+- 管理端套餐管理现已接入:
+  - `plan/fetch`
+  - `plan/save`
+  - `plan/update`
+  - `plan/drop`
+  - `plan/sort`
+  - `server/group/fetch`
 
 ## 项目概述
 
@@ -34,7 +47,7 @@
 ## 开发约定
 
 - 管理端路由使用 Hash 模式
-- 管理端当前业务路由包含 `/dashboard`、`/users` 与 `/tickets`
+- 管理端当前业务路由包含 `/dashboard`、`/users`、`/tickets`、`/nodes`、`/node-groups`、`/node-routes` 与 `/subscriptions/plans`
 - Bearer Token 存储于 `sessionStorage/localStorage`
 - `admin-frontend` 的视觉方向当前以 Apple 风格为基线，优先纯色分区、系统字体栈和低装饰成本
 

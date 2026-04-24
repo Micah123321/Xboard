@@ -513,12 +513,14 @@ class StatController extends Controller
         $request->validate([
             'type' => 'required|in:node,user',
             'start_time' => 'nullable|integer|min:1000000000|max:9999999999',
-            'end_time' => 'nullable|integer|min:1000000000|max:9999999999'
+            'end_time' => 'nullable|integer|min:1000000000|max:9999999999',
+            'limit' => 'nullable|integer|in:10,20'
         ]);
 
         $type = $request->input('type');
         $startDate = $request->input('start_time', strtotime('-7 days'));
         $endDate = $request->input('end_time', time());
+        $limit = (int) $request->input('limit', 10);
         $previousStartDate = $startDate - ($endDate - $startDate);
         $previousEndDate = $startDate;
 
@@ -529,7 +531,7 @@ class StatController extends Controller
                 ->where('record_at', '<=', $endDate)
                 ->groupBy('server_id')
                 ->orderBy('value', 'DESC')
-                ->limit(10)
+                ->limit($limit)
                 ->get();
 
             // Get previous period data for comparison
@@ -548,7 +550,7 @@ class StatController extends Controller
                 ->where('record_at', '<=', $endDate)
                 ->groupBy('user_id')
                 ->orderBy('value', 'DESC')
-                ->limit(10)
+                ->limit($limit)
                 ->get();
 
             // Get previous period data for comparison

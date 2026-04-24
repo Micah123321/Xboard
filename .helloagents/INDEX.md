@@ -3,7 +3,7 @@
 ```yaml
 kb_version: 2
 project: Xboard-new
-updated_at: 2026-04-21
+updated_at: 2026-04-23
 active_package: 无
 ```
 
@@ -11,11 +11,11 @@ active_package: 无
 
 - 类型: PHP Laravel 主仓 + `admin-frontend` Vue3 管理端前端
 - 当前重点模块: `admin-frontend`
-- 最新归档: `202604210441_admin-frontend-user-management`
+- 最新归档: `202604232345_traffic-rank-limit-backend-adapt`
 
 ## 活跃模块
 
-- [admin-frontend](modules/admin-frontend.md): 管理端登录、主布局、仪表盘、用户管理与管理 API 前端封装
+- [admin-frontend](modules/admin-frontend.md): 管理端登录、主布局、仪表盘、用户/节点/订阅/系统管理与管理 API 前端封装
 
 ## 归档与变更
 

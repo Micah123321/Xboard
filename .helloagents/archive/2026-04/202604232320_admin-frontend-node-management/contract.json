@@ -1,0 +1,51 @@
+{
+  "updatedAt": "2026-04-23T15:23:18.713Z",
+  "version": 1,
+  "source": "~auto",
+  "originCommand": "plan",
+  "verifyMode": "review-first",
+  "reviewerFocus": [
+    "节点管理侧边栏分组是否清晰且与现有 Apple 风格后台一致",
+    "未实现的创建/排序能力是否被透明标注为后续接入"
+  ],
+  "testerFocus": [
+    "节点列表是否真实连接 /server/manage/getNodes 与 /server/group/fetch",
+    "搜索、类型筛选、权限组筛选与显隐切换是否存在真实数据流",
+    "节点相关新路由是否可以正常进入"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "plan.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": true,
+      "reason": "节点管理属于整页新建后台视图，需要确认导航、列表密度与占位页结构在浏览器中符合 Apple 风格契约",
+      "screens": [
+        "#/nodes desktop",
+        "#/node-groups desktop",
+        "#/node-routes desktop"
+      ],
+      "states": [
+        "节点列表默认加载完成态",
+        "节点列表筛选结果态",
+        "权限组管理占位态",
+        "路由管理占位态"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

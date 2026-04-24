@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 4,
+  "failed": 0,
+  "pending": 0,
+  "total": 4,
+  "done": 4,
+  "percent": 100,
+  "current": "Dashboard 全量刷新按钮实现、验证与知识库同步完成，待归档",
+  "updated_at": "2026-04-23 15:43:00"
+}

@@ -1,0 +1,4 @@
+# Verify commands for HelloAGENTS Ralph Loop
+
+commands:
+  - npm run build
