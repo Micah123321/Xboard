@@ -1,0 +1,49 @@
+{
+  "updatedAt": "2026-04-24T09:09:46.384Z",
+  "version": 1,
+  "source": "manual",
+  "originCommand": "generic-r2",
+  "verifyMode": "test-first",
+  "reviewerFocus": [
+    "礼品卡管理整体结构是否贴近用户提供的四页签后台截图",
+    "模板抽屉字段分组是否与截图和现有后端 JSON 结构一致"
+  ],
+  "testerFocus": [
+    "礼品卡管理是否真实连接 gift-card/templates、codes、usages、statistics、types 接口",
+    "模板新增编辑是否能正确序列化 conditions、rewards、limits、special_config",
+    "兑换码管理是否支持生成、导出、复制、启停、编辑和删除主链路"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "requirements.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": true,
+      "reason": "礼品卡管理属于整页新增的真实后台业务页，需要确认四页签导航、模板表格、模板抽屉和统计卡片在代码结构上与目标截图及 Apple 化后台契约一致。",
+      "screens": [
+        "#/subscriptions/gift-cards desktop"
+      ],
+      "states": [
+        "模板管理默认加载完成态",
+        "模板新增抽屉展开态",
+        "兑换码管理列表态",
+        "统计数据总览态"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

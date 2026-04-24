@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 4,
+  "failed": 0,
+  "pending": 0,
+  "total": 4,
+  "done": 4,
+  "percent": 100,
+  "current": "24h 排行对昨天比较修复、测试补充与语法校验已完成",
+  "updated_at": "2026-04-24 19:25:00"
+}

@@ -169,7 +169,7 @@ watch(
   >
     <div class="dialog-shell">
       <div class="dialog-copy">
-        <p>Knowledge Base</p>
+        <p>系统管理</p>
         <h2>{{ dialogTitle }}</h2>
         <span>发布或维护知识库文案，支持分类、语言、显示状态和 Markdown 正文编辑。</span>
       </div>

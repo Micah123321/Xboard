@@ -26,7 +26,14 @@
   - `plan/fetch`
 - 管理端节点管理现已接入:
   - `server/manage/getNodes`
+  - `server/manage/save`
+  - `server/manage/sort`
   - `server/group/fetch`
+  - `server/group/save`
+  - `server/group/drop`
+  - `server/route/fetch`
+  - `server/route/save`
+  - `server/route/drop`
   - `server/manage/update`
   - `server/manage/copy`
   - `server/manage/drop`
@@ -44,6 +51,20 @@
   - `order/paid`
   - `order/cancel`
   - `order/update`
+- 管理端礼品卡管理现已接入:
+  - `gift-card/templates`
+  - `gift-card/create-template`
+  - `gift-card/update-template`
+  - `gift-card/delete-template`
+  - `gift-card/generate-codes`
+  - `gift-card/codes`
+  - `gift-card/toggle-code`
+  - `gift-card/export-codes`
+  - `gift-card/update-code`
+  - `gift-card/delete-code`
+  - `gift-card/usages`
+  - `gift-card/statistics`
+  - `gift-card/types`
 - 管理端公告管理现已接入:
   - `notice/fetch`
   - `notice/save`
@@ -71,7 +92,8 @@
 ## 开发约定
 
 - 管理端路由使用 Hash 模式
-- 管理端当前业务路由包含 `/dashboard`、`/users`、`/tickets`、`/nodes`、`/node-groups`、`/node-routes`、`/subscriptions/plans`、`/subscriptions/orders`、`/subscriptions/coupons`、`/system/config`、`/system/notices` 与 `/system/payments`
+- 管理端当前业务路由包含 `/dashboard`、`/users`、`/tickets`、`/nodes`、`/node-groups`、`/node-routes`、`/subscriptions/plans`、`/subscriptions/orders`、`/subscriptions/coupons`、`/subscriptions/gift-cards`、`/system/config`、`/system/notices`、`/system/payments`、`/system/plugins`、`/system/themes` 与 `/system/knowledge`
+- `#/nodes` 当前已升级为真实节点工作台：支持搜索、显隐切换、复制、删除，以及 11 种协议的新增 / 编辑弹窗和排序对话框
 - Bearer Token 存储于 `sessionStorage/localStorage`
 - `admin-frontend` 的视觉方向当前以 Apple 风格为基线，优先纯色分区、系统字体栈和低装饰成本
 

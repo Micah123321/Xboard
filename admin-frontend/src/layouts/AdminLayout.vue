@@ -64,7 +64,7 @@ const subscriptionItems: MenuItem[] = [
   { index: '/subscriptions/plans', title: '套餐管理', icon: CollectionTag },
   { index: '/subscriptions/orders', title: '订单管理', icon: Document },
   { index: '/subscriptions/coupons', title: '优惠券管理', icon: Discount },
-  { index: '/subscriptions/gift-cards', title: '礼品卡管理', icon: Present, disabled: true, badge: '即将开放' },
+  { index: '/subscriptions/gift-cards', title: '礼品卡管理', icon: Present },
 ]
 
 const systemManagementItems: MenuItem[] = [
@@ -116,19 +116,20 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <ElMenu
-        :default-active="route.path"
-        :default-openeds="['node-management', 'management', 'subscription', 'system-management']"
-        :collapse="app.sidebarCollapsed"
-        :collapse-transition="false"
-        router
-        class="admin-menu"
-        @select="handleMenuSelect"
+      <div class="aside-menu-scroll">
+        <ElMenu
+          :default-active="route.path"
+          :default-openeds="['node-management', 'management', 'subscription', 'system-management']"
+          :collapse="app.sidebarCollapsed"
+          :collapse-transition="false"
+          router
+          class="admin-menu"
+          @select="handleMenuSelect"
         >
           <ElMenuItem
             v-for="item in menuItems"
-          :key="item.index"
-          :index="item.index"
+            :key="item.index"
+            :index="item.index"
           >
             <ElIcon><component :is="item.icon" /></ElIcon>
             <template #title>{{ item.title }}</template>
@@ -203,7 +204,8 @@ onBeforeUnmount(() => {
               <template #title>{{ item.title }}</template>
             </ElMenuItem>
           </ElSubMenu>
-      </ElMenu>
+        </ElMenu>
+      </div>
     </ElAside>
 
     <ElContainer class="admin-stage">
@@ -251,6 +253,7 @@ onBeforeUnmount(() => {
 .admin-aside {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   background: #ffffff;
   border-right: 1px solid rgba(0, 0, 0, 0.06);
   overflow: hidden;
@@ -261,9 +264,19 @@ onBeforeUnmount(() => {
 
 .aside-logo {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 12px;
   padding: 12px 8px 20px;
+}
+
+.aside-menu-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .aside-mark {
@@ -297,9 +310,9 @@ onBeforeUnmount(() => {
 }
 
 .admin-menu {
-  flex: 1;
   background: #ffffff;
   border-right: 0;
+  padding-bottom: 12px;
 }
 
 .admin-menu :deep(.el-menu-item) {

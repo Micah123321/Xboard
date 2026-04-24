@@ -503,6 +503,39 @@ class StatController extends Controller
     }
 
     /**
+     * Resolve the comparison window used by traffic rank change calculation.
+     *
+     * Daily traffic statistics are stored with `record_at` pinned to the start
+     * of the day. For the dashboard `24h` preset, comparing by "same span in
+     * seconds" would shift the previous window to `00:00:01`, which skips the
+     * whole yesterday row and makes change percentages fall back to `0`.
+     *
+     * To keep the requested minimal scope, only the single-day preset is
+     * aligned to the exact previous calendar day; longer ranges keep the
+     * existing equal-span comparison behavior.
+     *
+     * @param int $startDate
+     * @param int $endDate
+     * @return array{start: int, end: int}
+     */
+    protected function resolveTrafficRankComparisonWindow(int $startDate, int $endDate): array
+    {
+        $currentWindowDays = (int) floor(max(0, $endDate - $startDate) / 86400) + 1;
+
+        if ($currentWindowDays === 1) {
+            return [
+                'start' => $startDate - 86400,
+                'end' => $startDate,
+            ];
+        }
+
+        return [
+            'start' => $startDate - ($endDate - $startDate),
+            'end' => $startDate,
+        ];
+    }
+
+    /**
      * Get traffic ranking data for nodes or users
      * 
      * @param Request $request
@@ -521,8 +554,9 @@ class StatController extends Controller
         $startDate = $request->input('start_time', strtotime('-7 days'));
         $endDate = $request->input('end_time', time());
         $limit = (int) $request->input('limit', 10);
-        $previousStartDate = $startDate - ($endDate - $startDate);
-        $previousEndDate = $startDate;
+        $comparisonWindow = $this->resolveTrafficRankComparisonWindow($startDate, $endDate);
+        $previousStartDate = $comparisonWindow['start'];
+        $previousEndDate = $comparisonWindow['end'];
 
         if ($type === 'node') {
             // Get node traffic data

@@ -1,5 +1,54 @@
 # CHANGELOG
 
+## [0.5.4] - 2026-04-24
+
+### 修复
+- **[admin-frontend]**: 修复仪表盘“节点流量排行 / 用户流量排行”在 `24h` 视图下涨跌始终显示 `0%` 的问题；后端现在会把单日排行改为精确对比昨天整日统计，避免 `record_at=00:00` 的日统计行被秒级窗口错位排除 — by yinjianm
+  - 方案: [202604241925_admin-frontend-dashboard-rank-24h-compare](plan/202604241925_admin-frontend-dashboard-rank-24h-compare/)
+  - 决策: admin-frontend-dashboard-rank-24h-compare#D001(仅修复 24h 与昨天对比逻辑，7天/30天 保持现状)
+
+## [0.5.3] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 完成节点管理真实新增 / 编辑 / 排序工作台，补齐 11 种协议的动态配置弹窗、动态倍率规则编辑、路由 / 权限组联动与排序保存流程，并接入真实 `server/manage/save`、`server/manage/sort`、`server/route/fetch` 后台接口 — by yinjianm
+  - 方案: [202604241718_admin-frontend-node-management](plans/202604241718_admin-frontend-node-management/)
+  - 决策: admin-frontend-node-management#D001(新增与编辑共用中央大弹窗), admin-frontend-node-management#D002(排序沿用本地草稿 + 上移 / 下移), admin-frontend-node-management#D003(协议配置采用通用字段 + 动态协议块)
+
+## [0.5.2] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 开放“礼品卡管理”入口，完整交付模板管理、兑换码管理、使用记录与统计数据四页签工作台，并接入真实 `gift-card/*` 后台接口 — by yinjianm
+  - 方案: [202604241703_admin-frontend-gift-card-management](archive/2026-04/202604241703_admin-frontend-gift-card-management/)
+  - 决策: admin-frontend-gift-card-management#D001(礼品卡管理采用单页四页签导航), admin-frontend-gift-card-management#D002(模板编辑使用分组式大抽屉), admin-frontend-gift-card-management#D003(兑换码导出按当前批次显式执行)
+
+## [0.5.1] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 完成“路由管理”真实工作台，支持路由列表、关键词搜索、新增/编辑弹窗、删除，以及基于节点 `route_ids` 推导的节点引用摘要，并接入真实 `server/route/*` 后台接口 — by yinjianm
+  - 方案: [202604241701_admin-frontend-node-route-management](plan/202604241701_admin-frontend-node-route-management/)
+  - 决策: admin-frontend-node-route-management#D001(列表页贴近用户截图并保留 Apple 化后台节奏), admin-frontend-node-route-management#D002(节点引用摘要先收敛为列表只读信息而不扩展拓扑视图), admin-frontend-node-route-management#D003(动作值仅在 dns/proxy 时显示独立输入)
+
+## [0.5.0] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 将 `#/node-groups` 从占位页升级为真实权限组管理工作台，支持搜索、新增/编辑中央弹窗、删除确认，并补齐到 `#/nodes` 的权限组筛选联动入口 — by yinjianm
+  - 方案: [202604241659_admin-frontend-node-group-management](archive/2026-04/202604241659_admin-frontend-node-group-management/)
+  - 决策: admin-frontend-node-group-management#D001(权限组页采用截图导向的轻量工作台), admin-frontend-node-group-management#D002(新增与编辑复用同一中央弹窗), admin-frontend-node-group-management#D003(节点数量列承担跳转到节点筛选的联动入口)
+
+## [0.4.8] - 2026-04-24
+
+### 修复
+- **[admin-frontend]**: 修复 `#/system/knowledge` 仍回退到结构化占位页的问题，补齐真实知识库管理列表挂载、详情编辑加载与最新构建产物刷新 — by yinjianm
+  - 方案: [202604241610_admin-frontend-knowledge-management](plan/202604241610_admin-frontend-knowledge-management/)
+  - 决策: admin-frontend-knowledge-management#D001(编辑器采用轻量 Markdown 方案), admin-frontend-knowledge-management#D002(列表页采用真实表格与中央对话框), admin-frontend-knowledge-management#D003(排序采用本地草稿编辑后统一提交)
+
+## [0.4.7] - 2026-04-24
+
+### 修复
+- **[admin-frontend]**: 修复管理端侧边栏在低窗口高度下会裁切底部菜单的问题；现在顶部品牌区保持固定，菜单区可独立滚动访问“礼品卡管理”“系统管理”“支付配置”“知识库管理”等底部入口 — by yinjianm
+  - 方案: [202604241655_admin-frontend-sidebar-height-overflow](archive/2026-04/202604241655_admin-frontend-sidebar-height-overflow/)
+  - 决策: admin-frontend-sidebar-height-overflow#D001(固定品牌区 + 独立滚动菜单区)
+
 ## [0.4.6] - 2026-04-24
 
 ### 修复

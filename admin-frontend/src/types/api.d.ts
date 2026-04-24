@@ -152,8 +152,13 @@ export interface AdminGroupOption {
 }
 
 export interface AdminServerGroupItem extends AdminGroupOption {
-  users_count?: number
-  server_count?: number
+  users_count?: number | string | null
+  server_count?: number | string | null
+}
+
+export interface AdminServerGroupSavePayload {
+  id?: number
+  name: string
 }
 
 export interface AdminPlanOption {
@@ -420,6 +425,147 @@ export interface AdminCouponGeneratePayload {
   code?: string
 }
 
+export type AdminGiftCardTemplateType = 1 | 2 | 3
+export type AdminGiftCardCodeStatus = 0 | 1 | 2 | 3
+
+export interface AdminGiftCardTemplateConditions {
+  new_user_only?: boolean
+  new_user_max_days?: number | null
+  paid_user_only?: boolean
+  allowed_plans?: number[]
+  require_invite?: boolean
+}
+
+export interface AdminGiftCardTemplateRewards {
+  balance?: number | null
+  transfer_enable?: number | null
+  expire_days?: number | null
+  device_limit?: number | null
+  reset_package?: boolean
+  plan_id?: number | null
+  plan_validity_days?: number | null
+  invite_reward_rate?: number | null
+  random_rewards?: Array<Record<string, unknown>>
+}
+
+export interface AdminGiftCardTemplateLimits {
+  max_use_per_user?: number | null
+  cooldown_hours?: number | null
+}
+
+export interface AdminGiftCardTemplateSpecialConfig {
+  start_time?: number | null
+  end_time?: number | null
+  festival_bonus?: number | null
+}
+
+export interface AdminGiftCardTemplateItem {
+  id: number
+  name: string
+  description?: string | null
+  type: AdminGiftCardTemplateType
+  type_name: string
+  status: boolean | number
+  conditions?: AdminGiftCardTemplateConditions | null
+  rewards: AdminGiftCardTemplateRewards
+  limits?: AdminGiftCardTemplateLimits | null
+  special_config?: AdminGiftCardTemplateSpecialConfig | null
+  icon?: string | null
+  background_image?: string | null
+  theme_color?: string | null
+  sort?: number | null
+  admin_id?: number | null
+  created_at?: number | string | null
+  updated_at?: number | string | null
+  codes_count?: number
+  used_count?: number
+}
+
+export interface AdminGiftCardTemplatePayload {
+  id?: number
+  name: string
+  description?: string | null
+  type: AdminGiftCardTemplateType
+  status: boolean
+  conditions?: AdminGiftCardTemplateConditions
+  rewards: AdminGiftCardTemplateRewards
+  limits?: AdminGiftCardTemplateLimits
+  special_config?: AdminGiftCardTemplateSpecialConfig
+  icon?: string | null
+  background_image?: string | null
+  theme_color?: string | null
+  sort?: number
+}
+
+export interface AdminGiftCardCodeItem {
+  id: number
+  template_id: number
+  template_name: string
+  code: string
+  batch_id?: string | null
+  status: AdminGiftCardCodeStatus
+  status_name: string
+  user_id?: number | null
+  user_email?: string | null
+  used_at?: number | string | null
+  expires_at?: number | string | null
+  usage_count: number
+  max_usage: number
+  created_at?: number | string | null
+}
+
+export interface AdminGiftCardCodeGeneratePayload {
+  template_id: number
+  count: number
+  prefix?: string
+  expires_hours?: number | null
+  max_usage?: number
+}
+
+export interface AdminGiftCardCodeUpdatePayload {
+  id: number
+  expires_at?: number | null
+  max_usage?: number
+  status?: AdminGiftCardCodeStatus
+}
+
+export interface AdminGiftCardUsageItem {
+  id: number
+  code: string
+  template_name: string
+  user_email: string
+  invite_user_email?: string | null
+  rewards_given?: Record<string, unknown> | null
+  invite_rewards?: Record<string, unknown> | null
+  multiplier_applied?: number | null
+  created_at?: number | string | null
+}
+
+export interface AdminGiftCardStatisticsTotal {
+  templates_count: number
+  active_templates_count: number
+  codes_count: number
+  used_codes_count: number
+  usages_count: number
+}
+
+export interface AdminGiftCardDailyUsage {
+  date: string
+  count: number
+}
+
+export interface AdminGiftCardTypeStat {
+  template_name: string
+  type_name: string
+  count: number
+}
+
+export interface AdminGiftCardStatistics {
+  total_stats: AdminGiftCardStatisticsTotal
+  daily_usages: AdminGiftCardDailyUsage[]
+  type_stats: AdminGiftCardTypeStat[]
+}
+
 export interface AdminUserRef {
   id: number
   email: string
@@ -638,10 +784,43 @@ export interface AdminTrafficLogResult extends AdminPaginationResult<AdminTraffi
   summary: TrafficAmount
 }
 
+export type AdminNodeRouteAction = 'block' | 'direct' | 'dns' | 'proxy'
+
+export interface AdminNodeRouteItem {
+  id: number
+  remarks: string
+  match: string[]
+  action: AdminNodeRouteAction
+  action_value?: string | null
+  created_at?: number | string | null
+  updated_at?: number | string | null
+}
+
+export interface AdminNodeRouteSavePayload {
+  id?: number
+  remarks: string
+  match: string[]
+  action: AdminNodeRouteAction
+  action_value?: string | null
+}
+
 export interface AdminNodeParentRef {
   id: number
   name: string
 }
+
+export type AdminNodeType =
+  | 'shadowsocks'
+  | 'vmess'
+  | 'trojan'
+  | 'hysteria'
+  | 'vless'
+  | 'tuic'
+  | 'socks'
+  | 'naive'
+  | 'http'
+  | 'mieru'
+  | 'anytls'
 
 export interface AdminNodeMetrics {
   active_connections?: number
@@ -650,20 +829,31 @@ export interface AdminNodeMetrics {
   updated_at?: number
 }
 
+export interface AdminNodeRateTimeRange {
+  start: string
+  end: string
+  rate: number
+}
+
 export interface AdminNodeItem {
   id: number
   name: string
-  type: string
+  type: AdminNodeType | string
+  code?: string | null
   host: string
   port: number | string | null
   server_port?: number | null
   group_ids?: Array<number | string> | null
   route_ids?: Array<number | string> | null
+  tags?: string[] | null
   show: boolean
   enabled?: boolean
   parent_id?: number | null
   rate?: number | null
+  rate_time_enable?: boolean
+  rate_time_ranges?: AdminNodeRateTimeRange[] | null
   sort?: number | null
+  protocol_settings?: Record<string, unknown> | null
   online: number
   online_conn: number
   is_online: number
@@ -680,6 +870,26 @@ export interface AdminNodeUpdatePayload {
   show?: boolean | number
   enabled?: boolean
   machine_id?: number | null
+}
+
+export interface AdminNodeSavePayload {
+  id?: number
+  type: AdminNodeType
+  code?: string
+  name: string
+  group_ids?: number[]
+  route_ids?: number[]
+  parent_id?: number | null
+  enabled?: boolean
+  host: string
+  port: number | string
+  server_port: number | string
+  tags?: string[]
+  rate: number
+  rate_time_enable?: boolean
+  rate_time_ranges?: AdminNodeRateTimeRange[]
+  protocol_settings?: Record<string, unknown>
+  show?: boolean | number
 }
 
 declare global {

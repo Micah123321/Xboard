@@ -72,6 +72,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '优惠券管理', kicker: 'Coupons' },
       },
       {
+        path: 'subscriptions/gift-cards',
+        name: 'SubscriptionGiftCards',
+        component: () => import('@/views/subscriptions/GiftCardsView.vue'),
+        meta: { title: '礼品卡管理', kicker: 'Gift Cards' },
+      },
+      {
         path: 'system/config',
         name: 'SystemConfig',
         component: () => import('@/views/system/SystemConfigView.vue'),

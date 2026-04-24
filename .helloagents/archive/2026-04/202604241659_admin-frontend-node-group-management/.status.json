@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 4,
+  "failed": 0,
+  "pending": 0,
+  "total": 4,
+  "done": 4,
+  "percent": 100,
+  "current": "权限组管理真实页、节点页联动与构建验证已完成",
+  "updated_at": "2026-04-24 17:10:00"
+}

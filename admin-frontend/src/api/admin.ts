@@ -9,12 +9,24 @@ import type {
   AdminOrderDetail,
   AdminOrderFetchParams,
   AdminOrderListItem,
+  AdminGiftCardCodeGeneratePayload,
+  AdminGiftCardCodeItem,
+  AdminGiftCardCodeStatus,
+  AdminGiftCardCodeUpdatePayload,
+  AdminGiftCardStatistics,
+  AdminGiftCardTemplateItem,
+  AdminGiftCardTemplatePayload,
+  AdminGiftCardTemplateType,
+  AdminGiftCardUsageItem,
   AdminKnowledgeDetail,
   AdminKnowledgeListItem,
   AdminKnowledgeSavePayload,
   AdminNoticeItem,
   AdminNoticeSavePayload,
   AdminNodeItem,
+  AdminNodeSavePayload,
+  AdminNodeRouteItem,
+  AdminNodeRouteSavePayload,
   AdminNodeUpdatePayload,
   AdminPaymentConfigFields,
   AdminPaymentListItem,
@@ -28,6 +40,7 @@ import type {
   AdminPluginItem,
   AdminPluginTypeItem,
   AdminServerGroupItem,
+  AdminServerGroupSavePayload,
   AdminTicketDetail,
   AdminTicketFetchParams,
   AdminTicketListItem,
@@ -209,6 +222,91 @@ export function deleteCoupon(id: number): Promise<ApiResponse<boolean>> {
   return unwrapPost<boolean>('/coupon/drop', { id })
 }
 
+export function fetchGiftCardTemplates(params: {
+  page?: number
+  per_page?: number
+  type?: AdminGiftCardTemplateType
+  status?: 0 | 1
+} = {}): Promise<AdminPaginationResult<AdminGiftCardTemplateItem>> {
+  return adminClient
+    .get<AdminPaginationResult<AdminGiftCardTemplateItem>>('/gift-card/templates', { params })
+    .then((res) => res.data)
+}
+
+export function createGiftCardTemplate(payload: AdminGiftCardTemplatePayload): Promise<ApiResponse<AdminGiftCardTemplateItem>> {
+  return unwrapPost<AdminGiftCardTemplateItem>('/gift-card/create-template', payload as unknown as Record<string, unknown>)
+}
+
+export function updateGiftCardTemplate(payload: AdminGiftCardTemplatePayload): Promise<ApiResponse<AdminGiftCardTemplateItem>> {
+  return unwrapPost<AdminGiftCardTemplateItem>('/gift-card/update-template', payload as unknown as Record<string, unknown>)
+}
+
+export function deleteGiftCardTemplate(id: number): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/gift-card/delete-template', { id })
+}
+
+export function fetchGiftCardCodes(params: {
+  page?: number
+  per_page?: number
+  template_id?: number
+  batch_id?: string
+  status?: AdminGiftCardCodeStatus
+} = {}): Promise<AdminPaginationResult<AdminGiftCardCodeItem>> {
+  return adminClient
+    .get<AdminPaginationResult<AdminGiftCardCodeItem>>('/gift-card/codes', { params })
+    .then((res) => res.data)
+}
+
+export function generateGiftCardCodes(payload: AdminGiftCardCodeGeneratePayload): Promise<ApiResponse<{ batch_id: string, count: number, message: string }>> {
+  return unwrapPost<{ batch_id: string, count: number, message: string }>(
+    '/gift-card/generate-codes',
+    payload as unknown as Record<string, unknown>,
+  )
+}
+
+export function toggleGiftCardCode(id: number, action: 'disable' | 'enable'): Promise<ApiResponse<{ message: string }>> {
+  return unwrapPost<{ message: string }>('/gift-card/toggle-code', { id, action })
+}
+
+export function exportGiftCardCodes(batchId: string): Promise<Blob> {
+  return adminClient
+    .get<Blob>('/gift-card/export-codes', {
+      params: { batch_id: batchId },
+      responseType: 'blob',
+    })
+    .then((res) => res.data)
+}
+
+export function updateGiftCardCode(payload: AdminGiftCardCodeUpdatePayload): Promise<ApiResponse<AdminGiftCardCodeItem>> {
+  return unwrapPost<AdminGiftCardCodeItem>('/gift-card/update-code', payload as unknown as Record<string, unknown>)
+}
+
+export function deleteGiftCardCode(id: number): Promise<ApiResponse<{ message: string }>> {
+  return unwrapPost<{ message: string }>('/gift-card/delete-code', { id })
+}
+
+export function fetchGiftCardUsages(params: {
+  page?: number
+  per_page?: number
+  template_id?: number
+  user_id?: number
+} = {}): Promise<AdminPaginationResult<AdminGiftCardUsageItem>> {
+  return adminClient
+    .get<AdminPaginationResult<AdminGiftCardUsageItem>>('/gift-card/usages', { params })
+    .then((res) => res.data)
+}
+
+export function getGiftCardStatistics(params: {
+  start_date?: string
+  end_date?: string
+} = {}): Promise<ApiResponse<AdminGiftCardStatistics>> {
+  return unwrap<AdminGiftCardStatistics>('/gift-card/statistics', params)
+}
+
+export function getGiftCardTypes(): Promise<ApiResponse<Record<string, string>>> {
+  return unwrap<Record<string, string>>('/gift-card/types')
+}
+
 export function fetchAdminConfig(key?: AdminConfigGroupKey): Promise<ApiResponse<AdminConfigMappings>> {
   return unwrap<AdminConfigMappings>('/config/fetch', key ? { key } : undefined)
 }
@@ -380,12 +478,40 @@ export function getServerGroups(): Promise<ApiResponse<AdminServerGroupItem[]>> 
   return unwrap<AdminServerGroupItem[]>('/server/group/fetch')
 }
 
+export function saveServerGroup(payload: AdminServerGroupSavePayload): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/server/group/save', payload as unknown as Record<string, unknown>)
+}
+
+export function deleteServerGroup(id: number): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/server/group/drop', { id })
+}
+
 export function fetchNodes(): Promise<ApiResponse<AdminNodeItem[]>> {
   return unwrap<AdminNodeItem[]>('/server/manage/getNodes')
 }
 
+export function fetchNodeRoutes(): Promise<ApiResponse<AdminNodeRouteItem[]>> {
+  return unwrap<AdminNodeRouteItem[]>('/server/route/fetch')
+}
+
+export function saveNodeRoute(payload: AdminNodeRouteSavePayload): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/server/route/save', payload as unknown as Record<string, unknown>)
+}
+
+export function deleteNodeRoute(id: number): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/server/route/drop', { id })
+}
+
 export function updateNode(payload: AdminNodeUpdatePayload): Promise<ApiResponse<boolean>> {
   return unwrapPost<boolean>('/server/manage/update', payload as unknown as Record<string, unknown>)
+}
+
+export function saveNode(payload: AdminNodeSavePayload): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/server/manage/save', payload as unknown as Record<string, unknown>)
+}
+
+export function sortNodes(payload: Array<{ id: number; order: number }>): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/server/manage/sort', payload as unknown as Record<string, unknown>)
 }
 
 export function copyNode(id: number): Promise<ApiResponse<boolean>> {

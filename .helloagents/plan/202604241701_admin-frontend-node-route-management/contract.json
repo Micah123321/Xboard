@@ -1,0 +1,49 @@
+{
+  "updatedAt": "2026-04-24T09:01:00.000Z",
+  "version": 1,
+  "source": "R2",
+  "originCommand": "design",
+  "verifyMode": "review-first",
+  "reviewerFocus": [
+    "路由管理页面是否贴近用户截图的 Apple 风格后台结构",
+    "列表、编辑弹窗与节点引用摘要是否覆盖用户本轮确认的范围",
+    "节点管理其他页面与导航边界是否未被误改"
+  ],
+  "testerFocus": [
+    "路由列表是否真实连接 /server/route/fetch",
+    "新增编辑是否真实连接 /server/route/save，删除是否连接 /server/route/drop",
+    "节点引用摘要是否由 /server/manage/getNodes 的 route_ids 正确推导，且 admin-frontend 构建通过"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "plan.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": true,
+      "reason": "路由管理属于真实后台 CRUD 页，需要确认列表页与编辑弹窗符合 Apple 风格后台契约，并补足节点引用摘要可读性",
+      "screens": [
+        "#/node-routes desktop",
+        "#/node-routes editor dialog"
+      ],
+      "states": [
+        "路由列表加载完成态",
+        "新增/编辑弹窗态"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

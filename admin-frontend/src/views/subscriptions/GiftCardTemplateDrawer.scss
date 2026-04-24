@@ -1,0 +1,97 @@
+.template-form {
+  display: grid;
+  gap: 18px;
+  padding-right: 8px;
+}
+
+.section-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px solid var(--xboard-border);
+  background: #fff;
+}
+
+.section-card header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.section-card header .el-icon {
+  margin-top: 2px;
+  color: var(--xboard-primary);
+}
+
+.section-card header div {
+  display: grid;
+  gap: 4px;
+}
+
+.section-card header strong {
+  color: var(--xboard-text-strong);
+}
+
+.section-card header span,
+.switch-box span {
+  color: var(--xboard-text-muted);
+  line-height: 1.45;
+  font-size: 13px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.full-row {
+  grid-column: 1 / -1;
+}
+
+.number-input,
+.date-input {
+  width: 100%;
+}
+
+.switch-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 48px;
+}
+
+.switch-box strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--xboard-text-strong);
+}
+
+.switch-box--soft {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--xboard-surface-soft);
+}
+
+.color-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .two-columns {
+    grid-template-columns: 1fr;
+  }
+}

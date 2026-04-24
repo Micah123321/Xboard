@@ -1,0 +1,49 @@
+{
+  "updatedAt": "2026-04-24T09:18:00.000Z",
+  "version": 1,
+  "source": "manual",
+  "originCommand": "generic-r2",
+  "verifyMode": "test-first",
+  "reviewerFocus": [
+    "节点编辑弹窗是否贴近用户截图中的高密度 Apple 化后台结构",
+    "不同协议切换时是否真正呈现差异化配置，而不是统一占位表单"
+  ],
+  "testerFocus": [
+    "节点新增与编辑是否真实接入 /server/manage/save",
+    "节点排序是否真实接入 /server/manage/sort 并生成正确顺序 payload",
+    "11 种节点协议是否都拥有可用的首版动态配置表单"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "requirements.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": true,
+      "reason": "节点管理属于截图导向的整页高密度运营工作台，新增节点弹窗与排序流程需要确认结构和状态呈现与目标截图一致。",
+      "screens": [
+        "#/nodes desktop"
+      ],
+      "states": [
+        "节点列表默认加载完成态",
+        "新建节点未选择协议态",
+        "新建节点 VLess 配置态",
+        "编辑排序对话框态"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

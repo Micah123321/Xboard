@@ -4,7 +4,7 @@
 
 - 提供 Vue3 管理端登录页、认证状态、路由守卫和主布局
 - 封装管理端统计/系统状态、用户管理、节点管理、套餐管理和系统配置接口
-- 渲染后台仪表盘、用户管理工作台、节点管理工作台、订阅套餐管理页、系统配置页、主题管理页、插件管理工作台、公告管理工作台、支付配置工作台，以及预留的工单管理入口
+- 渲染后台仪表盘、用户管理工作台、节点管理工作台、路由管理工作台、订阅套餐 / 订单 / 优惠券 / 礼品卡管理页、系统配置页、主题管理页、插件管理工作台、公告管理工作台、支付配置工作台，以及工单管理入口
 
 ## 行为规范
 
@@ -16,18 +16,28 @@
 - 仪表盘“作业详情”支持打开失败作业报错弹窗，集中查看 Horizon 失败作业的报错摘要、失败时间与队列信息
 - 仪表盘“节点流量排行 / 用户流量排行”均支持独立的 `10个 / 20个` 显示切换，长列表固定在面板内滚动，避免首页高度失控
 - `stat/getTrafficRank` 现支持 `limit=10|20`，前端会按当前排行面板的显示数量重新请求；24h 口径也继续显示涨跌百分比
+- `stat/getTrafficRank` 在 `24h` 口径下会按“昨天同日”统计做涨跌对比，避免日统计表因 `record_at=00:00` 被秒级窗口错位后全部回落为 `0%`
 - 仪表盘 Hero 区提供“刷新全部数据”入口，统一触发总览、趋势、排行和系统状态刷新，并在页面内展示最近一次刷新时间
 - 用户管理页通过真实后端 `user/fetch`、`user/update`、`user/generate`、`user/resetSecret`、`user/destroy` 与 `plan/fetch` 完成数据读写
 - 新增用户时采用“先 generate，后按邮箱回查并 update”的两段式流程，以兼容后端基础创建接口
-- 节点管理页通过真实后端 `server/manage/getNodes` 与 `server/group/fetch` 获取列表，并通过 `server/manage/update`、`server/manage/copy`、`server/manage/drop` 完成首批行级操作
-- 节点相关导航入口固定归入“节点管理”分组；`/node-groups` 与 `/node-routes` 本轮先交付结构化占位页，不伪装为完整功能
-- 订阅管理新增独立“订阅管理”侧边栏分组，现已完整实现 `#/subscriptions/plans`、`#/subscriptions/orders` 与 `#/subscriptions/coupons`；礼品卡管理仍保留禁用态
+- 节点管理页通过真实后端 `server/manage/getNodes`、`server/group/fetch` 与 `server/route/fetch` 获取列表 / 关联数据，并通过 `server/manage/save`、`server/manage/sort`、`server/manage/update`、`server/manage/copy`、`server/manage/drop` 完成新增、编辑、排序与行级操作
+- 节点新增 / 编辑采用统一中央大弹窗，支持 `Shadowsocks / VMess / Trojan / Hysteria / VLess / TUIC / SOCKS / Naive / HTTP / Mieru / AnyTLS` 11 种协议的首版动态配置表单
+- 节点排序采用本地草稿 + 上移 / 下移模式，保存时向 `server/manage/sort` 提交 `{ id, order }[]` 顺序 payload
+- 权限组管理页使用真实后端 `server/group/fetch`、`server/group/save` 与 `server/group/drop`，支持关键字搜索、新增/编辑中央弹窗、删除确认，以及从节点数量列跳转到 `#/nodes?group={id}` 的筛选联动
+- 路由管理页使用真实后端 `server/route/fetch`、`server/route/save` 与 `server/route/drop`，支持路由列表、关键词搜索、新增/编辑中央弹窗、删除与动作值展示
+- 路由管理页的节点引用摘要由 `server/manage/getNodes` 返回的 `route_ids` 推导，不在前端伪造额外接口
+- 节点页会读取路由查询中的 `group` 参数并自动应用对应权限组筛选，同时提供“管理权限组”入口回到权限组页；`/node-routes` 已升级为真实工作台
+- 订阅管理新增独立“订阅管理”侧边栏分组，现已完整实现 `#/subscriptions/plans`、`#/subscriptions/orders`、`#/subscriptions/coupons` 与 `#/subscriptions/gift-cards`
 - 套餐管理页使用真实后端 `plan/fetch`、`plan/save`、`plan/update`、`plan/drop`、`plan/sort` 与 `server/group/fetch`
+- 侧边栏在低窗口高度下采用“顶部品牌区固定 + 菜单区独立纵向滚动”的结构，避免新增分组后底部导航入口被直接裁切
 - 套餐管理页渲染 `ElSwitch` 前，会先把 `show / sell / renew` 归一化成布尔值；开关事件若新旧值相同则直接短路，避免初始化阶段误写后台状态
 - 套餐说明编辑采用轻量 Markdown/HTML 编辑器与预览模式，不引入额外富文本依赖
 - 订单管理页使用真实后端 `order/fetch`、`order/detail`、`order/assign`、`order/paid`、`order/cancel` 与 `order/update`，支持订单列表、类型/周期/状态筛选、详情抽屉、手动分配、人工标记已支付与佣金状态维护
 - 订单金额、佣金金额与相关拆解字段以“分”为后端真相源，前端统一在 `src/utils/orders.ts` 中格式化为“元”展示，避免后台金额口径混乱
 - 优惠券管理页使用真实后端 `coupon/fetch`、`coupon/generate`、`coupon/update` 与 `coupon/drop`，支持本地搜索、类型筛选、启停、删除与弹窗式新增/编辑
+- 礼品卡管理页使用真实后端 `gift-card/templates`、`gift-card/create-template`、`gift-card/update-template`、`gift-card/delete-template`、`gift-card/generate-codes`、`gift-card/codes`、`gift-card/toggle-code`、`gift-card/export-codes`、`gift-card/update-code`、`gift-card/delete-code`、`gift-card/usages`、`gift-card/statistics` 与 `gift-card/types`
+- 礼品卡工作台采用单页四页签结构，覆盖模板管理、兑换码管理、使用记录和统计数据；模板编辑使用分组式大抽屉，兑换码生成使用独立对话框
+- 礼品卡模板的 `conditions / rewards / limits / special_config` 映射统一收敛到 `src/utils/giftCards.ts`，避免表单展示结构与提交 JSON 结构漂移
 - 优惠券编辑弹窗支持金额/比例两种优惠类型、有效期范围、批量生成、自定义券码、指定周期与指定订阅限制
 - 系统管理新增独立“系统管理”侧边栏分组，当前已完整实现 `#/system/config`、`#/system/themes`、`#/system/plugins`、`#/system/notices`、`#/system/payments` 与 `#/system/knowledge`
 - 系统配置页使用真实后端 `config/fetch`、`config/save`、`config/testSendMail` 与 `config/setTelegramWebhook`，并按站点、安全、订阅、邀请佣金、节点、邮件、Telegram、APP、订阅模板 9 个分组组织长表单
@@ -42,6 +52,7 @@
 - 支付编辑抽屉根据所选支付接口动态拉取真实配置字段，不在前端写死 EPay / TokenPay 等网关表单；通知地址继续以后端拼接结果为准
 - 知识库管理页使用真实后端 `knowledge/fetch`、`knowledge/getCategory`、`knowledge/save`、`knowledge/show`、`knowledge/drop` 与 `knowledge/sort`，支持标题搜索、分类筛选、显隐切换、编辑弹窗、删除与排序模式
 - 知识编辑弹窗继续使用轻量 Markdown/HTML 工具栏，不引入额外富文本依赖；编辑时会单独请求详情补齐 `body / language`
+- `#/system/knowledge` 当前直接渲染 `SystemKnowledgeView` 真实页面，不再回退 `SystemPlaceholderView`
 - 当前首页视觉基线为 Apple 风格：纯色分区、系统字体栈、单一蓝色强调和轻量层次
 - 性能优化优先级高于装饰性表达，避免远程字体、全局模糊背景和固定特效层
 
@@ -51,12 +62,15 @@
 - 依赖 `src/utils/users.ts` 负责用户管理表单转换、筛选组装和状态计算
 - 依赖 `src/utils/plans.ts` 负责套餐价格、说明渲染、排序与表单转换
 - 依赖 `src/utils/orders.ts` 负责订单金额换算、状态映射、周期标签与筛选参数组装
+- 依赖 `src/utils/nodeGroups.ts` 负责权限组计数归一化、本地搜索与摘要计算
 - 依赖 `src/utils/coupons.ts` 负责优惠券类型映射、时间范围转换、过期状态计算与表单序列化
+- 依赖 `src/utils/giftCards.ts` 负责礼品卡类型/状态映射、模板表单序列化、金额/流量换算与本地筛选逻辑
 - 依赖 `src/utils/themes.ts` 负责主题列表排序、动态配置默认值回填与序列化
 - 依赖 `src/utils/plugins.ts` 负责插件状态判断、README 渲染、筛选与动态配置表单序列化
 - 依赖 `src/utils/payments.ts` 负责支付方式归一化、搜索过滤、排序移动与动态配置序列化
 - 依赖 `src/utils/knowledge.ts` 负责知识库分类、Markdown 渲染、过滤与表单转换
 - 依赖 `src/utils/notices.ts` 负责公告表单转换、内容摘要、排序与显示字段归一化
 - 依赖 `src/utils/systemConfig.ts` 负责系统配置字段元信息、默认值、回填与保存序列化
+- 依赖 `src/utils/routes.ts` 负责路由动作映射、匹配规则序列化、节点引用摘要与搜索过滤
 - 依赖 Laravel 注入的 `window.settings`
 - 构建输出到 `public/assets/admin`

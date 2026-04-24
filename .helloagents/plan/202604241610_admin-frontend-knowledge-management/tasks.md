@@ -1,6 +1,6 @@
 # 任务清单: admin-frontend-knowledge-management
 
-> **@status:** completed | 2026-04-24 16:24
+> **@status:** completed | 2026-04-24 17:03
 
 ```yaml
 @feature: admin-frontend-knowledge-management
@@ -31,9 +31,9 @@
 | 时间 | 任务 | 状态 | 备注 |
 |------|------|------|------|
 | 2026-04-24 16:10 | 方案包初始化 | completed | 用户已确认采用轻量 Markdown 编辑器方案 |
-| 2026-04-24 16:18 | 页面实现 | completed | 已接入知识列表、分类筛选、编辑弹窗、显隐切换与排序对话框 |
-| 2026-04-24 16:22 | 构建验证 | completed | `admin-frontend` 执行 `npm run build` 通过，并输出知识库页面产物 |
-| 2026-04-24 16:24 | 文档同步 | completed | 已更新 CHANGELOG、模块文档与状态快照 |
+| 2026-04-24 16:18 | 页面实现 | completed | 已补齐知识列表、分类筛选、详情编辑弹窗、显隐切换、删除与排序对话框，并将 `/system/knowledge` 从占位页切换为真实页面 |
+| 2026-04-24 17:01 | 构建验证 | completed | `admin-frontend` 重新执行 `npm run build` 通过，并刷新 `public/assets/admin` 最新知识库页面产物 |
+| 2026-04-24 17:03 | 文档同步 | completed | 已更新 CHANGELOG、模块文档、方案包时间戳与状态快照，修正文档先于代码落地的不一致 |
 
 ---
 

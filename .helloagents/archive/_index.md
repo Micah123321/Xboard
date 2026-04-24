@@ -7,6 +7,9 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202604241703 | admin-frontend-gift-card-management | implementation | admin-frontend | admin-frontend-gift-card-management#D001,#D002,#D003 | ✅完成 |
+| 202604241659 | admin-frontend-node-group-management | implementation | admin-frontend | admin-frontend-node-group-management#D001,#D002,#D003 | ✅完成 |
+| 202604241655 | admin-frontend-sidebar-height-overflow | - | - | - | ✅完成 |
 | 202604241620 | admin-frontend-order-management | implementation | admin-frontend | admin-frontend-order-management#D001,#D002,#D003 | ✅完成 |
 | 202604241558 | admin-frontend-payment-management | implementation | admin-frontend | admin-frontend-payment-management#D001,#D002,#D003 | ✅完成 |
 | 202604241553 | admin-frontend-plugin-management | implementation | admin-frontend | admin-frontend-plugin-management#D001,#D002,#D003 | ✅完成 |
@@ -29,6 +32,8 @@
 ## 按月归档
 
 ### 2026-04
+- [202604241703_admin-frontend-gift-card-management](./2026-04/202604241703_admin-frontend-gift-card-management/) - 开放“礼品卡管理”入口，交付模板管理、兑换码管理、使用记录与统计数据四页签工作台，并接入真实 gift-card 接口
+- [202604241659_admin-frontend-node-group-management](./2026-04/202604241659_admin-frontend-node-group-management/) - 将 `#/node-groups` 从占位页升级为真实权限组管理工作台，并补齐到 `#/nodes` 的权限组筛选联动
 - [202604241620_admin-frontend-order-management](./2026-04/202604241620_admin-frontend-order-management/) - 开放“订单管理”入口，交付真实订单列表、筛选、分配订单、详情抽屉、手动支付与佣金状态维护
 - [202604241558_admin-frontend-payment-management](./2026-04/202604241558_admin-frontend-payment-management/) - 将 `#/system/payments` 从占位页升级为真实支付配置工作台，接入支付方式列表、动态配置抽屉、启停、删除与排序
 - [202604241553_admin-frontend-plugin-management](./2026-04/202604241553_admin-frontend-plugin-management/) - 将 `#/system/plugins` 从占位页升级为真实插件管理工作台，接入插件列表、筛选、上传、安装、启停、升级、卸载，以及 README / 动态配置抽屉

@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 5,
+  "failed": 0,
+  "pending": 0,
+  "total": 5,
+  "done": 5,
+  "percent": 100,
+  "current": "节点管理新增 / 编辑 / 排序已完成，等待后续需求",
+  "updated_at": "2026-04-24 17:30:00"
+}

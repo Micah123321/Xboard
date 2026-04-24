@@ -11,7 +11,7 @@ active_package: 无
 
 - 类型: PHP Laravel 主仓 + `admin-frontend` Vue3 管理端前端
 - 当前重点模块: `admin-frontend`、`subscription-protocols`
-- 最新归档: `202604241620_admin-frontend-order-management`
+- 最新归档: `202604241703_admin-frontend-gift-card-management`
 
 ## 活跃模块
 

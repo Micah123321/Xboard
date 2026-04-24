@@ -1,0 +1,39 @@
+{
+  "updatedAt": "2026-04-24T11:25:00.000Z",
+  "version": 1,
+  "source": "R2",
+  "originCommand": "design",
+  "verifyMode": "targeted-check",
+  "reviewerFocus": [
+    "24h 排行比较窗口是否准确命中昨天整日统计",
+    "7天 / 30天 对比逻辑是否保持原样，未被意外改动",
+    "节点排行与用户排行是否共用同一后端修复入口"
+  ],
+  "testerFocus": [
+    "单日窗口应返回昨天整日作为 previous window",
+    "多日窗口应继续沿用原等跨度比较规则",
+    "修改文件至少通过 PHP 语法校验"
+  ],
+  "ui": {
+    "required": false,
+    "designContract": false,
+    "sourcePriority": [],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": false,
+      "reason": "",
+      "screens": [],
+      "states": []
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

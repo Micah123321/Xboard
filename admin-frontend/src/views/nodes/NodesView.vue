@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Connection,
@@ -13,10 +14,13 @@ import {
   copyNode,
   deleteNode,
   fetchNodes,
+  fetchNodeRoutes,
   getServerGroups,
   updateNode,
 } from '@/api/admin'
-import type { AdminNodeItem, AdminServerGroupItem } from '@/types/api'
+import type { AdminNodeItem, AdminNodeRouteItem, AdminServerGroupItem } from '@/types/api'
+import NodeEditorDialog from './NodeEditorDialog.vue'
+import NodeSortDialog from './NodeSortDialog.vue'
 import {
   buildNodeTypeOptions,
   countOnlineNodes,
@@ -29,25 +33,34 @@ import {
   getNodeStatusMeta,
   getNodeTypeLabel,
 } from '@/utils/nodes'
+import { sortNodesByOrder } from '@/utils/nodeEditor'
 
 type NodeAction = 'edit' | 'copy' | 'delete'
+type NodeDialogMode = 'create' | 'edit'
 
+const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const errorMessage = ref('')
 const nodes = ref<AdminNodeItem[]>([])
 const groups = ref<AdminServerGroupItem[]>([])
+const routes = ref<AdminNodeRouteItem[]>([])
 const keyword = ref('')
 const typeFilter = ref('all')
 const groupFilter = ref('all')
 const switchingIds = ref<number[]>([])
 const workingIds = ref<number[]>([])
+const editorVisible = ref(false)
+const editorMode = ref<NodeDialogMode>('create')
+const activeNode = ref<AdminNodeItem | null>(null)
+const sortDialogVisible = ref(false)
 
-const filteredNodes = computed(() => filterNodes(
+const filteredNodes = computed(() => sortNodesByOrder(filterNodes(
   nodes.value,
   keyword.value,
   typeFilter.value,
   groupFilter.value,
-))
+)))
 
 const typeOptions = computed(() => buildNodeTypeOptions(nodes.value))
 const hasActiveFilters = computed(() => keyword.value !== '' || typeFilter.value !== 'all' || groupFilter.value !== 'all')
@@ -58,6 +71,24 @@ const summaryCards = computed(() => [
   { label: '显示中', value: String(countVisibleNodes(nodes.value)) },
   { label: '当前结果', value: String(filteredNodes.value.length) },
 ])
+
+function getRouteGroupQuery(): string {
+  const rawValue = route.query.group
+  if (Array.isArray(rawValue)) {
+    return String(rawValue[0] ?? '')
+  }
+  return String(rawValue ?? '')
+}
+
+function applyRouteGroupFilter() {
+  const groupValue = getRouteGroupQuery().trim()
+  if (!groupValue) {
+    return
+  }
+
+  const exists = groups.value.some((group) => String(group.id) === groupValue)
+  groupFilter.value = exists ? groupValue : 'all'
+}
 
 function markPending(list: typeof switchingIds, id: number, pending: boolean) {
   if (pending) {
@@ -78,8 +109,20 @@ function isWorking(id: number): boolean {
   return workingIds.value.includes(id)
 }
 
-function notifyPending(scope: string) {
-  ElMessage.info(`${scope} 会在下一阶段接入，本轮已先打通节点列表主链路。`)
+function openCreateEditor() {
+  editorMode.value = 'create'
+  activeNode.value = null
+  editorVisible.value = true
+}
+
+function openEditEditor(node: AdminNodeItem) {
+  editorMode.value = 'edit'
+  activeNode.value = node
+  editorVisible.value = true
+}
+
+function openSortEditor() {
+  sortDialogVisible.value = true
 }
 
 async function loadNodeBoard() {
@@ -87,13 +130,16 @@ async function loadNodeBoard() {
   errorMessage.value = ''
 
   try {
-    const [nodesResponse, groupsResponse] = await Promise.all([
+    const [nodesResponse, groupsResponse, routesResponse] = await Promise.all([
       fetchNodes(),
       getServerGroups(),
+      fetchNodeRoutes(),
     ])
 
-    nodes.value = nodesResponse.data ?? []
+    nodes.value = sortNodesByOrder(nodesResponse.data ?? [])
     groups.value = groupsResponse.data ?? []
+    routes.value = routesResponse.data ?? []
+    applyRouteGroupFilter()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '节点数据加载失败'
   } finally {
@@ -105,6 +151,10 @@ function handleReset() {
   keyword.value = ''
   typeFilter.value = 'all'
   groupFilter.value = 'all'
+}
+
+function openNodeGroupManagement() {
+  void router.push('/node-groups')
 }
 
 async function handleToggleShow(node: AdminNodeItem, nextValue: boolean) {
@@ -132,7 +182,7 @@ async function handleToggleShow(node: AdminNodeItem, nextValue: boolean) {
 
 async function handleAction(action: NodeAction, node: AdminNodeItem) {
   if (action === 'edit') {
-    notifyPending(`编辑节点 #${node.id}`)
+    openEditEditor(node)
     return
   }
 
@@ -169,6 +219,13 @@ async function handleAction(action: NodeAction, node: AdminNodeItem) {
 onMounted(() => {
   void loadNodeBoard()
 })
+
+watch(
+  () => route.query.group,
+  () => {
+    applyRouteGroupFilter()
+  },
+)
 </script>
 
 <template>
@@ -193,7 +250,7 @@ onMounted(() => {
     <section class="nodes-board">
       <header class="board-toolbar">
         <div class="toolbar-fields">
-          <ElButton type="primary" @click="notifyPending('添加节点')">
+          <ElButton type="primary" @click="openCreateEditor">
             <ElIcon><Plus /></ElIcon>
             添加节点
           </ElButton>
@@ -231,11 +288,12 @@ onMounted(() => {
         </div>
 
         <div class="toolbar-actions">
+          <ElButton @click="openNodeGroupManagement">管理权限组</ElButton>
           <ElButton @click="handleReset" :disabled="!hasActiveFilters">
             <ElIcon><RefreshRight /></ElIcon>
             重置筛选
           </ElButton>
-          <ElButton @click="notifyPending('编辑排序')">编辑排序</ElButton>
+          <ElButton @click="openSortEditor">编辑排序</ElButton>
         </div>
       </header>
 
@@ -362,8 +420,8 @@ onMounted(() => {
                 <ElIcon><MoreFilled /></ElIcon>
               </ElButton>
               <template #dropdown>
-                <ElDropdownMenu>
-                  <ElDropdownItem command="edit">编辑节点（下一阶段）</ElDropdownItem>
+                  <ElDropdownMenu>
+                  <ElDropdownItem command="edit">编辑节点</ElDropdownItem>
                   <ElDropdownItem command="copy">复制节点</ElDropdownItem>
                   <ElDropdownItem command="delete" divided>删除节点</ElDropdownItem>
                 </ElDropdownMenu>
@@ -391,10 +449,26 @@ onMounted(() => {
         <span>已显示 {{ filteredNodes.length }} / {{ nodes.length }} 个节点</span>
         <div class="footer-hint">
           <ElIcon><Connection /></ElIcon>
-          <span>完整的节点创建、编辑与排序流程将在下一阶段补齐。</span>
+          <span>节点新增、编辑与排序已在当前工作台内接入真实流程。</span>
         </div>
       </footer>
     </section>
+
+    <NodeEditorDialog
+      v-model:visible="editorVisible"
+      :mode="editorMode"
+      :node="activeNode"
+      :groups="groups"
+      :routes="routes"
+      :nodes="nodes"
+      @success="() => loadNodeBoard()"
+    />
+
+    <NodeSortDialog
+      v-model:visible="sortDialogVisible"
+      :nodes="nodes"
+      @success="() => loadNodeBoard()"
+    />
   </div>
 </template>
 
