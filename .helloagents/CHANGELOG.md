@@ -7,6 +7,11 @@
   - 方案: [202604242245_admin-frontend-node-pagination-batch-edit](archive/2026-04/202604242245_admin-frontend-node-pagination-batch-edit/)
   - 决策: admin-frontend-node-pagination-batch-edit#D001(节点分页采用前端本地分页), admin-frontend-node-pagination-batch-edit#D002(批量修改范围固定为已勾选节点), admin-frontend-node-pagination-batch-edit#D003(置顶节点复用 server/manage/sort)
 
+### 快速修改
+- **[admin-frontend]**: 为独立 `xboard-admin-frontend` 容器补齐 `/api` 反向代理到后端 `web` 服务的链路，并在 compose 分支 `admin` 服务中显式声明 `XBOARD_BACKEND_UPSTREAM=http://web:7001`；同时把镜像名对齐到当前 fork `ghcr.io/micah123321/*` — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/Caddyfile:1-17, E:/code/php/Xboard-new-compose/compose.yaml:1-26
+
 ## [0.5.8] - 2026-04-24
 
 ### 新增

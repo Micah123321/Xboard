@@ -11,6 +11,7 @@
 - 管理端前端位于 `admin-frontend/`
 - `admin-frontend` 现支持通过 `ADMIN_BUILD_OUT_DIR` 覆写构建输出目录：仓内默认仍写到 `../public/assets/admin`，容器构建可切到独立 `dist`
 - 前端容器化运行采用 `admin-frontend/Dockerfile`（`Node 20 + Caddy` 多阶段构建），静态站点入口重定向到 `/assets/admin/`
+- 前端容器会通过 `XBOARD_BACKEND_UPSTREAM` 把 `/api` 反向代理到后端 `web` 服务；compose 分支当前默认值为 `http://web:7001`
 - GHCR 前端镜像发布工作流位于 `.github/workflows/admin-frontend-docker-publish.yml`，镜像名为 `ghcr.io/<owner>/xboard-admin-frontend`
 - 管理端 API 通过 `window.settings.secure_path` 或 `VITE_ADMIN_PATH` 解析 `/api/v2/{secure_path}` 前缀
 - 登录接口复用 `/api/v2/passport/auth/login`

@@ -11,6 +11,7 @@
 
 - 默认构建输出仍为主仓 `public/assets/admin`；当 `ADMIN_BUILD_OUT_DIR` 存在时，构建输出需切换到外部指定目录，供容器镜像独立打包
 - 独立容器运行时通过 `Caddyfile` 把根路径重定向到 `/assets/admin/`，避免当前 `base: '/assets/admin/'` 资源前缀失效
+- 独立容器运行时会把 `/api` 反向代理到 `XBOARD_BACKEND_UPSTREAM`，compose 分支默认指向 `http://web:7001`，确保前端静态容器仍能直连 Laravel 后端
 - 前端 GHCR 发布链路与 Laravel 主应用发布链路分离，避免把静态前端构建耦合进现有 PHP 镜像工作流
 - 登录成功后优先跳转 `redirect` 指定路由，否则回到 `/dashboard`
 - 受保护路由在未登录时会自动附加 `redirect` 查询参数

@@ -1,26 +1,25 @@
 # 恢复快照
 
 ## 主线目标
-完成 `admin-frontend` 节点管理页的分页、单节点置顶、仅对已勾选节点生效的批量修改，以及父/子节点筛选。
+完成 `admin-frontend` 独立 Docker 镜像、GHCR 自动发布、compose 分支 `admin` 服务接入，以及 `admin -> web` 的 `/api` 反向代理链路。
 
 ## 正在做什么
-当前任务已完成，已完成代码修改、构建验证、知识库同步与方案包归档。
+当前任务已完成，已补齐 `xboard-admin-frontend` 到后端 `web` 服务的 `/api` 反向代理，并整理最终变更与验证证据。
 
 ## 关键上下文
-- 用户在确认阶段选择了“1”，确认批量修改范围仅限已勾选节点，不扩展到当前筛选结果。
-- 节点页已补齐本地分页、父/子节点筛选、跨分页勾选恢复、行级“置顶节点”和批量修改弹窗。
-- 批量修改只会更新 `host / group_ids / rate`，不会改动端口、显隐状态和协议配置。
-- Laravel `ManageController::batchUpdate` 已扩展支持 `host / rate / group_ids` 三个字段。
-- 本轮方案包已归档到 `.helloagents/archive/2026-04/202604242245_admin-frontend-node-pagination-batch-edit/`。
+- 用户指出此前方案遗漏了 `xboard-admin-frontend` 访问后端 API 的回源链路，需要补齐到后端 `web` 服务。
+- `admin-frontend/Caddyfile` 现已增加 `/api` 反向代理，回源地址由 `XBOARD_BACKEND_UPSTREAM` 控制，默认值为 `http://web:7001`。
+- 独立 worktree `E:\code\php\Xboard-new-compose` 的 `compose.yaml` 已补充 `admin` 服务环境变量 `XBOARD_BACKEND_UPSTREAM=http://web:7001`，并把镜像名对齐到当前 fork `ghcr.io/micah123321/*`。
+- 本轮已同步知识库：`.helloagents/CHANGELOG.md`、`.helloagents/context.md`、`.helloagents/modules/admin-frontend.md`。
 
 ## 下一步
-当前任务已完成；如继续同一业务域，可在节点管理基础上补批量显隐、批量启停、批量重置流量或后端真实分页。
+当前任务已完成；如要继续，可下一步提交/推送 `master` 与 `compose` 两个工作树中的改动，或继续把 `ws-server`、命名卷和最终部署文档一并对齐到你的实际 compose 模板。
 
 ## 阻塞项
-（无）
+- 本地缺少 `docker` 与 `caddy` 可执行文件，因此本轮未执行 `docker build` / `caddy validate`，仅完成了 compose YAML 语法验证与代码级自检。
 
 ## 方案
-archive/2026-04/202604242245_admin-frontend-node-pagination-batch-edit
+无（R1 快速修正）
 
 ## 已标记技能
-frontend-design, hello-ui, hello-verify
+hello-verify

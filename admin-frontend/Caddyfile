@@ -2,6 +2,11 @@
   encode zstd gzip
   root * /usr/share/caddy
 
+  @api path /api /api/*
+  handle @api {
+    reverse_proxy {$XBOARD_BACKEND_UPSTREAM:http://web:7001}
+  }
+
   redir / /assets/admin/ 308
   redir /assets/admin /assets/admin/ 308
 
