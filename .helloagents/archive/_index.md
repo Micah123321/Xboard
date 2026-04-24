@@ -7,6 +7,11 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202604241620 | admin-frontend-order-management | implementation | admin-frontend | admin-frontend-order-management#D001,#D002,#D003 | ✅完成 |
+| 202604241558 | admin-frontend-payment-management | implementation | admin-frontend | admin-frontend-payment-management#D001,#D002,#D003 | ✅完成 |
+| 202604241553 | admin-frontend-plugin-management | implementation | admin-frontend | admin-frontend-plugin-management#D001,#D002,#D003 | ✅完成 |
+| 202604241607 | admin-frontend-theme-management | implementation | admin-frontend | admin-frontend-theme-management#D001,#D002 | ✅完成 |
+| 202604241551 | admin-frontend-coupon-management | implementation | admin-frontend | admin-frontend-coupon-management#D001,#D002,#D003 | ✅完成 |
 | 202604232345 | traffic-rank-limit-backend-adapt | implementation | admin-frontend,backend | traffic-rank-limit-backend-adapt#D001,#D002 | ✅完成 |
 | 202604232329 | admin-frontend-system-management | implementation | admin-frontend | admin-frontend-system-management#D001,#D002,#D003 | ✅完成 |
 | 202604232320 | admin-frontend-node-management | implementation | admin-frontend | admin-frontend-node-management#D001,#D002 | ✅完成 |
@@ -24,6 +29,11 @@
 ## 按月归档
 
 ### 2026-04
+- [202604241620_admin-frontend-order-management](./2026-04/202604241620_admin-frontend-order-management/) - 开放“订单管理”入口，交付真实订单列表、筛选、分配订单、详情抽屉、手动支付与佣金状态维护
+- [202604241558_admin-frontend-payment-management](./2026-04/202604241558_admin-frontend-payment-management/) - 将 `#/system/payments` 从占位页升级为真实支付配置工作台，接入支付方式列表、动态配置抽屉、启停、删除与排序
+- [202604241553_admin-frontend-plugin-management](./2026-04/202604241553_admin-frontend-plugin-management/) - 将 `#/system/plugins` 从占位页升级为真实插件管理工作台，接入插件列表、筛选、上传、安装、启停、升级、卸载，以及 README / 动态配置抽屉
+- [202604241607_admin-frontend-theme-management](./2026-04/202604241607_admin-frontend-theme-management/) - 将 `#/system/themes` 从占位页升级为真实主题管理页面，接入主题列表、当前主题切换、动态配置抽屉与 zip 主题上传
+- [202604241551_admin-frontend-coupon-management](./2026-04/202604241551_admin-frontend-coupon-management/) - 开放“优惠券管理”入口，完整交付优惠券列表、类型筛选、启停、删除，以及接入真实 coupon 接口的新增/编辑弹窗
 - [202604232345_traffic-rank-limit-backend-adapt](./2026-04/202604232345_traffic-rank-limit-backend-adapt/) - traffic rank 接口新增 limit=10|20 支持，并让 dashboard 的 10/20 切换真正驱动后端返回条数
 - [202604232329_admin-frontend-system-management](./2026-04/202604232329_admin-frontend-system-management/) - 新增“系统管理”侧边栏分组，完整交付系统配置页，并接入插件/主题/公告/支付/知识库结构化占位页
 - [202604232320_admin-frontend-node-management](./2026-04/202604232320_admin-frontend-node-management/) - 新增“节点管理”侧边栏分组、节点管理工作台，以及权限组/路由管理占位页

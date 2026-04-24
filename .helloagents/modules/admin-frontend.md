@@ -4,7 +4,7 @@
 
 - 提供 Vue3 管理端登录页、认证状态、路由守卫和主布局
 - 封装管理端统计/系统状态、用户管理、节点管理、套餐管理和系统配置接口
-- 渲染后台仪表盘、用户管理工作台、节点管理工作台、订阅套餐管理页、系统配置页，以及预留的工单管理入口
+- 渲染后台仪表盘、用户管理工作台、节点管理工作台、订阅套餐管理页、系统配置页、主题管理页、插件管理工作台、公告管理工作台、支付配置工作台，以及预留的工单管理入口
 
 ## 行为规范
 
@@ -21,11 +21,27 @@
 - 新增用户时采用“先 generate，后按邮箱回查并 update”的两段式流程，以兼容后端基础创建接口
 - 节点管理页通过真实后端 `server/manage/getNodes` 与 `server/group/fetch` 获取列表，并通过 `server/manage/update`、`server/manage/copy`、`server/manage/drop` 完成首批行级操作
 - 节点相关导航入口固定归入“节点管理”分组；`/node-groups` 与 `/node-routes` 本轮先交付结构化占位页，不伪装为完整功能
-- 订阅管理新增独立“订阅管理”侧边栏分组，本轮完整实现 `#/subscriptions/plans`，其余订单/优惠券/礼品卡入口先保留禁用态
+- 订阅管理新增独立“订阅管理”侧边栏分组，现已完整实现 `#/subscriptions/plans`、`#/subscriptions/orders` 与 `#/subscriptions/coupons`；礼品卡管理仍保留禁用态
 - 套餐管理页使用真实后端 `plan/fetch`、`plan/save`、`plan/update`、`plan/drop`、`plan/sort` 与 `server/group/fetch`
+- 套餐管理页渲染 `ElSwitch` 前，会先把 `show / sell / renew` 归一化成布尔值；开关事件若新旧值相同则直接短路，避免初始化阶段误写后台状态
 - 套餐说明编辑采用轻量 Markdown/HTML 编辑器与预览模式，不引入额外富文本依赖
-- 系统管理新增独立“系统管理”侧边栏分组，本轮完整实现 `#/system/config`，其余插件/主题/公告/支付/知识库入口先交付结构化占位页
+- 订单管理页使用真实后端 `order/fetch`、`order/detail`、`order/assign`、`order/paid`、`order/cancel` 与 `order/update`，支持订单列表、类型/周期/状态筛选、详情抽屉、手动分配、人工标记已支付与佣金状态维护
+- 订单金额、佣金金额与相关拆解字段以“分”为后端真相源，前端统一在 `src/utils/orders.ts` 中格式化为“元”展示，避免后台金额口径混乱
+- 优惠券管理页使用真实后端 `coupon/fetch`、`coupon/generate`、`coupon/update` 与 `coupon/drop`，支持本地搜索、类型筛选、启停、删除与弹窗式新增/编辑
+- 优惠券编辑弹窗支持金额/比例两种优惠类型、有效期范围、批量生成、自定义券码、指定周期与指定订阅限制
+- 系统管理新增独立“系统管理”侧边栏分组，当前已完整实现 `#/system/config`、`#/system/themes`、`#/system/plugins`、`#/system/notices`、`#/system/payments` 与 `#/system/knowledge`
 - 系统配置页使用真实后端 `config/fetch`、`config/save`、`config/testSendMail` 与 `config/setTelegramWebhook`，并按站点、安全、订阅、邀请佣金、节点、邮件、Telegram、APP、订阅模板 9 个分组组织长表单
+- 主题管理页使用真实后端 `theme/getThemes`、`theme/getThemeConfig`、`theme/saveThemeConfig`、`theme/upload`，并通过 `config/save(frontend_theme)` 完成当前主题切换
+- 主题配置抽屉按后端返回的动态 schema 渲染 `input / textarea / select` 字段，不在前端猜测额外配置项
+- 插件管理页使用真实后端 `plugin/types`、`plugin/getPlugins`、`plugin/upload`、`plugin/install`、`plugin/uninstall`、`plugin/enable`、`plugin/disable`、`plugin/config` 与 `plugin/upgrade`
+- 插件管理首屏采用“搜索 + 类型切换 + 状态筛选 + 上传入口 + 插件卡片”结构；详情抽屉负责 README 展示与动态配置编辑
+- 动态插件配置按后端返回的 schema 渲染，当前已兼容 `boolean / string / text / json / select / number` 字段类型；未安装插件仅显示配置结构预览，不允许保存
+- 公告管理页使用真实后端 `notice/fetch`、`notice/save`、`notice/show`、`notice/drop` 与 `notice/sort`，支持标题搜索、显隐切换、编辑弹窗、删除与排序模式
+- 公告编辑弹窗继续使用轻量 Markdown/HTML 工具栏，不引入额外富文本依赖；`show / popup / tags` 会在工具层统一归一化后再回填到 UI
+- 支付配置页使用真实后端 `payment/fetch`、`payment/getPaymentMethods`、`payment/getPaymentForm`、`payment/save`、`payment/show`、`payment/drop` 与 `payment/sort`，支持关键词搜索、启停、删除、新增/编辑与排序模式
+- 支付编辑抽屉根据所选支付接口动态拉取真实配置字段，不在前端写死 EPay / TokenPay 等网关表单；通知地址继续以后端拼接结果为准
+- 知识库管理页使用真实后端 `knowledge/fetch`、`knowledge/getCategory`、`knowledge/save`、`knowledge/show`、`knowledge/drop` 与 `knowledge/sort`，支持标题搜索、分类筛选、显隐切换、编辑弹窗、删除与排序模式
+- 知识编辑弹窗继续使用轻量 Markdown/HTML 工具栏，不引入额外富文本依赖；编辑时会单独请求详情补齐 `body / language`
 - 当前首页视觉基线为 Apple 风格：纯色分区、系统字体栈、单一蓝色强调和轻量层次
 - 性能优化优先级高于装饰性表达，避免远程字体、全局模糊背景和固定特效层
 
@@ -34,6 +50,13 @@
 - 依赖 `src/api/client.ts` 处理 axios 与认证头
 - 依赖 `src/utils/users.ts` 负责用户管理表单转换、筛选组装和状态计算
 - 依赖 `src/utils/plans.ts` 负责套餐价格、说明渲染、排序与表单转换
+- 依赖 `src/utils/orders.ts` 负责订单金额换算、状态映射、周期标签与筛选参数组装
+- 依赖 `src/utils/coupons.ts` 负责优惠券类型映射、时间范围转换、过期状态计算与表单序列化
+- 依赖 `src/utils/themes.ts` 负责主题列表排序、动态配置默认值回填与序列化
+- 依赖 `src/utils/plugins.ts` 负责插件状态判断、README 渲染、筛选与动态配置表单序列化
+- 依赖 `src/utils/payments.ts` 负责支付方式归一化、搜索过滤、排序移动与动态配置序列化
+- 依赖 `src/utils/knowledge.ts` 负责知识库分类、Markdown 渲染、过滤与表单转换
+- 依赖 `src/utils/notices.ts` 负责公告表单转换、内容摘要、排序与显示字段归一化
 - 依赖 `src/utils/systemConfig.ts` 负责系统配置字段元信息、默认值、回填与保存序列化
 - 依赖 Laravel 注入的 `window.settings`
 - 构建输出到 `public/assets/admin`

@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 5,
+  "failed": 0,
+  "pending": 0,
+  "total": 5,
+  "done": 5,
+  "percent": 100,
+  "current": "公告管理真实工作台、构建验证与知识库同步已完成，等待用户验收",
+  "updated_at": "2026-04-24 16:09:00"
+}

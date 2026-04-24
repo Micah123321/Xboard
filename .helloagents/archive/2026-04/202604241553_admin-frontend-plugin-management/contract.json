@@ -1,0 +1,51 @@
+{
+  "updatedAt": "2026-04-24T07:55:29.737Z",
+  "version": 1,
+  "source": "manual",
+  "originCommand": "plugin-management-r2",
+  "verifyMode": "review-first",
+  "reviewerFocus": [
+    "插件管理页是否延续当前 Apple 风格后台，并形成真实工作台而不是占位页",
+    "卡片动作优先级、危险动作和受保护插件边界是否清晰",
+    "详情抽屉中的 README 与配置双视图是否易读且层级明确"
+  ],
+  "testerFocus": [
+    "插件列表、类型切换、状态筛选与搜索是否真实连接 /plugin/getPlugins 数据流",
+    "上传、安装、启用、禁用、升级、卸载动作是否真实命中对应插件接口",
+    "插件配置读取与保存是否真实命中 /plugin/config"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "plan.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": true,
+      "reason": "插件管理属于整页 UI 重做，需确认卡片列表、筛选工具栏与详情抽屉层级符合 Apple 风格后台契约",
+      "screens": [
+        "#/system/plugins desktop",
+        "#/system/plugins detail-drawer desktop"
+      ],
+      "states": [
+        "插件列表加载完成态",
+        "插件列表空状态或错误态",
+        "插件详情 README 态",
+        "插件配置编辑态"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

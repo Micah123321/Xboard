@@ -1,5 +1,68 @@
 # CHANGELOG
 
+## [0.4.6] - 2026-04-24
+
+### 修复
+- **[subscription-protocols]**: 修复 `flag=stash` 订阅在未知版本或低版本客户端下仍导出 `AnyTLS` 节点的问题；现在只有 Stash `>= 3.3.0` 才会保留 `AnyTLS`，避免导入时报“**不支持 anytls 协议**” — by yinjianm
+  - 方案: [202604241619_fix-stash-anytls-compat-filter](plan/202604241619_fix-stash-anytls-compat-filter/)
+  - 决策: fix-stash-anytls-compat-filter#D001(未知版本按不支持 AnyTLS 处理), fix-stash-anytls-compat-filter#D002(仅在 Stash 导出器中做定点修复)
+
+## [0.4.5] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 开放“订单管理”入口，完整交付真实订单列表、类型/周期/状态筛选、分配订单抽屉、详情抽屉、手动标记已支付与佣金状态维护，并接入 `order/*` 后台接口 — by yinjianm
+  - 方案: [202604241620_admin-frontend-order-management](archive/2026-04/202604241620_admin-frontend-order-management/)
+  - 决策: admin-frontend-order-management#D001(列表页贴近用户截图并保留 Apple 化后台节奏), admin-frontend-order-management#D002(详情操作收口到订单详情抽屉而不是额外操作列), admin-frontend-order-management#D003(订单金额统一按“分→元”格式化展示)
+
+## [0.4.4] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 完成“支付配置”真实工作台，支持支付方式列表、关键词搜索、启停、删除、动态配置抽屉与排序模式，并接入真实 `payment/*` 后台接口 — by yinjianm
+  - 方案: [202604241558_admin-frontend-payment-management](archive/2026-04/202604241558_admin-frontend-payment-management/)
+  - 决策: admin-frontend-payment-management#D001(真实列表页+动态配置抽屉+排序对话框), admin-frontend-payment-management#D002(支付配置字段完全以后端动态表单为真相源), admin-frontend-payment-management#D003(启停继续沿用切换型接口并做同值短路保护)
+
+## [0.4.3] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 将 `#/system/themes` 从结构化占位页升级为真实主题管理页面，接入主题列表、当前主题切换、动态主题配置抽屉与 zip 主题上传入口 — by yinjianm
+  - 方案: [202604241607_admin-frontend-theme-management](archive/2026-04/202604241607_admin-frontend-theme-management/)
+  - 决策: admin-frontend-theme-management#D001(主题切换复用 config/save(frontend_theme)), admin-frontend-theme-management#D002(主题配置统一放入抽屉)
+
+## [0.4.3] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 将 `#/system/plugins` 从占位页升级为真实插件管理工作台，接入插件列表、类型 / 状态筛选、上传、安装、启停、升级、卸载，以及 README / 动态配置抽屉；同时补齐缺失的订单管理与知识库管理路由壳层以恢复 `npm run build` 通过 — by yinjianm
+  - 方案: [202604241553_admin-frontend-plugin-management](archive/2026-04/202604241553_admin-frontend-plugin-management/)
+  - 决策: admin-frontend-plugin-management#D001(插件管理采用卡片列表 + 详情抽屉), admin-frontend-plugin-management#D002(配置编辑使用动态 schema 渲染), admin-frontend-plugin-management#D003(README 与配置合并进同一个详情工作台)
+
+## [0.4.2] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 完成“知识库管理”真实工作台，支持知识列表、标题搜索、分类筛选、显隐切换、新增/编辑弹窗、删除与排序模式，并接入真实 `knowledge/*` 后台接口 — by yinjianm
+  - 方案: [202604241610_admin-frontend-knowledge-management](plan/202604241610_admin-frontend-knowledge-management/)
+  - 决策: admin-frontend-knowledge-management#D001(编辑器采用轻量 Markdown 方案), admin-frontend-knowledge-management#D002(列表页采用真实表格与中央对话框), admin-frontend-knowledge-management#D003(排序采用本地草稿编辑后统一提交)
+
+## [0.4.1] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 完成“公告管理”真实工作台，支持公告列表、标题搜索、显隐切换、新增/编辑弹窗、删除与排序模式，并接入真实 `notice/*` 后台接口 — by yinjianm
+  - 方案: [202604241609_admin-frontend-notice-management](plan/202604241609_admin-frontend-notice-management/)
+  - 决策: admin-frontend-notice-management#D001(真实列表页+编辑弹窗+排序对话框), admin-frontend-notice-management#D002(公告内容编辑继续使用轻量 Markdown 方案), admin-frontend-notice-management#D003(公告开关与标签统一归一化)
+
+## [0.4.0] - 2026-04-24
+
+### 新增
+- **[admin-frontend]**: 开放“优惠券管理”入口，完整交付优惠券列表、关键字搜索、类型筛选、启停、删除，以及接入真实 `coupon/*` 接口的新增/编辑弹窗 — by yinjianm
+  - 方案: [202604241551_admin-frontend-coupon-management](archive/2026-04/202604241551_admin-frontend-coupon-management/)
+  - 决策: admin-frontend-coupon-management#D001(优惠券列表采用真实接口+本地搜索筛选分页), admin-frontend-coupon-management#D002(新增与编辑共用同一弹窗并统一序列化), admin-frontend-coupon-management#D003(优惠券编辑采用居中弹窗而非抽屉)
+
+## [0.3.2] - 2026-04-24
+
+### 修复
+- **[admin-frontend]**: 修复 `#/subscriptions/plans` 页面首次加载时会误把套餐“新购”状态批量关闭的问题；现在会先归一化 `show / sell / renew` 开关值，并在同值事件下短路，避免浏览页面即触发真实写操作 — by yinjianm
+  - 方案: [202604241542_admin-frontend-plan-toggle-regression](plan/202604241542_admin-frontend-plan-toggle-regression/)
+  - 决策: admin-frontend-plan-toggle-regression#D001(前端入口先归一化套餐开关值), admin-frontend-plan-toggle-regression#D002(开关提交增加同值短路护栏)
+
 ## [0.3.0] - 2026-04-23
 
 ### 新增

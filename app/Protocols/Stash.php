@@ -10,6 +10,8 @@ use App\Models\Server;
 
 class Stash extends AbstractProtocol
 {
+    private const ANYTLS_MIN_VERSION = '3.3.0';
+
     public $flags = ['stash'];
     public $allowedProtocols = [
         Server::TYPE_SHADOWSOCKS,
@@ -124,6 +126,16 @@ class Stash extends AbstractProtocol
                 array_push($proxies, $item['name']);
             }
             if ($item['type'] === Server::TYPE_ANYTLS) {
+                if (!self::supportsAnyTlsVersion(
+                    clientVersion: $this->clientVersion,
+                    minimumVersion: data_get(
+                        $this->protocolRequirements,
+                        'stash.anytls.base_version',
+                        self::ANYTLS_MIN_VERSION
+                    )
+                )) {
+                    continue;
+                }
                 array_push($proxy, self::buildAnyTLS($item['password'], $item));
                 array_push($proxies, $item['name']);
             }
@@ -176,6 +188,15 @@ class Stash extends AbstractProtocol
             ->header('subscription-userinfo', "upload={$user['u']}; download={$user['d']}; total={$user['transfer_enable']}; expire={$user['expired_at']}")
             ->header('profile-update-interval', '24')
             ->header('content-disposition', 'attachment;filename*=UTF-8\'\'' . rawurlencode($appName));
+    }
+
+    public static function supportsAnyTlsVersion(?string $clientVersion, ?string $minimumVersion = self::ANYTLS_MIN_VERSION): bool
+    {
+        if (!$clientVersion || !$minimumVersion) {
+            return false;
+        }
+
+        return version_compare($clientVersion, $minimumVersion, '>=');
     }
 
     public static function buildShadowsocks($uuid, $server)

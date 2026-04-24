@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 6,
+  "failed": 0,
+  "pending": 0,
+  "total": 6,
+  "done": 6,
+  "percent": 100,
+  "current": "支付配置真实工作台已完成，等待归档与用户验收",
+  "updated_at": "2026-04-24 16:14:00"
+}

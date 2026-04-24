@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 6,
+  "failed": 0,
+  "pending": 0,
+  "total": 6,
+  "done": 6,
+  "percent": 100,
+  "current": "优惠券管理页面、弹窗与构建验证已完成，等待归档",
+  "updated_at": "2026-04-24 16:28:00"
+}

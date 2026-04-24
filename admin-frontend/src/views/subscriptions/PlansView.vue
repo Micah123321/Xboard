@@ -23,6 +23,7 @@ import {
   formatPlanTraffic,
   getPlanPriceBadges,
   movePlanOrder,
+  normalizePlanToggleFields,
 } from '@/utils/plans'
 import PlanEditorDrawer from './PlanEditorDrawer.vue'
 
@@ -70,7 +71,9 @@ async function loadData() {
   loading.value = true
   try {
     const [plansResponse, groupsResponse] = await Promise.all([getPlans(), getServerGroups()])
-    plans.value = [...(plansResponse.data ?? [])].sort((left, right) => (left.sort || 0) - (right.sort || 0))
+    plans.value = (plansResponse.data ?? [])
+      .map((plan) => normalizePlanToggleFields(plan))
+      .sort((left, right) => (left.sort || 0) - (right.sort || 0))
     groups.value = groupsResponse.data ?? []
   } finally {
     loading.value = false
@@ -91,10 +94,14 @@ function openEditDrawer(plan: AdminPlanListItem) {
 
 async function handleToggle(plan: AdminPlanListItem, field: PlanToggleField, nextValue: boolean | string | number) {
   const key = getToggleKey(plan.id, field)
+  const normalizedNextValue = Boolean(nextValue)
+  if (plan[field] === normalizedNextValue) {
+    return
+  }
   toggleLoadingMap.value[key] = true
   try {
-    await updatePlan(plan.id, { [field]: Boolean(nextValue) })
-    plan[field] = Boolean(nextValue)
+    await updatePlan(plan.id, { [field]: normalizedNextValue })
+    plan[field] = normalizedNextValue
     ElMessage.success('套餐状态已更新')
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '套餐状态更新失败')

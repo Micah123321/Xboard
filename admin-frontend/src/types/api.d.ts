@@ -136,6 +136,14 @@ export interface AdminQueueFailedJobResult extends AdminPaginationResult<AdminQu
 export interface AdminPaginationResult<T> {
   data: T[]
   total: number
+  current_page?: number
+  per_page?: number
+  last_page?: number
+}
+
+export interface AdminTableSort {
+  id: string
+  desc: boolean
 }
 
 export interface AdminGroupOption {
@@ -174,6 +182,99 @@ export type AdminConfigGroupKey =
 export type AdminConfigGroupValue = Record<string, unknown>
 
 export type AdminConfigMappings = Partial<Record<AdminConfigGroupKey, AdminConfigGroupValue>>
+
+export interface AdminKnowledgeListItem {
+  id: number
+  title: string
+  updated_at: number | string | null
+  category: string | null
+  show: boolean
+}
+
+export interface AdminKnowledgeDetail extends AdminKnowledgeListItem {
+  body: string
+  language: string
+  sort?: number | null
+  created_at?: number | string | null
+}
+
+export interface AdminKnowledgeSavePayload {
+  id?: number
+  category: string
+  language: string
+  title: string
+  body: string
+  show: boolean
+}
+
+export type AdminPluginTypeValue = 'feature' | 'payment'
+
+export interface AdminPluginTypeItem {
+  value: AdminPluginTypeValue
+  label: string
+  description: string
+  icon?: string
+}
+
+export interface AdminPluginConfigOption {
+  label: string
+  value: string | number | boolean
+}
+
+export interface AdminPluginConfigField {
+  type: string
+  label: string
+  placeholder: string
+  description: string
+  value: unknown
+  options: AdminPluginConfigOption[] | Record<string, string> | Array<string | number | boolean>
+}
+
+export interface AdminPluginItem {
+  code: string
+  name: string
+  version: string
+  description: string
+  author: string
+  type: AdminPluginTypeValue | string
+  is_installed: boolean
+  is_enabled: boolean
+  is_protected: boolean
+  can_be_deleted: boolean
+  config: Record<string, AdminPluginConfigField>
+  readme: string
+  need_upgrade: boolean
+  admin_menus?: unknown
+  admin_crud?: unknown
+}
+
+export type AdminThemeFieldType = 'input' | 'textarea' | 'select'
+
+export interface AdminThemeConfigField {
+  label: string
+  placeholder?: string
+  field_name: string
+  field_type: AdminThemeFieldType
+  select_options?: Record<string, string>
+  default_value?: string | number | boolean | null
+}
+
+export interface AdminThemeSummary {
+  name: string
+  description?: string
+  version?: string
+  images?: string
+  configs?: AdminThemeConfigField[]
+  can_delete?: boolean
+  is_system?: boolean
+}
+
+export interface AdminThemeListResult {
+  themes: Record<string, AdminThemeSummary>
+  active: string
+}
+
+export type AdminThemeConfigRecord = Record<string, string | number | boolean | null>
 
 export interface AdminPlanPriceMap {
   monthly?: number | null
@@ -218,9 +319,184 @@ export interface AdminPlanSavePayload {
   force_update?: boolean
 }
 
+export interface AdminNoticeItem {
+  id: number
+  title: string
+  content: string
+  img_url?: string | null
+  tags?: string[] | null
+  show: boolean | number
+  popup?: boolean | number | null
+  sort?: number | null
+  created_at?: number | string | null
+  updated_at?: number | string | null
+}
+
+export interface AdminNoticeSavePayload {
+  id?: number
+  title: string
+  content: string
+  img_url?: string | null
+  tags?: string[]
+  show?: boolean
+  popup?: boolean
+}
+
+export interface AdminPaymentConfigField {
+  type: string
+  label: string
+  placeholder: string
+  description: string
+  value: string
+  options: AdminPluginConfigOption[] | Record<string, string> | Array<string | number | boolean>
+}
+
+export type AdminPaymentConfigFields = Record<string, AdminPaymentConfigField>
+
+export interface AdminPaymentListItem {
+  id: number
+  uuid: string
+  payment: string
+  name: string
+  icon?: string | null
+  config?: Record<string, unknown> | null
+  notify_domain?: string | null
+  notify_url?: string | null
+  handling_fee_fixed?: number | null
+  handling_fee_percent?: number | string | null
+  enable: boolean | number
+  sort?: number | null
+  created_at?: number | string | null
+  updated_at?: number | string | null
+}
+
+export interface AdminPaymentSavePayload {
+  id?: number
+  name: string
+  icon?: string | null
+  payment: string
+  config: Record<string, string>
+  notify_domain?: string | null
+  handling_fee_fixed?: number | null
+  handling_fee_percent?: number | null
+}
+
+export type AdminCouponType = 1 | 2
+
+export interface AdminCouponListItem {
+  id: number
+  show: boolean
+  name: string
+  type: AdminCouponType
+  value: number
+  code: string
+  limit_use?: number | null
+  limit_use_with_user?: number | null
+  limit_plan_ids?: string[] | null
+  limit_period?: string[] | null
+  started_at: number
+  ended_at: number
+  created_at: number
+  updated_at: number
+}
+
+export interface AdminCouponFetchParams {
+  current?: number
+  pageSize?: number
+}
+
+export interface AdminCouponGeneratePayload {
+  id?: number
+  generate_count?: number
+  name: string
+  type: AdminCouponType
+  value: number
+  started_at: number
+  ended_at: number
+  limit_use?: number | null
+  limit_use_with_user?: number | null
+  limit_plan_ids?: number[]
+  limit_period?: string[]
+  code?: string
+}
+
 export interface AdminUserRef {
   id: number
   email: string
+}
+
+export interface AdminOrderUserRef {
+  id: number
+  email: string
+  balance?: number | null
+  commission_balance?: number | null
+  plan_id?: number | null
+}
+
+export interface AdminCommissionLogItem {
+  id: number
+  invite_user_id: number
+  user_id: number
+  trade_no: string
+  order_amount: number
+  get_amount: number
+  created_at: number
+  updated_at: number
+}
+
+export interface AdminOrderListItem {
+  id: number
+  invite_user_id?: number | null
+  user_id: number
+  plan_id: number | null
+  coupon_id?: number | null
+  payment_id?: number | null
+  type: number
+  period: string
+  trade_no: string
+  callback_no?: string | null
+  total_amount: number
+  handling_amount?: number | null
+  discount_amount?: number | null
+  surplus_amount?: number | null
+  refund_amount?: number | null
+  balance_amount?: number | null
+  surplus_order_ids?: number[] | null
+  status: number
+  commission_status?: number | null
+  commission_balance?: number | null
+  actual_commission_balance?: number | null
+  paid_at?: number | null
+  created_at: number
+  updated_at: number
+  plan?: AdminPlanOption | null
+}
+
+export interface AdminOrderDetail extends AdminOrderListItem {
+  user?: AdminOrderUserRef | null
+  invite_user?: AdminOrderUserRef | null
+  commission_log?: AdminCommissionLogItem[]
+  surplus_orders?: AdminOrderListItem[]
+}
+
+export interface AdminOrderFilter {
+  id: string
+  value: string | number | Array<string | number>
+}
+
+export interface AdminOrderFetchParams {
+  current: number
+  pageSize: number
+  filter?: AdminOrderFilter[]
+  sort?: AdminTableSort[]
+  is_commission?: boolean
+}
+
+export interface AdminOrderAssignPayload {
+  email: string
+  plan_id: number
+  period: string
+  total_amount: number
 }
 
 export interface AdminUserListItem {
@@ -260,10 +536,7 @@ export interface AdminUserFilter {
   logic?: 'and' | 'or'
 }
 
-export interface AdminUserSort {
-  id: string
-  desc: boolean
-}
+export type AdminUserSort = AdminTableSort
 
 export interface AdminUserFetchParams {
   current: number

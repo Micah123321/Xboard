@@ -229,6 +229,15 @@ export function countEnabledPlans(plans: AdminPlanListItem[], field: 'show' | 's
   return plans.filter((plan) => Boolean(plan[field])).length
 }
 
+export function normalizePlanToggleFields(plan: AdminPlanListItem): AdminPlanListItem {
+  return {
+    ...plan,
+    show: Boolean(plan.show),
+    sell: Boolean(plan.sell),
+    renew: Boolean(plan.renew),
+  }
+}
+
 export function movePlanOrder(plans: AdminPlanListItem[], fromIndex: number, direction: -1 | 1): AdminPlanListItem[] {
   const targetIndex = fromIndex + direction
   if (targetIndex < 0 || targetIndex >= plans.length) {

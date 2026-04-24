@@ -1,0 +1,179 @@
+.coupons-page {
+  display: grid;
+  gap: 24px;
+}
+
+.coupons-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 30px 32px;
+  border-radius: 28px;
+  background: #000000;
+}
+
+.coupons-copy {
+  display: grid;
+  gap: 10px;
+  max-width: 620px;
+}
+
+.coupons-kicker {
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.coupons-copy h1 {
+  font-size: clamp(34px, 5vw, 52px);
+  line-height: 1.08;
+  letter-spacing: -0.28px;
+  color: #ffffff;
+}
+
+.coupons-copy span,
+.hero-stats span,
+.table-footer span,
+.name-cell span,
+.validity-cell span:last-child {
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.47;
+}
+
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 360px;
+}
+
+.hero-stats article {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.hero-stats strong {
+  color: #ffffff;
+  font-size: 22px;
+}
+
+.table-shell {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 26px;
+  background: #ffffff;
+  box-shadow: var(--xboard-shadow);
+}
+
+.table-toolbar,
+.toolbar-left,
+.table-footer,
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.table-toolbar,
+.table-footer {
+  justify-content: space-between;
+}
+
+.toolbar-left {
+  flex-wrap: wrap;
+}
+
+.toolbar-search {
+  width: min(320px, 100%);
+}
+
+.toolbar-filter {
+  width: 180px;
+}
+
+.coupons-table :deep(th.el-table__cell) {
+  color: var(--xboard-text-secondary);
+  background: #fbfbfd;
+}
+
+.coupons-table :deep(.el-table__row td.el-table__cell) {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.name-cell,
+.validity-cell {
+  display: grid;
+  gap: 8px;
+}
+
+.name-cell strong {
+  color: var(--xboard-text-strong);
+}
+
+.coupon-code {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--xboard-text-strong);
+}
+
+.validity-cell span:last-child,
+.table-footer span,
+.name-cell span {
+  color: var(--xboard-text-muted);
+}
+
+.expiry-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.expiry-pill--danger {
+  background: rgba(201, 52, 40, 0.08);
+  color: var(--xboard-danger);
+}
+
+.expiry-pill--success {
+  background: rgba(35, 134, 63, 0.08);
+  color: var(--xboard-success);
+}
+
+.expiry-pill--info {
+  background: rgba(0, 113, 227, 0.08);
+  color: var(--xboard-primary);
+}
+
+.action-btn {
+  font-size: 18px;
+}
+
+.danger-btn {
+  color: var(--xboard-danger);
+}
+
+@media (max-width: 1080px) {
+  .coupons-hero,
+  .table-toolbar,
+  .table-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hero-stats {
+    min-width: 0;
+    grid-template-columns: 1fr;
+  }
+}

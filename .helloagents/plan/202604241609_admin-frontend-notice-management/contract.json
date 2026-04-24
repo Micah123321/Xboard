@@ -1,0 +1,51 @@
+{
+  "updatedAt": "2026-04-24T07:55:06.613Z",
+  "version": 1,
+  "source": "R2",
+  "originCommand": "design",
+  "verifyMode": "review-first",
+  "reviewerFocus": [
+    "公告管理页面是否延续当前 Apple 风格后台的黑色 hero 与白色工作台结构",
+    "列表、编辑弹窗与排序模式是否覆盖用户要求的完整 CRUD 工作台",
+    "其余系统管理入口是否仍保持当前边界不被误改"
+  ],
+  "testerFocus": [
+    "公告列表是否真实连接 /notice/fetch",
+    "新增编辑是否真实连接 /notice/save，显隐是否连接 /notice/show，删除是否连接 /notice/drop",
+    "排序模式是否真实调用 /notice/sort 且 admin-frontend 构建通过"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "plan.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": true,
+      "reason": "公告管理属于真实后台 CRUD 页，需要确认列表、编辑弹窗与排序模式在浏览器中符合 Apple 风格后台契约",
+      "screens": [
+        "#/system/notices desktop",
+        "#/system/notices editor dialog",
+        "#/system/notices sort dialog"
+      ],
+      "states": [
+        "公告列表加载完成态",
+        "新增/编辑弹窗态",
+        "排序编辑态"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}

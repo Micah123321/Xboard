@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 5,
+  "failed": 0,
+  "pending": 0,
+  "total": 5,
+  "done": 5,
+  "percent": 100,
+  "current": "主题管理页面、动态配置抽屉与构建验证已完成，等待交付",
+  "updated_at": "2026-04-24 16:12:00"
+}

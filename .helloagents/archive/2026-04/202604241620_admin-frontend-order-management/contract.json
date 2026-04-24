@@ -1,0 +1,48 @@
+{
+  "updatedAt": "2026-04-24T16:20:00+08:00",
+  "version": 1,
+  "source": "manual",
+  "originCommand": "generic-r2",
+  "verifyMode": "build-first",
+  "reviewerFocus": [
+    "订单管理列表结构是否贴近用户提供的后台截图",
+    "详情抽屉是否覆盖查看、手动支付、取消与佣金状态维护主链路"
+  ],
+  "testerFocus": [
+    "订单列表是否真实连接 /order/fetch，并响应搜索、筛选、排序与分页",
+    "分配订单抽屉是否真实连接 /order/assign",
+    "详情抽屉是否真实连接 /order/detail /order/paid /order/cancel /order/update"
+  ],
+  "ui": {
+    "required": true,
+    "designContract": true,
+    "sourcePriority": [
+      "requirements.md",
+      ".helloagents/DESIGN.md",
+      "hello-ui"
+    ],
+    "styleAdvisor": {
+      "required": false,
+      "reason": "",
+      "focus": []
+    },
+    "visualValidation": {
+      "required": true,
+      "reason": "订单管理属于真实后台业务页，需要确认列表结构、筛选条与详情抽屉在代码实现上与目标截图和 Apple 化后台契约一致。",
+      "screens": [
+        "#/subscriptions/orders desktop"
+      ],
+      "states": [
+        "订单列表默认加载完成态",
+        "分配订单抽屉展开态",
+        "订单详情抽屉展开态"
+      ]
+    }
+  },
+  "advisor": {
+    "required": false,
+    "reason": "",
+    "focus": [],
+    "preferredSources": []
+  }
+}
