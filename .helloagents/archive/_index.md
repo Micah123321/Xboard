@@ -7,6 +7,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202604272325 | node-gfw-check | implementation | node-gfw-check,admin-frontend,mi-node | node-gfw-check#D001,#D002 | ✅完成 |
 | 202604272310 | ticket-chat-image-dnd-paste-upload | implementation | admin-frontend | ticket-chat-image-dnd-paste-upload#D001 | ✅完成 |
 | 202604250018 | admin-frontend-user-activity-status-filter | implementation | admin-frontend,backend | admin-frontend-user-activity-status-filter#D001,#D002,#D003 | ✅完成 |
 | 202604250002 | order-payment-snapshot | implementation | admin-frontend,order-payment | order-payment-snapshot#D001,#D002 | ✅完成 |
@@ -37,6 +38,7 @@
 ## 按月归档
 
 ### 2026-04
+- [202604272325_node-gfw-check](./2026-04/202604272325_node-gfw-check/) - 新增节点墙状态检测闭环，支持父节点检测、子节点继承、管理端展示筛选，以及 mi-node WS/REST 检测上报
 - [202604272310_ticket-chat-image-dnd-paste-upload](./2026-04/202604272310_ticket-chat-image-dnd-paste-upload/) - 为工单工作台回复区补齐图片拖拽上传与剪贴板粘贴上传，并将上传逻辑与样式从超大 SFC 中拆分
 - [202604250018_admin-frontend-user-activity-status-filter](./2026-04/202604250018_admin-frontend-user-activity-status-filter/) - 为用户管理高级筛选新增“活跃状态”条件，并在后端补齐 `activity_status` 复合过滤规则，支持按活跃 / 非活跃筛选用户
 - [202604250002_order-payment-snapshot](./2026-04/202604250002_order-payment-snapshot/) - 补齐订单支付成功快照保存链路，并在后台订单详情中集中展示支付渠道、支付方法、平台订单号、商户订单号、实付金额与支付 IP

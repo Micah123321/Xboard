@@ -36,7 +36,8 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property int $updated_at
  * 
  * @property-read Server|null $parent 父节点
- * @property-read \Illuminate\Database\Eloquent\Collection<int, StatServer> $stats 节点统计
+     * @property-read \Illuminate\Database\Eloquent\Collection<int, StatServer> $stats 节点统计
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, ServerGfwCheck> $gfwChecks 墙状态检测记录
  * 
  * @property-read int|null $last_check_at 最后检查时间（Unix时间戳）
  * @property-read int|null $last_push_at 最后推送时间（Unix时间戳）
@@ -460,6 +461,11 @@ class Server extends Model
     public function stats(): HasMany
     {
         return $this->hasMany(StatServer::class, 'server_id', 'id');
+    }
+
+    public function gfwChecks(): HasMany
+    {
+        return $this->hasMany(ServerGfwCheck::class, 'server_id', 'id');
     }
 
     public function machine(): \Illuminate\Database\Eloquent\Relations\BelongsTo

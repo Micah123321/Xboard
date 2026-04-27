@@ -25,6 +25,7 @@ import type {
   AdminNoticeSavePayload,
   AdminNodeItem,
   AdminNodeBatchUpdatePayload,
+  AdminNodeGfwCheckResult,
   AdminNodeSavePayload,
   AdminNodeRouteItem,
   AdminNodeRouteSavePayload,
@@ -516,6 +517,10 @@ export function batchUpdateNodes(payload: AdminNodeBatchUpdatePayload): Promise<
 
 export function batchDeleteNodes(ids: number[]): Promise<ApiResponse<boolean>> {
   return unwrapPost<boolean>('/server/manage/batchDelete', { ids })
+}
+
+export function checkNodeGfw(ids: number[]): Promise<ApiResponse<AdminNodeGfwCheckResult>> {
+  return unwrapPost<AdminNodeGfwCheckResult>('/server/manage/checkGfw', { ids })
 }
 
 export function saveNode(payload: AdminNodeSavePayload): Promise<ApiResponse<boolean>> {

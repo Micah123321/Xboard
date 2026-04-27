@@ -896,6 +896,44 @@ export interface AdminNodeItem {
   metrics?: AdminNodeMetrics | null
   groups?: AdminServerGroupItem[]
   parent?: AdminNodeParentRef | null
+  gfw_check?: AdminNodeGfwCheck | null
+}
+
+export type AdminNodeGfwStatus =
+  | 'unchecked'
+  | 'pending'
+  | 'checking'
+  | 'normal'
+  | 'blocked'
+  | 'partial'
+  | 'failed'
+  | 'skipped'
+
+export interface AdminNodeGfwCheck {
+  id?: number
+  status: AdminNodeGfwStatus | string
+  inherited?: boolean
+  source_node_id?: number | null
+  summary?: Record<string, unknown> | null
+  operator_summary?: Record<string, unknown> | null
+  error_message?: string | null
+  checked_at?: number | null
+  updated_at?: number | null
+}
+
+export interface AdminNodeGfwCheckResult {
+  started: Array<{
+    id: number
+    check_id: number
+    status: AdminNodeGfwStatus | string
+  }>
+  skipped: Array<{
+    id: number
+    status: AdminNodeGfwStatus | string
+    reason?: string
+    source_node_id?: number
+  }>
+  total: number
 }
 
 export interface AdminNodeUpdatePayload {

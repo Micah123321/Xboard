@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.6.0] - 2026-04-27
+
+### 新增
+- **[node-gfw-check]**: 新增节点墙状态检测闭环，管理端可对父节点发起检测并在节点列表展示、搜索和筛选正常 / 疑似被墙 / 部分异常 / 检测失败 / 未检测状态；子节点不单独检测并继承父节点状态，mi-node 支持 `gfw.check` WS 触发、REST 兜底领取和三网 ping 结果上报 — by yinjianm
+  - 方案: [202604272325_node-gfw-check](archive/2026-04/202604272325_node-gfw-check/)
+  - 决策: node-gfw-check#D001(使用 WS 触发 + REST 兜底), node-gfw-check#D002(子节点继承父节点墙状态)
+
 ## [0.5.19] - 2026-04-27
 
 ### 新增

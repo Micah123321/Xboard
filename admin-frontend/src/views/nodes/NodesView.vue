@@ -15,6 +15,7 @@ import {
 import {
   batchDeleteNodes,
   batchUpdateNodes,
+  checkNodeGfw,
   copyNode,
   deleteNode,
   fetchNodes,
@@ -38,17 +39,20 @@ import {
   countVisibleNodes,
   filterNodes,
   formatNodeRate,
+  getNodeGfwMeta,
+  getNodeGfwTooltip,
   getNodeAddress,
   getNodeGroupNames,
   getNodeIdLabel,
   getNodeStatusMeta,
   getNodeTypeLabel,
   type NodeRelationFilter,
+  type NodeGfwFilter,
   type NodeStatusFilter,
 } from '@/utils/nodes'
 import { sortNodesByOrder } from '@/utils/nodeEditor'
 
-type NodeAction = 'edit' | 'copy' | 'pin-top' | 'delete'
+type NodeAction = 'edit' | 'copy' | 'pin-top' | 'delete' | 'check-gfw'
 type NodeDialogMode = 'create' | 'edit'
 type NodeBatchEditPayload = Omit<AdminNodeBatchUpdatePayload, 'ids'>
 
@@ -65,6 +69,7 @@ const typeFilter = ref('all')
 const groupFilter = ref('all')
 const statusFilter = ref<NodeStatusFilter>('all')
 const relationFilter = ref<NodeRelationFilter>('all')
+const gfwFilter = ref<NodeGfwFilter>('all')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const selectedNodeIds = ref<number[]>([])
@@ -78,6 +83,7 @@ const sortDialogVisible = ref(false)
 const batchEditVisible = ref(false)
 const batchSubmitting = ref(false)
 const batchDeleting = ref(false)
+const batchGfwChecking = ref(false)
 
 const filteredNodes = computed(() => sortNodesByOrder(filterNodes(
   nodes.value,
@@ -86,6 +92,7 @@ const filteredNodes = computed(() => sortNodesByOrder(filterNodes(
   groupFilter.value,
   statusFilter.value,
   relationFilter.value,
+  gfwFilter.value,
 )))
 
 const paginatedNodes = computed(() => {
@@ -102,6 +109,7 @@ const hasActiveFilters = computed(() => (
   || groupFilter.value !== 'all'
   || statusFilter.value !== 'all'
   || relationFilter.value !== 'all'
+  || gfwFilter.value !== 'all'
 ))
 
 const summaryCards = computed(() => [
@@ -238,6 +246,7 @@ function handleReset() {
   groupFilter.value = 'all'
   statusFilter.value = 'all'
   relationFilter.value = 'all'
+  gfwFilter.value = 'all'
   currentPage.value = 1
 }
 
@@ -337,6 +346,59 @@ async function handleBatchDelete() {
   }
 }
 
+async function handleCheckGfw(ids: number[], label: string) {
+  if (ids.length === 0) {
+    ElMessage.warning('请先选择需要检测的节点')
+    return
+  }
+
+  try {
+    const response = await checkNodeGfw(ids)
+    const started = response.data?.started?.length ?? 0
+    const skipped = response.data?.skipped?.length ?? 0
+
+    if (started > 0) {
+      ElMessage.success(`${label}已发起墙状态检测，${started} 个父节点等待上报`)
+    } else if (skipped > 0) {
+      ElMessage.info('所选节点均为子节点，墙状态随父节点显示')
+    } else {
+      ElMessage.info('没有可检测的节点')
+    }
+
+    await loadNodeBoard()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '墙状态检测发起失败')
+  }
+}
+
+async function handleBatchCheckGfw() {
+  if (!hasSelectedNodes.value) {
+    ElMessage.warning('请先勾选需要检测的节点')
+    return
+  }
+
+  batchGfwChecking.value = true
+  try {
+    await handleCheckGfw([...selectedNodeIds.value], '批量')
+  } finally {
+    batchGfwChecking.value = false
+  }
+}
+
+async function handleNodeCheckGfw(node: AdminNodeItem) {
+  if (node.parent_id) {
+    ElMessage.info('子节点不单独检测，墙状态随父节点显示')
+    return
+  }
+
+  markPending(workingIds, node.id, true)
+  try {
+    await handleCheckGfw([node.id], '')
+  } finally {
+    markPending(workingIds, node.id, false)
+  }
+}
+
 async function handleToggleShow(node: AdminNodeItem, nextValue: boolean) {
   const previous = Boolean(node.show)
   if (previous === nextValue) {
@@ -396,6 +458,11 @@ async function handleAction(action: NodeAction, node: AdminNodeItem) {
     return
   }
 
+  if (action === 'check-gfw') {
+    await handleNodeCheckGfw(node)
+    return
+  }
+
   markPending(workingIds, node.id, true)
 
   try {
@@ -437,7 +504,7 @@ watch(
   },
 )
 
-watch([keyword, typeFilter, groupFilter, statusFilter, relationFilter], () => {
+watch([keyword, typeFilter, groupFilter, statusFilter, relationFilter, gfwFilter], () => {
   currentPage.value = 1
 })
 
@@ -530,11 +597,30 @@ watch(
             <ElOption label="父节点" value="parent" />
             <ElOption label="子节点" value="child" />
           </ElSelect>
+
+          <ElSelect v-model="gfwFilter" class="toolbar-select" placeholder="墙状态">
+            <ElOption label="全部墙状态" value="all" />
+            <ElOption label="正常" value="normal" />
+            <ElOption label="疑似被墙" value="blocked" />
+            <ElOption label="部分异常" value="partial" />
+            <ElOption label="检测失败" value="failed" />
+            <ElOption label="检测中" value="checking" />
+            <ElOption label="未检测" value="unchecked" />
+            <ElOption label="随父节点" value="inherited" />
+          </ElSelect>
         </div>
 
         <div class="toolbar-actions">
           <span class="scope-hint">{{ batchTargetLabel }}</span>
           <ElButton :disabled="!hasSelectedNodes || batchDeleting" @click="openBatchEditor">批量修改</ElButton>
+          <ElButton
+            :disabled="!hasSelectedNodes || batchGfwChecking"
+            :loading="batchGfwChecking"
+            @click="handleBatchCheckGfw"
+          >
+            <ElIcon><Connection /></ElIcon>
+            检测墙状态
+          </ElButton>
           <ElButton
             type="danger"
             plain
@@ -620,6 +706,17 @@ watch(
                 <ElTag round effect="plain" :type="getNodeStatusMeta(row).tagType">
                   {{ getNodeStatusMeta(row).label }}
                 </ElTag>
+                <ElTooltip :content="getNodeGfwTooltip(row)" placement="top">
+                  <ElTag
+                    round
+                    effect="plain"
+                    :type="getNodeGfwMeta(row).tagType"
+                    class="gfw-tag"
+                    :class="`gfw-tag--${getNodeGfwMeta(row).tone}`"
+                  >
+                    {{ getNodeGfwMeta(row).label }}
+                  </ElTag>
+                </ElTooltip>
                 <span>{{ getNodeTypeLabel(row.type) }}</span>
               </div>
             </div>
@@ -687,6 +784,9 @@ watch(
               <template #dropdown>
                 <ElDropdownMenu>
                   <ElDropdownItem command="edit">编辑节点</ElDropdownItem>
+                  <ElDropdownItem command="check-gfw" :disabled="Boolean(row.parent_id)">
+                    检测墙状态
+                  </ElDropdownItem>
                   <ElDropdownItem command="pin-top">置顶节点</ElDropdownItem>
                   <ElDropdownItem command="copy">复制节点</ElDropdownItem>
                   <ElDropdownItem command="delete" divided>删除节点</ElDropdownItem>
@@ -907,6 +1007,10 @@ watch(
   gap: 8px;
 }
 
+.node-cell__sub {
+  flex-wrap: wrap;
+}
+
 .node-cell__main strong,
 .stack-cell strong {
   color: var(--xboard-text-strong);
@@ -950,8 +1054,13 @@ watch(
 }
 
 .rate-tag,
-.id-tag {
+.id-tag,
+.gfw-tag {
   font-variant-numeric: tabular-nums;
+}
+
+.gfw-tag {
+  max-width: 150px;
 }
 
 .action-trigger {

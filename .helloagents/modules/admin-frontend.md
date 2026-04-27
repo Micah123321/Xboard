@@ -41,6 +41,7 @@
 - TUIC 表单默认以 V5 / V4 版本选择、`h3 / h2 / http/1.1` ALPN 选项和 `native / quic` UDP Relay Mode 对齐后端协议模板；AnyTLS Padding Scheme 默认值与 `Server` 模型完整模板保持一致
 - 节点排序采用本地草稿 + 上移 / 下移模式，保存时向 `server/manage/sort` 提交 `{ id, order }[]` 顺序 payload
 - 节点列表现支持本地分页、在线 / 离线筛选、父/子节点筛选，以及跨分页稳定勾选；批量修改 / 批量删除仅作用于已勾选节点，其中批量修改可统一更新 `host / group_ids / rate`
+- 节点管理页现支持墙状态展示、墙状态筛选与关键词搜索；父节点可通过行级或批量操作发起检测，子节点不单独检测并显示“随父节点”的继承状态
 - 节点行级菜单现已补齐“置顶节点”，会复用当前排序结果生成新的顺序 payload 并提交到 `server/manage/sort`
 - 权限组管理页使用真实后端 `server/group/fetch`、`server/group/save` 与 `server/group/drop`，支持关键字搜索、新增/编辑中央弹窗、删除确认，以及从节点数量列跳转到 `#/nodes?group={id}` 的筛选联动
 - 路由管理页使用真实后端 `server/route/fetch`、`server/route/save` 与 `server/route/drop`，支持路由列表、关键词搜索、新增/编辑中央弹窗、删除与动作值展示
@@ -95,6 +96,7 @@
 - 依赖 `src/utils/notices.ts` 负责公告表单转换、内容摘要、排序与显示字段归一化
 - 依赖 `src/utils/systemConfig.ts` 负责系统配置字段元信息、默认值、回填与保存序列化
 - 依赖 `src/utils/routes.ts` 负责路由动作映射、匹配规则序列化、节点引用摘要与搜索过滤
+- 依赖 `src/utils/nodes.ts` 负责节点在线状态、父/子节点、墙状态 meta、搜索文本和筛选逻辑
 - 依赖 `src/views/tickets/useTicketReplyImages.ts` 收敛工单回复区图片点击上传、拖拽上传、粘贴上传、文件校验和 Markdown 插入
 - 依赖 Laravel 后端 `TicketService::reply()` 提供工单“再次回复自动重开”的统一业务语义
 - 依赖 Laravel 注入的 `window.settings`

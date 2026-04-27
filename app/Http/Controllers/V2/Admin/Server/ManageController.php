@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ServerSave;
 use App\Models\Server;
 use App\Models\ServerGroup;
+use App\Services\ServerGfwCheckService;
 use App\Services\ServerService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +17,7 @@ class ManageController extends Controller
 {
     public function getNodes(Request $request)
     {
-        $servers = ServerService::getAllServers()->map(function ($item) {
+        $servers = app(ServerGfwCheckService::class)->decorateServers(ServerService::getAllServers())->map(function ($item) {
             $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])->get(['name', 'id']);
             $item['parent'] = $item->parent;
             return $item;
@@ -275,6 +276,25 @@ class ManageController extends Controller
             Log::error($e);
             return $this->fail([500, '批量更新失败']);
         }
+    }
+
+    public function checkGfw(Request $request)
+    {
+        $params = $request->validate([
+            'ids' => 'required|array',
+            'ids.*' => 'integer',
+        ]);
+
+        if (empty($params['ids'])) {
+            return $this->fail([400, '请选择需要检测的节点']);
+        }
+
+        $result = app(ServerGfwCheckService::class)->startChecks(
+            $params['ids'],
+            $request->user()?->id
+        );
+
+        return $this->success($result);
     }
 
     /**

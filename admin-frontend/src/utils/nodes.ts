@@ -1,6 +1,7 @@
 import type { AdminNodeItem } from '@/types/api'
 
 export type NodeRelationFilter = 'all' | 'parent' | 'child'
+export type NodeGfwFilter = 'all' | 'normal' | 'blocked' | 'partial' | 'failed' | 'unchecked' | 'checking' | 'inherited'
 export type NodeStatusFilter = 'all' | 'online' | 'offline'
 
 export interface NodeStatusMeta {
@@ -10,6 +11,14 @@ export interface NodeStatusMeta {
 }
 
 type NodeStatusClass = NodeStatusMeta['dotClass']
+
+export interface NodeGfwMeta {
+  label: string
+  searchText: string
+  tagType: 'success' | 'warning' | 'danger' | 'info' | 'primary'
+  tone: 'normal' | 'blocked' | 'partial' | 'failed' | 'unchecked' | 'checking'
+  inherited: boolean
+}
 
 const NODE_TYPE_LABELS: Record<string, string> = {
   shadowsocks: 'Shadowsocks',
@@ -66,6 +75,83 @@ export function getNodeStatusMeta(node: AdminNodeItem): NodeStatusMeta {
   }
 }
 
+export function getNodeGfwMeta(node: AdminNodeItem): NodeGfwMeta {
+  const status = normalizeText(node.gfw_check?.status || 'unchecked')
+  const inherited = Boolean(node.gfw_check?.inherited)
+  const inheritedPrefix = inherited ? '随父节点 · ' : ''
+
+  if (status === 'normal') {
+    return {
+      label: `${inheritedPrefix}正常`,
+      searchText: `${inherited ? '随父节点 继承 ' : ''}正常 未被墙 墙正常 gfw normal`,
+      tagType: 'success',
+      tone: 'normal',
+      inherited,
+    }
+  }
+
+  if (status === 'blocked') {
+    return {
+      label: `${inheritedPrefix}疑似被墙`,
+      searchText: `${inherited ? '随父节点 继承 ' : ''}被墙 疑似被墙 gfw blocked`,
+      tagType: 'danger',
+      tone: 'blocked',
+      inherited,
+    }
+  }
+
+  if (status === 'partial') {
+    return {
+      label: `${inheritedPrefix}部分异常`,
+      searchText: `${inherited ? '随父节点 继承 ' : ''}异常 部分异常 gfw partial`,
+      tagType: 'warning',
+      tone: 'partial',
+      inherited,
+    }
+  }
+
+  if (status === 'failed') {
+    return {
+      label: `${inheritedPrefix}检测失败`,
+      searchText: `${inherited ? '随父节点 继承 ' : ''}失败 检测失败 异常 gfw failed`,
+      tagType: 'danger',
+      tone: 'failed',
+      inherited,
+    }
+  }
+
+  if (status === 'pending' || status === 'checking') {
+    return {
+      label: `${inheritedPrefix}检测中`,
+      searchText: `${inherited ? '随父节点 继承 ' : ''}检测中 等待检测 gfw checking pending`,
+      tagType: 'primary',
+      tone: 'checking',
+      inherited,
+    }
+  }
+
+  return {
+    label: inherited ? '随父节点 · 未检测' : '未检测',
+    searchText: `${inherited ? '随父节点 继承 ' : ''}未检测 unchecked`,
+    tagType: 'info',
+    tone: 'unchecked',
+    inherited,
+  }
+}
+
+export function getNodeGfwTooltip(node: AdminNodeItem): string {
+  const meta = getNodeGfwMeta(node)
+  const source = node.gfw_check?.source_node_id
+  const checkedAt = node.gfw_check?.checked_at
+    ? new Date(Number(node.gfw_check.checked_at) * 1000).toLocaleString()
+    : ''
+  const sourceText = meta.inherited && source ? `，来源父节点 #${source}` : ''
+  const timeText = checkedAt ? `，检测时间 ${checkedAt}` : ''
+  const errorText = node.gfw_check?.error_message ? `，错误：${node.gfw_check.error_message}` : ''
+
+  return `${meta.label}${sourceText}${timeText}${errorText}`
+}
+
 function isNodeOnlineStatus(status: NodeStatusClass): boolean {
   return status === 'online' || status === 'pending'
 }
@@ -113,6 +199,7 @@ function buildNodeSearchText(node: AdminNodeItem): string {
     node.port,
     node.server_port,
     getNodeTypeLabel(node.type),
+    getNodeGfwMeta(node).searchText,
     ...getNodeGroupNames(node),
   ]
     .map((item) => String(item ?? '').trim())
@@ -128,12 +215,14 @@ export function filterNodes(
   groupFilter: string,
   statusFilter: NodeStatusFilter = 'all',
   relationFilter: NodeRelationFilter = 'all',
+  gfwFilter: NodeGfwFilter = 'all',
 ): AdminNodeItem[] {
   const normalizedKeyword = normalizeText(keyword)
   const normalizedType = normalizeText(typeFilter)
   const normalizedGroup = normalizeText(groupFilter)
   const normalizedStatus = normalizeText(statusFilter)
   const normalizedRelation = normalizeText(relationFilter)
+  const normalizedGfw = normalizeText(gfwFilter)
 
   return nodes.filter((node) => {
     if (normalizedKeyword && !buildNodeSearchText(node).includes(normalizedKeyword)) {
@@ -165,6 +254,15 @@ export function filterNodes(
     }
 
     if (normalizedRelation === 'child' && !node.parent_id) {
+      return false
+    }
+
+    const gfwMeta = getNodeGfwMeta(node)
+    if (normalizedGfw === 'inherited' && !gfwMeta.inherited) {
+      return false
+    }
+
+    if (normalizedGfw !== '' && normalizedGfw !== 'all' && normalizedGfw !== 'inherited' && gfwMeta.tone !== normalizedGfw) {
       return false
     }
 

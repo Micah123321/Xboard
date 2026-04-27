@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V2\Server;
 
 use App\Http\Controllers\Controller;
+use App\Services\ServerGfwCheckService;
 use App\Services\ServerService;
 use App\WebSocket\NodeWorker;
 use Illuminate\Http\Request;
@@ -74,5 +75,34 @@ class ServerController extends Controller
         }
 
         return response()->json(['data' => true]);
+    }
+
+    public function gfwTask(Request $request, ServerGfwCheckService $service): JsonResponse
+    {
+        $node = $request->attributes->get('node_info');
+        if (!$node) {
+            return response()->json(['data' => null]);
+        }
+
+        return response()->json(['data' => $service->getPendingTaskForNode($node)]);
+    }
+
+    public function gfwReport(Request $request, ServerGfwCheckService $service): JsonResponse
+    {
+        $node = $request->attributes->get('node_info');
+        if (!$node) {
+            return response()->json(['data' => false], 404);
+        }
+
+        $params = $request->validate([
+            'check_id' => 'required|integer',
+            'status' => 'nullable|string',
+            'summary' => 'nullable|array',
+            'operator_summary' => 'nullable|array',
+            'raw_result' => 'nullable|array',
+            'error_message' => 'nullable|string',
+        ]);
+
+        return response()->json(['data' => $service->reportResult($node, $params)]);
     }
 }
