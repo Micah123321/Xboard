@@ -3,7 +3,7 @@
 ```yaml
 kb_version: 2
 project: Xboard-new
-updated_at: 2026-04-25
+updated_at: 2026-04-27
 active_package: 无
 ```
 
@@ -11,7 +11,7 @@ active_package: 无
 
 - 类型: PHP Laravel 主仓 + `admin-frontend` Vue3 管理端前端
 - 当前重点模块: `admin-frontend`、`order-payment`、`subscription-protocols`
-- 最新归档: `202604250002_order-payment-snapshot`
+- 最新归档: `202604272310_ticket-chat-image-dnd-paste-upload`
 
 ## 活跃模块
 

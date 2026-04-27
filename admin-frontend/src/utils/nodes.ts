@@ -9,6 +9,8 @@ export interface NodeStatusMeta {
   tagType: 'success' | 'warning' | 'danger' | 'info'
 }
 
+type NodeStatusClass = NodeStatusMeta['dotClass']
+
 const NODE_TYPE_LABELS: Record<string, string> = {
   shadowsocks: 'Shadowsocks',
   trojan: 'Trojan',
@@ -62,6 +64,10 @@ export function getNodeStatusMeta(node: AdminNodeItem): NodeStatusMeta {
     dotClass: 'offline',
     tagType: 'danger',
   }
+}
+
+function isNodeOnlineStatus(status: NodeStatusClass): boolean {
+  return status === 'online' || status === 'pending'
 }
 
 export function getNodeIdLabel(node: AdminNodeItem): string {
@@ -146,7 +152,7 @@ export function filterNodes(
     }
 
     const nodeStatus = getNodeStatusMeta(node).dotClass
-    if (normalizedStatus === 'online' && nodeStatus !== 'online') {
+    if (normalizedStatus === 'online' && !isNodeOnlineStatus(nodeStatus)) {
       return false
     }
 
@@ -167,7 +173,7 @@ export function filterNodes(
 }
 
 export function countOnlineNodes(nodes: AdminNodeItem[]): number {
-  return nodes.filter((node) => getNodeStatusMeta(node).dotClass === 'online').length
+  return nodes.filter((node) => isNodeOnlineStatus(getNodeStatusMeta(node).dotClass)).length
 }
 
 export function countVisibleNodes(nodes: AdminNodeItem[]): number {

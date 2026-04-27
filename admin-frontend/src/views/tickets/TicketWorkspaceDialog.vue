@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { UploadProps, UploadRequestOptions } from 'element-plus'
 import { ChatLineRound, DataAnalysis, Picture, Search } from '@element-plus/icons-vue'
 import { closeTicket, fetchTickets, getTicketById, replyTicket } from '@/api/admin'
 import type { AdminTicketDetail, AdminTicketListItem } from '@/types/api'
@@ -12,8 +11,8 @@ import {
   getTicketStatusMeta,
   renderTicketMarkdown,
 } from '@/utils/tickets'
-import { uploadImage } from '@/utils/upload'
 import TrafficLogDialog from './TrafficLogDialog.vue'
+import { useTicketReplyImages } from './useTicketReplyImages'
 
 const props = defineProps<{
   visible: boolean
@@ -35,8 +34,20 @@ const detail = ref<AdminTicketDetail | null>(null)
 const keyword = ref('')
 const replyMessage = ref('')
 const trafficVisible = ref(false)
-const uploadingImage = ref(false)
-type UploadError = Parameters<UploadRequestOptions['onError']>[0]
+
+const {
+  uploadingImage,
+  isReplyDragActive,
+  replyImageUploadLabel,
+  beforeImageUpload,
+  handleImageUploadRequest,
+  handleReplyDragEnter,
+  handleReplyDragOver,
+  handleReplyDragLeave,
+  handleReplyDrop,
+  handleReplyPaste,
+  resetReplyDragState,
+} = useTicketReplyImages(replyMessage)
 
 const statusMeta = computed(() => detail.value ? getTicketStatusMeta(detail.value) : null)
 const levelMeta = computed(() => detail.value ? getTicketLevelMeta(detail.value.level) : null)
@@ -108,43 +119,6 @@ async function handleReply() {
   }
 }
 
-const beforeImageUpload: UploadProps['beforeUpload'] = (rawFile) => {
-  if (!rawFile.type.startsWith('image/')) {
-    ElMessage.error('仅支持上传图片文件')
-    return false
-  }
-
-  if (rawFile.size / 1024 / 1024 > 10) {
-    ElMessage.error('图片大小不能超过 10MB')
-    return false
-  }
-
-  return true
-}
-
-async function handleImageUploadRequest(options: UploadRequestOptions) {
-  uploadingImage.value = true
-  try {
-    const url = await uploadImage(options.file)
-    const markdown = `![image](${url})`
-    replyMessage.value = replyMessage.value
-      ? `${replyMessage.value}\n${markdown}\n`
-      : `${markdown}\n`
-    options.onSuccess({ url })
-    ElMessage.success('图片上传成功')
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '图片上传失败'
-    options.onError(Object.assign(new Error(message), {
-      status: 500,
-      method: 'POST',
-      url: '/upload/rest/upload',
-    }) as UploadError)
-    ElMessage.error(message)
-  } finally {
-    uploadingImage.value = false
-  }
-}
-
 async function handleCloseTicket() {
   if (!detail.value || detail.value.status === 1) {
     return
@@ -165,6 +139,7 @@ async function handleCloseTicket() {
 }
 
 function closeDialog() {
+  resetReplyDragState()
   emit('update:visible', false)
 }
 
@@ -172,6 +147,7 @@ watch(
   () => props.visible,
   async (visible) => {
     if (!visible) {
+      resetReplyDragState()
       return
     }
 
@@ -312,7 +288,17 @@ watch(
             </article>
           </div>
 
-          <footer class="reply-box">
+          <footer
+            class="reply-box"
+            :class="{
+              'is-drag-active': isReplyDragActive,
+              'is-uploading': uploadingImage,
+            }"
+            @dragenter="handleReplyDragEnter"
+            @dragover="handleReplyDragOver"
+            @dragleave="handleReplyDragLeave"
+            @drop="handleReplyDrop"
+          >
             <p v-if="willReopenClosedTicket" class="reply-box__hint">
               当前工单已关闭，发送新回复后会自动重新开启。
             </p>
@@ -322,13 +308,19 @@ watch(
               :rows="3"
               resize="none"
               placeholder="输入回复内容..."
+              @paste="handleReplyPaste"
             />
+            <div class="reply-box__drop-hint">
+              <ElIcon><Picture /></ElIcon>
+              <span>{{ replyImageUploadLabel }}</span>
+            </div>
             <div class="reply-box__actions">
               <ElUpload
                 :show-file-list="false"
                 accept="image/*"
                 :before-upload="beforeImageUpload"
                 :http-request="handleImageUploadRequest"
+                :disabled="uploadingImage"
               >
                 <ElButton text class="ghost-action" :loading="uploadingImage">
                   <ElIcon><Picture /></ElIcon>
@@ -339,6 +331,7 @@ watch(
                 type="primary"
                 :icon="ChatLineRound"
                 :loading="replying"
+                :disabled="uploadingImage"
                 @click="handleReply"
               >
                 {{ willReopenClosedTicket ? '发送并重开' : '发送' }}
@@ -361,242 +354,4 @@ watch(
   </ElDialog>
 </template>
 
-<style scoped>
-.workspace-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.workspace-title p {
-  font-size: 11px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--xboard-text-muted);
-}
-
-.workspace-title h2 {
-  font-size: 34px;
-  line-height: 1.08;
-  color: var(--xboard-text-strong);
-}
-
-.workspace-header__actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.ghost-action {
-  color: var(--xboard-link);
-}
-
-.danger-action {
-  color: var(--xboard-danger);
-}
-
-.workspace-shell {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  min-height: 70vh;
-  border: 1px solid var(--xboard-border);
-  border-radius: 24px;
-  overflow: hidden;
-}
-
-.workspace-sidebar {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  border-right: 1px solid var(--xboard-border);
-  background: #fbfbfd;
-}
-
-.sidebar-header {
-  display: grid;
-  gap: 12px;
-  padding: 20px;
-  border-bottom: 1px solid var(--xboard-border);
-}
-
-.sidebar-list {
-  display: grid;
-  align-content: start;
-  gap: 8px;
-  padding: 16px;
-  overflow-y: auto;
-}
-
-.sidebar-ticket {
-  border: 1px solid transparent;
-  background: #ffffff;
-  border-radius: 18px;
-  padding: 16px;
-  text-align: left;
-  display: grid;
-  gap: 8px;
-  cursor: pointer;
-  transition: 0.2s ease;
-}
-
-.sidebar-ticket.active {
-  border-color: rgba(0, 113, 227, 0.24);
-  background: rgba(0, 113, 227, 0.08);
-}
-
-.sidebar-ticket__row,
-.sidebar-ticket__meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.sidebar-ticket span,
-.sidebar-ticket small {
-  color: var(--xboard-text-muted);
-}
-
-.workspace-main {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  background: #ffffff;
-  min-height: 0;
-}
-
-.conversation-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--xboard-border);
-}
-
-.conversation-header h3 {
-  font-size: 32px;
-  line-height: 1.08;
-  color: var(--xboard-text-strong);
-}
-
-.conversation-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin-top: 8px;
-  color: var(--xboard-text-muted);
-}
-
-.conversation-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.message-thread {
-  display: grid;
-  align-content: start;
-  gap: 16px;
-  padding: 24px;
-  overflow-y: auto;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfbfd 100%);
-}
-
-.message-card {
-  display: grid;
-  gap: 10px;
-  max-width: min(720px, 100%);
-  padding: 18px 20px;
-  border-radius: 20px;
-  box-shadow: var(--xboard-shadow);
-}
-
-.from-user {
-  background: #eef3fb;
-}
-
-.from-admin {
-  background: #1d1d1f;
-  color: #ffffff;
-  margin-left: auto;
-}
-
-.message-card__meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-}
-
-.from-user .message-card__meta {
-  color: var(--xboard-text-muted);
-}
-
-.from-admin .message-card__meta {
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.markdown-body :deep(p),
-.markdown-body :deep(h1),
-.markdown-body :deep(h2),
-.markdown-body :deep(h3),
-.markdown-body :deep(ul),
-.markdown-body :deep(ol) {
-  margin: 0 0 10px;
-}
-
-.markdown-body :deep(img) {
-  max-width: min(420px, 100%);
-  border-radius: 14px;
-}
-
-.markdown-body :deep(a) {
-  color: inherit;
-  text-decoration: underline;
-}
-
-.reply-box {
-  display: grid;
-  gap: 12px;
-  padding: 20px 24px;
-  border-top: 1px solid var(--xboard-border);
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.reply-box__hint {
-  color: var(--xboard-text-muted);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.reply-box__actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 12px;
-}
-
-.workspace-empty {
-  display: grid;
-  place-items: center;
-  color: var(--xboard-text-muted);
-}
-
-@media (max-width: 1023px) {
-  .workspace-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .workspace-sidebar {
-    border-right: 0;
-    border-bottom: 1px solid var(--xboard-border);
-  }
-
-  .workspace-header,
-  .conversation-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-</style>
+<style scoped lang="scss" src="./TicketWorkspaceDialog.scss"></style>

@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## [0.5.19] - 2026-04-27
+
+### 新增
+- **[admin-frontend]**: 为工单工作台回复区补齐图片拖拽上传与剪贴板粘贴上传，统一复用现有图片上传接口和 Markdown 图片插入逻辑，并将超大工单工作台组件拆分出上传 composable 与独立 SCSS 样式文件 — by yinjianm
+  - 方案: [202604272310_ticket-chat-image-dnd-paste-upload](archive/2026-04/202604272310_ticket-chat-image-dnd-paste-upload/)
+  - 决策: ticket-chat-image-dnd-paste-upload#D001(统一图片入口到现有 Markdown 上传链路)
+
+## [0.5.18] - 2026-04-27
+
+### 快速修改
+- **[admin-frontend]**: 调整节点管理状态筛选口径，“在线节点”现在同时包含显式在线与待同步节点，顶部在线节点统计同步采用相同口径；“离线节点”仍只匹配显式离线节点 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/utils/nodes.ts:12-176
+
 ## [0.5.17] - 2026-04-25
 
 ### 修复
