@@ -3,7 +3,7 @@
 ```yaml
 kb_version: 2
 project: Xboard-new
-updated_at: 2026-04-27
+updated_at: 2026-04-28
 active_package: 无
 ```
 
@@ -11,7 +11,7 @@ active_package: 无
 
 - 类型: PHP Laravel 主仓 + `admin-frontend` Vue3 管理端前端
 - 当前重点模块: `admin-frontend`、`node-gfw-check`、`order-payment`、`subscription-protocols`
-- 最新归档: `202604272325_node-gfw-check`
+- 最新归档: `202604280024_node-gfw-auto-check-and-online`
 
 ## 活跃模块
 

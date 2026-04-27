@@ -881,6 +881,9 @@ export interface AdminNodeItem {
   tags?: string[] | null
   show: boolean
   auto_online?: boolean
+  gfw_check_enabled?: boolean
+  gfw_auto_hidden?: boolean
+  gfw_auto_action_at?: number | null
   enabled?: boolean
   parent_id?: number | null
   rate?: number | null
@@ -941,6 +944,7 @@ export interface AdminNodeUpdatePayload {
   id: number
   show?: boolean | number
   auto_online?: boolean
+  gfw_check_enabled?: boolean
   enabled?: boolean
   machine_id?: number | null
 }
@@ -951,6 +955,7 @@ export interface AdminNodeBatchUpdatePayload {
   rate?: number
   group_ids?: string[]
   auto_online?: boolean
+  gfw_check_enabled?: boolean
 }
 
 export interface AdminNodeSavePayload {
@@ -972,6 +977,7 @@ export interface AdminNodeSavePayload {
   protocol_settings?: Record<string, unknown>
   show?: boolean | number
   auto_online?: boolean
+  gfw_check_enabled?: boolean
 }
 
 declare global {

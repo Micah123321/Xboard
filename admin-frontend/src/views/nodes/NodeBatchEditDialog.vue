@@ -8,6 +8,7 @@ interface NodeBatchEditPayload {
   rate?: number
   group_ids?: string[]
   auto_online?: boolean
+  gfw_check_enabled?: boolean
 }
 
 const props = defineProps<{
@@ -31,6 +32,8 @@ const form = reactive({
   groupIds: [] as number[],
   updateAutoOnline: false,
   autoOnline: true,
+  updateGfwCheck: false,
+  gfwCheckEnabled: true,
 })
 
 const hasEnabledField = computed(() => (
@@ -38,6 +41,7 @@ const hasEnabledField = computed(() => (
   || form.updateRate
   || form.updateGroups
   || form.updateAutoOnline
+  || form.updateGfwCheck
 ))
 
 function resetForm() {
@@ -49,6 +53,8 @@ function resetForm() {
   form.groupIds = []
   form.updateAutoOnline = false
   form.autoOnline = true
+  form.updateGfwCheck = false
+  form.gfwCheckEnabled = true
 }
 
 function closeDialog() {
@@ -76,6 +82,7 @@ function handleSubmit() {
     rate: form.updateRate ? Number(form.rate) : undefined,
     group_ids: form.updateGroups ? [...new Set(form.groupIds.map((item) => String(item)))] : undefined,
     auto_online: form.updateAutoOnline ? form.autoOnline : undefined,
+    gfw_check_enabled: form.updateGfwCheck ? form.gfwCheckEnabled : undefined,
   })
 }
 
@@ -186,6 +193,24 @@ watch(
             <span>关闭时节点显隐继续由管理员手动控制。</span>
           </div>
           <ElSwitch v-model="form.autoOnline" :disabled="!form.updateAutoOnline" />
+        </label>
+      </section>
+
+      <section class="batch-section">
+        <label class="batch-switch-card">
+          <div>
+            <strong>批量设置墙检测托管</strong>
+            <span>启用后父节点会自动检测；子节点不独立检测，只跟随父节点自动隐藏或恢复。</span>
+          </div>
+          <ElSwitch v-model="form.updateGfwCheck" />
+        </label>
+
+        <label class="batch-switch-card batch-switch-card--nested">
+          <div>
+            <strong>{{ form.gfwCheckEnabled ? '开启墙检测托管' : '关闭墙检测托管' }}</strong>
+            <span>关闭后不会参与自动墙检测和墙状态自动显隐。</span>
+          </div>
+          <ElSwitch v-model="form.gfwCheckEnabled" :disabled="!form.updateGfwCheck" />
         </label>
       </section>
     </div>

@@ -59,6 +59,10 @@ class ManageController extends Controller
                 return $this->fail([400202, '服务器不存在']);
             }
             try {
+                if (array_key_exists('show', $params)) {
+                    $params['gfw_auto_hidden'] = false;
+                    $params['gfw_auto_action_at'] = null;
+                }
                 $server->update($params);
                 return $this->success(true);
             } catch (\Exception $e) {
@@ -82,6 +86,7 @@ class ManageController extends Controller
             'id' => 'required|integer',
             'show' => 'nullable|integer',
             'auto_online' => 'nullable|boolean',
+            'gfw_check_enabled' => 'nullable|boolean',
             'machine_id' => 'nullable|integer',
             'enabled' => 'nullable|boolean',
         ]);
@@ -93,9 +98,14 @@ class ManageController extends Controller
 
         if (array_key_exists('show', $params)) {
             $server->show = (int) $params['show'];
+            $server->gfw_auto_hidden = false;
+            $server->gfw_auto_action_at = null;
         }
         if (array_key_exists('auto_online', $params)) {
             $server->auto_online = (bool) $params['auto_online'];
+        }
+        if (array_key_exists('gfw_check_enabled', $params)) {
+            $server->gfw_check_enabled = (bool) $params['gfw_check_enabled'];
         }
         if (array_key_exists('machine_id', $params)) {
             $server->machine_id = $params['machine_id'] ?: null;
@@ -231,6 +241,7 @@ class ManageController extends Controller
             'ids.*' => 'integer',
             'show' => 'nullable|integer|in:0,1',
             'auto_online' => 'nullable|boolean',
+            'gfw_check_enabled' => 'nullable|boolean',
             'enabled' => 'nullable|boolean',
             'machine_id' => 'nullable|integer',
             'host' => 'sometimes|required|string',
@@ -247,9 +258,14 @@ class ManageController extends Controller
         $update = [];
         if (array_key_exists('show', $params) && $params['show'] !== null) {
             $update['show'] = (int) $params['show'];
+            $update['gfw_auto_hidden'] = false;
+            $update['gfw_auto_action_at'] = null;
         }
         if (array_key_exists('auto_online', $params) && $params['auto_online'] !== null) {
             $update['auto_online'] = (bool) $params['auto_online'];
+        }
+        if (array_key_exists('gfw_check_enabled', $params) && $params['gfw_check_enabled'] !== null) {
+            $update['gfw_check_enabled'] = (bool) $params['gfw_check_enabled'];
         }
         if (array_key_exists('enabled', $params) && $params['enabled'] !== null) {
             $update['enabled'] = (bool) $params['enabled'];

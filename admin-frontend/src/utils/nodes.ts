@@ -145,11 +145,15 @@ export function getNodeGfwTooltip(node: AdminNodeItem): string {
   const checkedAt = node.gfw_check?.checked_at
     ? new Date(Number(node.gfw_check.checked_at) * 1000).toLocaleString()
     : ''
+  const actionAt = node.gfw_auto_action_at
+    ? new Date(Number(node.gfw_auto_action_at) * 1000).toLocaleString()
+    : ''
   const sourceText = meta.inherited && source ? `，来源父节点 #${source}` : ''
   const timeText = checkedAt ? `，检测时间 ${checkedAt}` : ''
+  const autoText = node.gfw_auto_hidden ? `，已自动隐藏${actionAt ? `（${actionAt}）` : ''}` : ''
   const errorText = node.gfw_check?.error_message ? `，错误：${node.gfw_check.error_message}` : ''
 
-  return `${meta.label}${sourceText}${timeText}${errorText}`
+  return `${meta.label}${sourceText}${timeText}${autoText}${errorText}`
 }
 
 function isNodeOnlineStatus(status: NodeStatusClass): boolean {
@@ -200,6 +204,8 @@ function buildNodeSearchText(node: AdminNodeItem): string {
     node.server_port,
     getNodeTypeLabel(node.type),
     node.auto_online ? '自动上线 自动托管 auto online' : '',
+    node.gfw_check_enabled === false ? '关闭墙检测 关闭自动墙检 gfw disabled' : '自动墙检 墙检测托管 gfw enabled',
+    node.gfw_auto_hidden ? '自动隐藏 墙检测隐藏 疑似被墙已隐藏 gfw auto hidden' : '',
     getNodeGfwMeta(node).searchText,
     ...getNodeGroupNames(node),
   ]
@@ -281,4 +287,8 @@ export function countVisibleNodes(nodes: AdminNodeItem[]): number {
 
 export function countAutoOnlineNodes(nodes: AdminNodeItem[]): number {
   return nodes.filter((node) => Boolean(node.auto_online)).length
+}
+
+export function countAutoGfwCheckNodes(nodes: AdminNodeItem[]): number {
+  return nodes.filter((node) => node.gfw_check_enabled !== false).length
 }

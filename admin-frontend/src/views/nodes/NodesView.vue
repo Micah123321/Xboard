@@ -35,6 +35,7 @@ import NodeEditorDialog from './NodeEditorDialog.vue'
 import NodeSortDialog from './NodeSortDialog.vue'
 import {
   buildNodeTypeOptions,
+  countAutoGfwCheckNodes,
   countAutoOnlineNodes,
   countOnlineNodes,
   countVisibleNodes,
@@ -77,6 +78,7 @@ const selectedNodeIds = ref<number[]>([])
 const syncingSelection = ref(false)
 const switchingIds = ref<number[]>([])
 const autoSwitchingIds = ref<number[]>([])
+const gfwSwitchingIds = ref<number[]>([])
 const workingIds = ref<number[]>([])
 const editorVisible = ref(false)
 const editorMode = ref<NodeDialogMode>('create')
@@ -119,6 +121,7 @@ const summaryCards = computed(() => [
   { label: '在线节点', value: String(countOnlineNodes(nodes.value)) },
   { label: '显示中', value: String(countVisibleNodes(nodes.value)) },
   { label: '自动上线', value: String(countAutoOnlineNodes(nodes.value)) },
+  { label: '自动墙检', value: String(countAutoGfwCheckNodes(nodes.value)) },
   { label: '已勾选', value: String(selectedNodes.value.length) },
 ])
 
@@ -164,6 +167,10 @@ function isSwitching(id: number): boolean {
 
 function isAutoSwitching(id: number): boolean {
   return autoSwitchingIds.value.includes(id)
+}
+
+function isGfwSwitching(id: number): boolean {
+  return gfwSwitchingIds.value.includes(id)
 }
 
 function isWorking(id: number): boolean {
@@ -293,6 +300,7 @@ async function handleBatchSubmit(payload: NodeBatchEditPayload) {
     rate: payload.rate,
     group_ids: payload.group_ids,
     auto_online: payload.auto_online,
+    gfw_check_enabled: payload.gfw_check_enabled,
   }
 
   try {
@@ -450,6 +458,29 @@ async function handleToggleAutoOnline(node: AdminNodeItem, nextValue: boolean) {
     ElMessage.error(error instanceof Error ? error.message : '自动上线状态更新失败')
   } finally {
     markPending(autoSwitchingIds, node.id, false)
+  }
+}
+
+async function handleToggleGfwCheck(node: AdminNodeItem, nextValue: boolean) {
+  const previous = node.gfw_check_enabled !== false
+  if (previous === nextValue) {
+    return
+  }
+
+  node.gfw_check_enabled = nextValue
+  markPending(gfwSwitchingIds, node.id, true)
+
+  try {
+    await updateNode({
+      id: node.id,
+      gfw_check_enabled: nextValue,
+    })
+    ElMessage.success(nextValue ? '已开启墙检测托管' : '已关闭墙检测托管')
+  } catch (error) {
+    node.gfw_check_enabled = previous
+    ElMessage.error(error instanceof Error ? error.message : '墙检测托管状态更新失败')
+  } finally {
+    markPending(gfwSwitchingIds, node.id, false)
   }
 }
 
@@ -653,6 +684,13 @@ watch(
             检测墙状态
           </ElButton>
           <ElButton
+            :loading="loading"
+            @click="loadNodeBoard"
+          >
+            <ElIcon><RefreshRight /></ElIcon>
+            刷新数据
+          </ElButton>
+          <ElButton
             type="danger"
             plain
             :disabled="!hasSelectedNodes"
@@ -720,10 +758,27 @@ watch(
               <ElSwitch
                 :model-value="Boolean(row.show)"
                 :loading="isSwitching(row.id)"
-                :disabled="Boolean(row.auto_online)"
+                :disabled="Boolean(row.auto_online) || (Boolean(row.gfw_auto_hidden) && row.gfw_check_enabled !== false)"
                 @change="(value) => handleToggleShow(row, Boolean(value))"
               />
             </div>
+          </template>
+        </ElTableColumn>
+
+        <ElTableColumn label="墙检测" width="118">
+          <template #default="{ row }">
+            <ElTooltip
+              :content="row.parent_id ? '子节点不单独检测；此开关只控制是否随父节点自动隐藏或恢复。' : '关闭后不参与自动墙检测和墙状态自动显隐。'"
+              placement="top"
+            >
+              <div class="switch-shell switch-shell--gfw">
+                <ElSwitch
+                  :model-value="row.gfw_check_enabled !== false"
+                  :loading="isGfwSwitching(row.id)"
+                  @change="(value) => handleToggleGfwCheck(row, Boolean(value))"
+                />
+              </div>
+            </ElTooltip>
           </template>
         </ElTableColumn>
 
@@ -758,6 +813,24 @@ watch(
                   class="auto-online-tag"
                 >
                   自动上线
+                </ElTag>
+                <ElTag
+                  v-if="row.gfw_check_enabled !== false"
+                  round
+                  effect="plain"
+                  type="primary"
+                  class="auto-online-tag"
+                >
+                  墙检测
+                </ElTag>
+                <ElTag
+                  v-if="row.gfw_auto_hidden"
+                  round
+                  effect="plain"
+                  type="danger"
+                  class="auto-online-tag"
+                >
+                  自动隐藏
                 </ElTag>
                 <ElTooltip :content="getNodeGfwTooltip(row)" placement="top">
                   <ElTag
@@ -1046,6 +1119,10 @@ watch(
 
 .switch-shell--auto :deep(.el-switch) {
   --el-switch-on-color: #0071e3;
+}
+
+.switch-shell--gfw :deep(.el-switch) {
+  --el-switch-on-color: #34c759;
 }
 
 .node-cell,

@@ -25,6 +25,9 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property array|null $tags 标签
  * @property boolean $show 是否显示
  * @property boolean $auto_online 是否根据在线状态自动同步显示
+ * @property boolean $gfw_check_enabled 是否自动检测墙状态并同步显示
+ * @property boolean $gfw_auto_hidden 是否由墙状态自动隐藏
+ * @property int|null $gfw_auto_action_at 最近墙状态自动显隐时间
  * @property string|null $allow_insecure 是否允许不安全
  * @property string|null $network 网络类型
  * @property int|null $parent_id 父节点ID
@@ -127,6 +130,9 @@ class Server extends Model
         'last_push_at' => 'integer',
         'show' => 'boolean',
         'auto_online' => 'boolean',
+        'gfw_check_enabled' => 'boolean',
+        'gfw_auto_hidden' => 'boolean',
+        'gfw_auto_action_at' => 'integer',
         'enabled' => 'boolean',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',

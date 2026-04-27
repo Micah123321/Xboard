@@ -117,6 +117,7 @@ class ServerSave extends FormRequest
             'code' => 'nullable|string',
             'show' => '',
             'auto_online' => 'nullable|boolean',
+            'gfw_check_enabled' => 'nullable|boolean',
             'name' => 'required|string',
             'group_ids' => 'nullable|array',
             'route_ids' => 'nullable|array',

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.6.3] - 2026-04-28
+
+### 新增
+- **[node-gfw-check]**: 为节点墙状态检测打通自动检测与自动显隐；`sync:server-gfw-checks` 会自动为开启托管的父节点创建检测任务，`blocked` 时自动隐藏节点并阻止自动上线重新发布，`normal` 时只恢复由墙检测自动隐藏的节点；管理端节点页新增刷新数据、墙检测托管开关和批量设置入口 — by yinjianm
+  - 方案: [202604280024_node-gfw-auto-check-and-online](archive/2026-04/202604280024_node-gfw-auto-check-and-online/)
+  - 决策: node-gfw-auto-check-and-online#D001(使用自动隐藏标记隔离管理员手动显隐), node-gfw-auto-check-and-online#D002(自动上线服务必须把 blocked 作为显示否决)
+
 ## [0.6.2] - 2026-04-27
 
 ### 新增

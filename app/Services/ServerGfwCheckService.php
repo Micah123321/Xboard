@@ -13,7 +13,7 @@ class ServerGfwCheckService
         ServerGfwCheck::STATUS_CHECKING,
     ];
 
-    public function startChecks(array $ids, ?int $adminUserId = null): array
+    public function startChecks(array $ids, ?int $adminUserId = null, bool $respectAutoSwitch = false): array
     {
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
         $servers = Server::whereIn('id', $ids)->get()->keyBy('id');
@@ -37,13 +37,16 @@ class ServerGfwCheckService
                 continue;
             }
 
-            $check = ServerGfwCheck::create([
-                'server_id' => $server->id,
-                'status' => ServerGfwCheck::STATUS_PENDING,
-                'triggered_by' => $adminUserId,
-            ]);
+            if ($respectAutoSwitch && !$this->isGfwCheckEnabled($server)) {
+                $skipped[] = [
+                    'id' => $id,
+                    'status' => ServerGfwCheck::STATUS_SKIPPED,
+                    'reason' => '节点已关闭自动墙检测',
+                ];
+                continue;
+            }
 
-            NodeSyncService::push($server->id, 'gfw.check', $this->formatTask($check));
+            $check = $this->createCheck($server, $adminUserId);
             $started[] = [
                 'id' => $server->id,
                 'check_id' => $check->id,
@@ -58,6 +61,54 @@ class ServerGfwCheckService
         ];
     }
 
+    public function startAutomaticChecks(?int $limit = null): array
+    {
+        $query = Server::query()
+            ->whereNull('parent_id')
+            ->where('gfw_check_enabled', true)
+            ->orderBy('sort', 'ASC')
+            ->orderBy('id', 'ASC');
+
+        if ($limit !== null && $limit > 0) {
+            $query->limit($limit);
+        }
+
+        $servers = $query->get();
+        $activeServerIds = ServerGfwCheck::whereIn('server_id', $servers->pluck('id'))
+            ->whereIn('status', self::TASK_STATUS)
+            ->pluck('server_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $activeLookup = array_flip($activeServerIds);
+        $started = [];
+        $skipped = [];
+
+        foreach ($servers as $server) {
+            if (isset($activeLookup[(int) $server->id])) {
+                $skipped[] = [
+                    'id' => (int) $server->id,
+                    'status' => ServerGfwCheck::STATUS_SKIPPED,
+                    'reason' => '已有检测任务等待上报',
+                ];
+                continue;
+            }
+
+            $check = $this->createCheck($server, null);
+            $started[] = [
+                'id' => (int) $server->id,
+                'check_id' => (int) $check->id,
+                'status' => $check->status,
+            ];
+        }
+
+        return [
+            'started' => $started,
+            'skipped' => $skipped,
+            'total' => $servers->count(),
+            'active' => count($activeServerIds),
+        ];
+    }
+
     public function decorateServers(Collection $servers): Collection
     {
         $sourceIds = $servers
@@ -65,11 +116,7 @@ class ServerGfwCheckService
             ->unique()
             ->values();
 
-        $latestChecks = ServerGfwCheck::whereIn('server_id', $sourceIds)
-            ->orderByDesc('id')
-            ->get()
-            ->groupBy('server_id')
-            ->map(fn (Collection $items) => $items->first());
+        $latestChecks = $this->latestChecksByServerIds($sourceIds);
 
         return $servers->map(function (Server $server) use ($latestChecks) {
             $sourceNodeId = (int) ($server->parent_id ?: $server->id);
@@ -77,6 +124,43 @@ class ServerGfwCheckService
             $server->setAttribute('gfw_check', $this->formatCheck($check, (bool) $server->parent_id, $sourceNodeId));
             return $server;
         });
+    }
+
+    public function getBlockedSourceIdsForServers(Collection $servers): array
+    {
+        return collect($this->getLatestStatusesForServers($servers))
+            ->filter(fn (string $status) => $status === ServerGfwCheck::STATUS_BLOCKED)
+            ->keys()
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    public function getLatestStatusesForServers(Collection $servers): array
+    {
+        $sourceIds = $servers
+            ->map(fn (Server $server) => (int) ($server->parent_id ?: $server->id))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($sourceIds->isEmpty()) {
+            return [];
+        }
+
+        $enabledSourceIds = Server::whereIn('id', $sourceIds)
+            ->where('gfw_check_enabled', true)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+
+        if ($enabledSourceIds->isEmpty()) {
+            return [];
+        }
+
+        return $this->latestChecksByServerIds($enabledSourceIds)
+            ->map(fn (ServerGfwCheck $check) => $check->status)
+            ->all();
     }
 
     public function getPendingTaskForNode(Server $node): ?array
@@ -134,7 +218,22 @@ class ServerGfwCheckService
             'checked_at' => time(),
         ]);
 
+        $this->syncVisibilityFromStatus($node, $status);
+
         return true;
+    }
+
+    private function createCheck(Server $server, ?int $adminUserId): ServerGfwCheck
+    {
+        $check = ServerGfwCheck::create([
+            'server_id' => $server->id,
+            'status' => ServerGfwCheck::STATUS_PENDING,
+            'triggered_by' => $adminUserId,
+        ]);
+
+        NodeSyncService::push($server->id, 'gfw.check', $this->formatTask($check));
+
+        return $check;
     }
 
     private function formatTask(ServerGfwCheck $check): array
@@ -169,6 +268,85 @@ class ServerGfwCheckService
             'checked_at' => $check->checked_at,
             'updated_at' => optional($check->updated_at)->timestamp,
         ];
+    }
+
+    private function latestChecksByServerIds($sourceIds): Collection
+    {
+        $ids = collect($sourceIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return ServerGfwCheck::whereIn('server_id', $ids)
+            ->orderByDesc('id')
+            ->get()
+            ->groupBy('server_id')
+            ->map(fn (Collection $items) => $items->first());
+    }
+
+    private function syncVisibilityFromStatus(Server $sourceNode, string $status): array
+    {
+        if (!in_array($status, [ServerGfwCheck::STATUS_BLOCKED, ServerGfwCheck::STATUS_NORMAL], true)) {
+            return ['shown' => 0, 'hidden' => 0, 'unchanged' => 0];
+        }
+
+        if (!$this->isGfwCheckEnabled($sourceNode)) {
+            return ['shown' => 0, 'hidden' => 0, 'unchanged' => 1];
+        }
+
+        $nodes = Server::query()
+            ->where('id', $sourceNode->id)
+            ->orWhere('parent_id', $sourceNode->id)
+            ->get();
+
+        $result = ['shown' => 0, 'hidden' => 0, 'unchanged' => 0];
+        $now = time();
+
+        foreach ($nodes as $node) {
+            if (!$this->isGfwCheckEnabled($node)) {
+                $result['unchanged']++;
+                continue;
+            }
+
+            if ($status === ServerGfwCheck::STATUS_BLOCKED) {
+                if (!(bool) $node->show) {
+                    $result['unchanged']++;
+                    continue;
+                }
+
+                $node->update([
+                    'show' => false,
+                    'gfw_auto_hidden' => true,
+                    'gfw_auto_action_at' => $now,
+                ]);
+                $result['hidden']++;
+                continue;
+            }
+
+            if (!(bool) $node->gfw_auto_hidden) {
+                $result['unchanged']++;
+                continue;
+            }
+
+            $node->update([
+                'show' => true,
+                'gfw_auto_hidden' => false,
+                'gfw_auto_action_at' => $now,
+            ]);
+            $result['shown']++;
+        }
+
+        return $result;
+    }
+
+    private function isGfwCheckEnabled(Server $server): bool
+    {
+        return (bool) ($server->gfw_check_enabled ?? true);
     }
 
     private function determineStatus(?array $operators, string $reportedStatus, string $errorMessage): string

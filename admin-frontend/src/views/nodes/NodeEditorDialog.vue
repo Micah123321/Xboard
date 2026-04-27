@@ -340,6 +340,13 @@ watch(
                 </label>
                 <label class="switch-card">
                   <div>
+                    <strong>墙检测托管</strong>
+                    <span>{{ form.parentId ? '子节点不独立检测，只控制是否随父节点自动隐藏或恢复。' : '开启后后台会自动检测并在疑似被墙时隐藏。' }}</span>
+                  </div>
+                  <ElSwitch v-model="form.gfwCheckEnabled" />
+                </label>
+                <label class="switch-card">
+                  <div>
                     <strong>启用节点</strong>
                     <span>关闭后节点仍保留配置，但视为停用状态。</span>
                   </div>

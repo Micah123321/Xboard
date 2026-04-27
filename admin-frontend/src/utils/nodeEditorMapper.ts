@@ -172,6 +172,7 @@ export function toNodeFormModel(node?: AdminNodeItem | null): NodeFormModel {
   form.parentId = node.parent_id ?? null
   form.show = toBooleanValue(node.show, true)
   form.autoOnline = toBooleanValue(node.auto_online)
+  form.gfwCheckEnabled = toBooleanValue(node.gfw_check_enabled, true)
   form.enabled = toBooleanValue(node.enabled, true)
   form.tlsMode = Number(protocolSettings.tls ?? 0)
   form.tlsServerName = toStringValue(tlsSettings.server_name || tlsObject.server_name)
@@ -493,5 +494,6 @@ export function toNodeSavePayload(form: NodeFormModel): AdminNodeSavePayload {
     protocol_settings: buildProtocolSettings(form),
     show: form.show ? 1 : 0,
     auto_online: form.autoOnline,
+    gfw_check_enabled: form.gfwCheckEnabled,
   }
 }
