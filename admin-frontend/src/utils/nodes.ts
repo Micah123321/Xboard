@@ -120,10 +120,20 @@ export function getNodeGfwMeta(node: AdminNodeItem): NodeGfwMeta {
     }
   }
 
-  if (status === 'pending' || status === 'checking') {
+  if (status === 'pending') {
+    return {
+      label: `${inheritedPrefix}等待节点领取`,
+      searchText: `${inherited ? '随父节点 继承 ' : ''}等待节点领取 等待检测 gfw pending`,
+      tagType: 'primary',
+      tone: 'checking',
+      inherited,
+    }
+  }
+
+  if (status === 'checking') {
     return {
       label: `${inheritedPrefix}检测中`,
-      searchText: `${inherited ? '随父节点 继承 ' : ''}检测中 等待检测 gfw checking pending`,
+      searchText: `${inherited ? '随父节点 继承 ' : ''}检测中 正在检测 gfw checking`,
       tagType: 'primary',
       tone: 'checking',
       inherited,

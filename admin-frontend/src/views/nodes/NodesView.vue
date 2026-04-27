@@ -376,7 +376,8 @@ async function handleCheckGfw(ids: number[], label: string) {
     if (started > 0) {
       ElMessage.success(`${label}已发起墙状态检测，${started} 个父节点等待上报`)
     } else if (skipped > 0) {
-      ElMessage.info('所选节点均为子节点，墙状态随父节点显示')
+      const reason = response.data?.skipped?.[0]?.reason
+      ElMessage.info(reason || '所选节点暂未发起新的墙状态检测')
     } else {
       ElMessage.info('没有可检测的节点')
     }
@@ -666,7 +667,7 @@ watch(
             <ElOption label="疑似被墙" value="blocked" />
             <ElOption label="部分异常" value="partial" />
             <ElOption label="检测失败" value="failed" />
-            <ElOption label="检测中" value="checking" />
+            <ElOption label="等待/检测中" value="checking" />
             <ElOption label="未检测" value="unchecked" />
             <ElOption label="随父节点" value="inherited" />
           </ElSelect>

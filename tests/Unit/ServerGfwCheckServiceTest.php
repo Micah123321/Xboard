@@ -16,6 +16,7 @@ class ServerGfwCheckServiceTest extends TestCase
     {
         $eligible = $this->makeServer(['name' => 'eligible-parent']);
         $active = $this->makeServer(['name' => 'active-parent']);
+        $stale = $this->makeServer(['name' => 'stale-parent']);
         $this->makeServer([
             'name' => 'disabled-parent',
             'gfw_check_enabled' => false,
@@ -29,16 +30,30 @@ class ServerGfwCheckServiceTest extends TestCase
             'server_id' => $active->id,
             'status' => ServerGfwCheck::STATUS_PENDING,
         ]);
+        $staleCheck = ServerGfwCheck::create([
+            'server_id' => $stale->id,
+            'status' => ServerGfwCheck::STATUS_PENDING,
+        ]);
+        $staleCheck->forceFill([
+            'created_at' => now()->subMinutes(10),
+            'updated_at' => now()->subMinutes(10),
+        ])->save();
 
         $result = app(ServerGfwCheckService::class)->startAutomaticChecks();
 
-        $this->assertSame(2, $result['total']);
+        $this->assertSame(3, $result['total']);
         $this->assertSame(1, $result['active']);
-        $this->assertSame([$eligible->id], array_column($result['started'], 'id'));
+        $this->assertSame(1, $result['expired']);
+        $this->assertSame([$eligible->id, $stale->id], array_column($result['started'], 'id'));
         $this->assertCount(1, $result['skipped']);
         $this->assertDatabaseHas('server_gfw_checks', [
             'server_id' => $eligible->id,
             'status' => ServerGfwCheck::STATUS_PENDING,
+        ]);
+        $this->assertDatabaseHas('server_gfw_checks', [
+            'id' => $staleCheck->id,
+            'status' => ServerGfwCheck::STATUS_FAILED,
+            'error_message' => '墙检测任务超时：节点端未领取或未上报结果',
         ]);
     }
 

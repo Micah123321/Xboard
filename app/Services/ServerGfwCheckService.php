@@ -8,6 +8,8 @@ use Illuminate\Support\Collection;
 
 class ServerGfwCheckService
 {
+    private const ACTIVE_TASK_TIMEOUT_SECONDS = 300;
+
     private const TASK_STATUS = [
         ServerGfwCheck::STATUS_PENDING,
         ServerGfwCheck::STATUS_CHECKING,
@@ -17,6 +19,8 @@ class ServerGfwCheckService
     {
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
         $servers = Server::whereIn('id', $ids)->get()->keyBy('id');
+        $this->expireStaleActiveTasks($ids);
+        $activeLookup = $this->activeTaskServerLookup($ids);
         $started = [];
         $skipped = [];
 
@@ -42,6 +46,15 @@ class ServerGfwCheckService
                     'id' => $id,
                     'status' => ServerGfwCheck::STATUS_SKIPPED,
                     'reason' => '节点已关闭自动墙检测',
+                ];
+                continue;
+            }
+
+            if (isset($activeLookup[(int) $server->id])) {
+                $skipped[] = [
+                    'id' => $id,
+                    'status' => ServerGfwCheck::STATUS_SKIPPED,
+                    'reason' => '已有检测任务等待节点领取或上报',
                 ];
                 continue;
             }
@@ -74,12 +87,8 @@ class ServerGfwCheckService
         }
 
         $servers = $query->get();
-        $activeServerIds = ServerGfwCheck::whereIn('server_id', $servers->pluck('id'))
-            ->whereIn('status', self::TASK_STATUS)
-            ->pluck('server_id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
-        $activeLookup = array_flip($activeServerIds);
+        $expired = $this->expireStaleActiveTasks($servers->pluck('id'));
+        $activeLookup = $this->activeTaskServerLookup($servers->pluck('id'));
         $started = [];
         $skipped = [];
 
@@ -105,7 +114,8 @@ class ServerGfwCheckService
             'started' => $started,
             'skipped' => $skipped,
             'total' => $servers->count(),
-            'active' => count($activeServerIds),
+            'active' => count($activeLookup),
+            'expired' => $expired,
         ];
     }
 
@@ -169,6 +179,8 @@ class ServerGfwCheckService
             return null;
         }
 
+        $this->expireStaleActiveTasks([$node->id]);
+
         $check = ServerGfwCheck::where('server_id', $node->id)
             ->whereIn('status', self::TASK_STATUS)
             ->orderByDesc('id')
@@ -183,6 +195,47 @@ class ServerGfwCheckService
         }
 
         return $this->formatTask($check->refresh());
+    }
+
+    private function activeTaskServerLookup($serverIds): array
+    {
+        $ids = collect($serverIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        return array_flip(ServerGfwCheck::whereIn('server_id', $ids)
+            ->whereIn('status', self::TASK_STATUS)
+            ->pluck('server_id')
+            ->map(fn ($id) => (int) $id)
+            ->all());
+    }
+
+    private function expireStaleActiveTasks($serverIds): int
+    {
+        $ids = collect($serverIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return 0;
+        }
+
+        return ServerGfwCheck::whereIn('server_id', $ids)
+            ->whereIn('status', self::TASK_STATUS)
+            ->where('updated_at', '<=', now()->subSeconds(self::ACTIVE_TASK_TIMEOUT_SECONDS))
+            ->update([
+                'status' => ServerGfwCheck::STATUS_FAILED,
+                'error_message' => '墙检测任务超时：节点端未领取或未上报结果',
+                'checked_at' => time(),
+            ]);
     }
 
     public function reportResult(Server $node, array $payload): bool

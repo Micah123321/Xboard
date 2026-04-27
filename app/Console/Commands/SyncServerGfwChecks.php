@@ -19,11 +19,12 @@ class SyncServerGfwChecks extends Command
         );
 
         $this->info(sprintf(
-            'Server GFW checks synced: total=%d started=%d skipped=%d active=%d',
+            'Server GFW checks synced: total=%d started=%d skipped=%d active=%d expired=%d',
             $result['total'],
             count($result['started']),
             count($result['skipped']),
-            $result['active']
+            $result['active'],
+            $result['expired'] ?? 0
         ));
 
         return self::SUCCESS;

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.6.4] - 2026-04-28
+
+### 修复
+- **[node-gfw-check]**: 修复墙检测任务卡在 `pending/checking` 后会长期占用 active 状态的问题；超过 5 分钟未被节点端领取或未上报的任务会标记为检测失败，管理端区分展示“等待节点领取”和“检测中”。同时修正 mi-node 的 ping 成功判定，避免正常可达但平均延迟解析不到时被误判为超时 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: app/Services/ServerGfwCheckService.php, app/Console/Commands/SyncServerGfwChecks.php, admin-frontend/src/utils/nodes.ts, admin-frontend/src/views/nodes/NodesView.vue, E:/code/go/mi-node/internal/gfwcheck/gfwcheck.go
+
 ## [0.6.3] - 2026-04-28
 
 ### 新增
