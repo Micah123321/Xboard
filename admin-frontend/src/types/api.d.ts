@@ -909,7 +909,7 @@ export interface AdminNodeBatchUpdatePayload {
   ids: number[]
   host?: string
   rate?: number
-  group_ids?: number[]
+  group_ids?: string[]
 }
 
 export interface AdminNodeSavePayload {
@@ -917,8 +917,8 @@ export interface AdminNodeSavePayload {
   type: AdminNodeType
   code?: string
   name: string
-  group_ids?: number[]
-  route_ids?: number[]
+  group_ids?: string[]
+  route_ids?: string[]
   parent_id?: number | null
   enabled?: boolean
   host: string

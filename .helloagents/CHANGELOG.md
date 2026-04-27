@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.5.17] - 2026-04-25
+
+### 修复
+- **[admin-frontend]**: 修复节点编辑 / 批量修改保存权限组后订阅侧无法命中节点的问题；前端提交 `group_ids / route_ids` 时统一序列化为字符串 ID，后端 `whereGroupId` 同时兼容历史字符串与数字 JSON 值，并补齐 TUIC V5/V4、ALPN 选项与 AnyTLS 完整默认 Padding Scheme — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/utils/nodeEditorMapper.ts, admin-frontend/src/utils/nodeEditorOptions.ts, admin-frontend/src/views/nodes/NodeEditorProtocolSection.vue, app/Models/Server.php
+
 ## [0.5.16] - 2026-04-25
 
 ### 新增

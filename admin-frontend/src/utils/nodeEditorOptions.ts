@@ -197,6 +197,17 @@ export const NODE_UDP_RELAY_MODE_OPTIONS: Array<NodeOption> = [
   { value: 'quic', label: 'quic' },
 ]
 
+export const NODE_TUIC_VERSION_OPTIONS: Array<NodeOption<number>> = [
+  { value: 5, label: 'V5' },
+  { value: 4, label: 'V4' },
+]
+
+export const NODE_ALPN_OPTIONS: Array<NodeOption> = [
+  { value: 'h3', label: 'HTTP/3' },
+  { value: 'h2', label: 'HTTP/2' },
+  { value: 'http/1.1', label: 'HTTP/1.1' },
+]
+
 export const NODE_MUX_PROTOCOL_OPTIONS: Array<NodeOption> = [
   { value: 'yamux', label: 'yamux' },
   { value: 'smux', label: 'smux' },
@@ -290,6 +301,11 @@ export function createEmptyNodeForm(): NodeFormModel {
       '0=30-30',
       '1=100-400',
       '2=400-500,c,500-1000,c,500-1000,c,500-1000,c,500-1000',
+      '3=9-9,500-1000',
+      '4=500-1000',
+      '5=500-1000',
+      '6=500-1000',
+      '7=500-1000',
     ].join('\n'),
     multiplexEnabled: false,
     multiplexProtocol: 'yamux',

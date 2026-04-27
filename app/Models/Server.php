@@ -135,6 +135,46 @@ class Server extends Model
         'machine_id' => 'integer',
     ];
 
+    private function normalizeJsonIdList($value): array
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = json_last_error() === JSON_ERROR_NONE ? $decoded : [$value];
+        }
+
+        if (!is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            fn ($item) => trim((string) $item),
+            $value
+        ), fn ($item) => $item !== '')));
+    }
+
+    public function setGroupIdsAttribute($value): void
+    {
+        $this->attributes['group_ids'] = json_encode($this->normalizeJsonIdList($value));
+    }
+
+    public function setRouteIdsAttribute($value): void
+    {
+        $this->attributes['route_ids'] = json_encode($this->normalizeJsonIdList($value));
+    }
+
+    public function scopeWhereGroupId($query, $groupId)
+    {
+        $normalized = trim((string) $groupId);
+
+        return $query->where(function ($query) use ($normalized) {
+            $query->whereJsonContains('group_ids', $normalized);
+
+            if (ctype_digit($normalized)) {
+                $query->orWhereJsonContains('group_ids', (int) $normalized);
+            }
+        });
+    }
+
     private const MULTIPLEX_CONFIGURATION = [
         'multiplex' => [
             'type' => 'object',

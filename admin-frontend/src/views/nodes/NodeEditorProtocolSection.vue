@@ -2,12 +2,14 @@
 import { computed } from 'vue'
 import {
   getNodeProtocolHint,
+  NODE_ALPN_OPTIONS,
   NODE_CONGESTION_CONTROL_OPTIONS,
   NODE_MUX_PROTOCOL_OPTIONS,
   NODE_SHADOWSOCKS_CIPHER_OPTIONS,
   NODE_SHADOWSOCKS_OBFS_OPTIONS,
   NODE_TCP_HEADER_OPTIONS,
   NODE_TLS_FINGERPRINT_OPTIONS,
+  NODE_TUIC_VERSION_OPTIONS,
   NODE_UDP_RELAY_MODE_OPTIONS,
   NODE_VLESS_FLOW_OPTIONS,
   shouldShowRealitySettings,
@@ -56,13 +58,6 @@ const currentProtocolHint = computed(() => getNodeProtocolHint(props.form.type))
             :value="option.value"
           />
         </ElSelect>
-      </ElFormItem>
-
-      <ElFormItem
-        v-if="['hysteria', 'tuic', 'anytls'].includes(props.form.type)"
-        label="服务器名称（SNI）"
-      >
-        <ElInput v-model="props.form.tlsServerName" placeholder="example.com" />
       </ElFormItem>
 
       <ElFormItem v-if="showTlsSection" label="服务器名称（SNI）">
@@ -366,7 +361,14 @@ const currentProtocolHint = computed(() => getNodeProtocolHint(props.form.type))
 
       <template v-else-if="props.form.type === 'tuic'">
         <ElFormItem label="协议版本">
-          <ElInputNumber v-model="props.form.tuicVersion" :min="1" :controls="false" class="full-width" />
+          <ElSelect v-model="props.form.tuicVersion" placeholder="请选择版本">
+            <ElOption
+              v-for="option in NODE_TUIC_VERSION_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </ElSelect>
         </ElFormItem>
         <ElFormItem label="拥塞控制">
           <ElSelect v-model="props.form.tuicCongestionControl" placeholder="请选择拥塞控制">
@@ -396,7 +398,14 @@ const currentProtocolHint = computed(() => getNodeProtocolHint(props.form.type))
             allow-create
             default-first-option
             placeholder="输入后回车添加 ALPN"
-          />
+          >
+            <ElOption
+              v-for="option in NODE_ALPN_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </ElSelect>
         </ElFormItem>
       </template>
 

@@ -36,6 +36,8 @@
 - 用户流量重置优先复用 `traffic-reset/reset-user`，用户行级“重置流量”会走真实后端重置链路并在成功后刷新列表
 - 节点管理页通过真实后端 `server/manage/getNodes`、`server/group/fetch` 与 `server/route/fetch` 获取列表 / 关联数据，并通过 `server/manage/save`、`server/manage/sort`、`server/manage/update`、`server/manage/batchUpdate`、`server/manage/copy`、`server/manage/drop` 完成新增、编辑、排序、批量修改与行级操作
 - 节点新增 / 编辑采用统一中央大弹窗，支持 `Shadowsocks / VMess / Trojan / Hysteria / VLess / TUIC / SOCKS / Naive / HTTP / Mieru / AnyTLS` 11 种协议的首版动态配置表单
+- 节点新增 / 编辑 / 批量修改保存 `group_ids / route_ids` 时统一向后端提交字符串 ID，后端 `Server::whereGroupId()` 同时兼容历史字符串与数字 JSON 值，避免权限组保存后订阅侧无法命中节点
+- TUIC 表单默认以 V5 / V4 版本选择、`h3 / h2 / http/1.1` ALPN 选项和 `native / quic` UDP Relay Mode 对齐后端协议模板；AnyTLS Padding Scheme 默认值与 `Server` 模型完整模板保持一致
 - 节点排序采用本地草稿 + 上移 / 下移模式，保存时向 `server/manage/sort` 提交 `{ id, order }[]` 顺序 payload
 - 节点列表现支持本地分页、在线 / 离线筛选、父/子节点筛选，以及跨分页稳定勾选；批量修改 / 批量删除仅作用于已勾选节点，其中批量修改可统一更新 `host / group_ids / rate`
 - 节点行级菜单现已补齐“置顶节点”，会复用当前排序结果生成新的顺序 payload 并提交到 `server/manage/sort`

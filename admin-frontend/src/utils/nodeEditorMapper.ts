@@ -55,6 +55,14 @@ function toNumberArray(value: unknown): number[] {
   )]
 }
 
+function toJsonIdArray(value: unknown[]): string[] {
+  return [...new Set(
+    value
+      .map((item) => String(item ?? '').trim())
+      .filter(Boolean),
+  )]
+}
+
 function splitMultiline(value: string): string[] {
   return [...new Set(
     value
@@ -154,6 +162,9 @@ export function toNodeFormModel(node?: AdminNodeItem | null): NodeFormModel {
     : createEmptyNodeForm().rateTimeRanges
   form.tags = toStringArray(node.tags)
   form.groupIds = toNumberArray(node.group_ids)
+  if (form.groupIds.length === 0 && Array.isArray(node.groups)) {
+    form.groupIds = toNumberArray(node.groups.map((group) => group.id))
+  }
   form.routeIds = toNumberArray(node.route_ids)
   form.host = toStringValue(node.host)
   form.port = toStringValue(node.port)
@@ -467,8 +478,8 @@ export function toNodeSavePayload(form: NodeFormModel): AdminNodeSavePayload {
     type: form.type as AdminNodeType,
     code: form.code.trim() || undefined,
     name: form.name.trim(),
-    group_ids: [...new Set(form.groupIds)],
-    route_ids: [...new Set(form.routeIds)],
+    group_ids: toJsonIdArray(form.groupIds),
+    route_ids: toJsonIdArray(form.routeIds),
     parent_id: form.parentId ?? undefined,
     enabled: form.enabled,
     host: form.host.trim(),

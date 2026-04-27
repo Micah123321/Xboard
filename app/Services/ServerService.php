@@ -54,7 +54,7 @@ class ServerService
      */
     public static function getAvailableServers(User $user): array
     {
-        $servers = Server::whereJsonContains('group_ids', (string) $user->group_id)
+        $servers = Server::whereGroupId($user->group_id)
             ->where('show', true)
             ->where(function ($query) {
                 $query->whereNull('transfer_enable')

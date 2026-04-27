@@ -6,7 +6,7 @@ import type { AdminServerGroupItem } from '@/types/api'
 interface NodeBatchEditPayload {
   host?: string
   rate?: number
-  group_ids?: number[]
+  group_ids?: string[]
 }
 
 const props = defineProps<{
@@ -64,7 +64,7 @@ function handleSubmit() {
   emit('submit', {
     host: form.updateHost ? form.host.trim() : undefined,
     rate: form.updateRate ? Number(form.rate) : undefined,
-    group_ids: form.updateGroups ? [...form.groupIds] : undefined,
+    group_ids: form.updateGroups ? [...new Set(form.groupIds.map((item) => String(item)))] : undefined,
   })
 }
 
