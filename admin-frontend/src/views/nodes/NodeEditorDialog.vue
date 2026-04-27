@@ -327,9 +327,16 @@ watch(
                 <label class="switch-card">
                   <div>
                     <strong>前台显示</strong>
-                    <span>开启后节点会出现在可展示列表中。</span>
+                    <span>{{ form.autoOnline ? '已由自动上线托管，后台会按在线状态同步。' : '开启后节点会出现在可展示列表中。' }}</span>
                   </div>
-                  <ElSwitch v-model="form.show" />
+                  <ElSwitch v-model="form.show" :disabled="form.autoOnline" />
+                </label>
+                <label class="switch-card">
+                  <div>
+                    <strong>自动上线</strong>
+                    <span>开启后后台会自动同步显示状态：在线显示，离线隐藏。</span>
+                  </div>
+                  <ElSwitch v-model="form.autoOnline" />
                 </label>
                 <label class="switch-card">
                   <div>

@@ -7,6 +7,7 @@ interface NodeBatchEditPayload {
   host?: string
   rate?: number
   group_ids?: string[]
+  auto_online?: boolean
 }
 
 const props = defineProps<{
@@ -28,9 +29,16 @@ const form = reactive({
   rate: 1,
   updateGroups: false,
   groupIds: [] as number[],
+  updateAutoOnline: false,
+  autoOnline: true,
 })
 
-const hasEnabledField = computed(() => form.updateHost || form.updateRate || form.updateGroups)
+const hasEnabledField = computed(() => (
+  form.updateHost
+  || form.updateRate
+  || form.updateGroups
+  || form.updateAutoOnline
+))
 
 function resetForm() {
   form.updateHost = false
@@ -39,6 +47,8 @@ function resetForm() {
   form.rate = 1
   form.updateGroups = false
   form.groupIds = []
+  form.updateAutoOnline = false
+  form.autoOnline = true
 }
 
 function closeDialog() {
@@ -65,6 +75,7 @@ function handleSubmit() {
     host: form.updateHost ? form.host.trim() : undefined,
     rate: form.updateRate ? Number(form.rate) : undefined,
     group_ids: form.updateGroups ? [...new Set(form.groupIds.map((item) => String(item)))] : undefined,
+    auto_online: form.updateAutoOnline ? form.autoOnline : undefined,
   })
 }
 
@@ -159,11 +170,29 @@ watch(
           class="full-width"
         />
       </section>
+
+      <section class="batch-section">
+        <label class="batch-switch-card">
+          <div>
+            <strong>批量设置自动上线</strong>
+            <span>启用后会统一设置所选节点是否由后台自动同步前台显示。</span>
+          </div>
+          <ElSwitch v-model="form.updateAutoOnline" />
+        </label>
+
+        <label class="batch-switch-card batch-switch-card--nested">
+          <div>
+            <strong>{{ form.autoOnline ? '开启自动上线' : '关闭自动上线' }}</strong>
+            <span>关闭时节点显隐继续由管理员手动控制。</span>
+          </div>
+          <ElSwitch v-model="form.autoOnline" :disabled="!form.updateAutoOnline" />
+        </label>
+      </section>
     </div>
 
     <template #footer>
       <div class="batch-footer">
-        <span class="batch-footer__hint">批量修改不会影响端口、协议配置与显隐状态。</span>
+        <span class="batch-footer__hint">未开启的批量字段不会被提交；自动上线不会改动端口与协议配置。</span>
         <div class="batch-footer__actions">
           <ElButton @click="closeDialog">取消</ElButton>
           <ElButton type="primary" :loading="props.loading" @click="handleSubmit">

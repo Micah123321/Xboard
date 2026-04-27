@@ -880,6 +880,7 @@ export interface AdminNodeItem {
   route_ids?: Array<number | string> | null
   tags?: string[] | null
   show: boolean
+  auto_online?: boolean
   enabled?: boolean
   parent_id?: number | null
   rate?: number | null
@@ -939,6 +940,7 @@ export interface AdminNodeGfwCheckResult {
 export interface AdminNodeUpdatePayload {
   id: number
   show?: boolean | number
+  auto_online?: boolean
   enabled?: boolean
   machine_id?: number | null
 }
@@ -948,6 +950,7 @@ export interface AdminNodeBatchUpdatePayload {
   host?: string
   rate?: number
   group_ids?: string[]
+  auto_online?: boolean
 }
 
 export interface AdminNodeSavePayload {
@@ -968,6 +971,7 @@ export interface AdminNodeSavePayload {
   rate_time_ranges?: AdminNodeRateTimeRange[]
   protocol_settings?: Record<string, unknown>
   show?: boolean | number
+  auto_online?: boolean
 }
 
 declare global {

@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property array|null $route_ids 路由IDs
  * @property array|null $tags 标签
  * @property boolean $show 是否显示
+ * @property boolean $auto_online 是否根据在线状态自动同步显示
  * @property string|null $allow_insecure 是否允许不安全
  * @property string|null $network 网络类型
  * @property int|null $parent_id 父节点ID
@@ -36,7 +37,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property int $updated_at
  * 
  * @property-read Server|null $parent 父节点
-     * @property-read \Illuminate\Database\Eloquent\Collection<int, StatServer> $stats 节点统计
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, StatServer> $stats 节点统计
  * @property-read \Illuminate\Database\Eloquent\Collection<int, ServerGfwCheck> $gfwChecks 墙状态检测记录
  * 
  * @property-read int|null $last_check_at 最后检查时间（Unix时间戳）
@@ -125,6 +126,7 @@ class Server extends Model
         'last_check_at' => 'integer',
         'last_push_at' => 'integer',
         'show' => 'boolean',
+        'auto_online' => 'boolean',
         'enabled' => 'boolean',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',

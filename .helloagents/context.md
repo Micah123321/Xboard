@@ -12,6 +12,7 @@
 - `admin-frontend` 现支持通过 `ADMIN_BUILD_OUT_DIR` 覆写构建输出目录：仓内默认仍写到 `../public/assets/admin`，容器构建可切到独立 `dist`
 - 前端容器化运行采用 `admin-frontend/Dockerfile`（`Node 20 + Caddy` 多阶段构建），静态站点入口重定向到 `/assets/admin/`
 - 前端容器会通过 `XBOARD_BACKEND_UPSTREAM` 把 `/api` 反向代理到后端 `web` 服务；compose 分支当前默认值为 `http://web:7001`
+- 前端容器会通过 `XBOARD_UPLOAD_UPSTREAM` 把 `/upload/*` 去掉 `/upload` 前缀后反向代理到图片上传服务，默认值为 `https://pic.535888.xyz`
 - GHCR 前端镜像发布工作流位于 `.github/workflows/admin-frontend-docker-publish.yml`，镜像名为 `ghcr.io/<owner>/xboard-admin-frontend`
 - 管理端 API 通过 `window.settings.secure_path` 或 `VITE_ADMIN_PATH` 解析 `/api/v2/{secure_path}` 前缀
 - 登录接口复用 `/api/v2/passport/auth/login`
@@ -47,6 +48,10 @@
   - `server/manage/update`
   - `server/manage/copy`
   - `server/manage/drop`
+  - `server/manage/batchDelete`
+  - `server/manage/checkGfw`
+  - `server/manage/resetTraffic`
+  - `server/manage/batchResetTraffic`
 - 管理端套餐管理现已接入:
   - `plan/fetch`
   - `plan/save`
@@ -106,7 +111,8 @@
 
 - 管理端路由使用 Hash 模式
 - 管理端当前业务路由包含 `/dashboard`、`/users`、`/tickets`、`/nodes`、`/node-groups`、`/node-routes`、`/subscriptions/plans`、`/subscriptions/orders`、`/subscriptions/coupons`、`/subscriptions/gift-cards`、`/system/config`、`/system/notices`、`/system/payments`、`/system/plugins`、`/system/themes` 与 `/system/knowledge`
-- `#/nodes` 当前已升级为真实节点工作台：支持搜索、在线 / 离线筛选、父/子节点筛选、分页浏览、显隐切换、复制、单节点置顶、仅对已勾选节点生效的批量修改 / 批量删除，以及 11 种协议的新增 / 编辑弹窗和排序对话框
+- `#/nodes` 当前已升级为真实节点工作台：支持搜索、在线 / 离线筛选、父/子节点筛选、墙状态筛选、分页浏览、显隐切换、自动上线托管开关、复制、单节点置顶、仅对已勾选节点生效的批量修改 / 批量删除，以及 11 种协议的新增 / 编辑弹窗和排序对话框
+- 节点自动上线由后端 `sync:server-auto-online` 定时命令执行，只处理 `auto_online=1` 的节点：在线 / 待同步时自动 `show=1`，离线时自动 `show=0`；未开启自动上线的节点继续保持手动显隐控制
 - Bearer Token 存储于 `sessionStorage/localStorage`
 - `admin-frontend` 的视觉方向当前以 Apple 风格为基线，优先纯色分区、系统字体栈和低装饰成本
 

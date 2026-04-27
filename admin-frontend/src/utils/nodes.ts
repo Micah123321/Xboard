@@ -199,6 +199,7 @@ function buildNodeSearchText(node: AdminNodeItem): string {
     node.port,
     node.server_port,
     getNodeTypeLabel(node.type),
+    node.auto_online ? '自动上线 自动托管 auto online' : '',
     getNodeGfwMeta(node).searchText,
     ...getNodeGroupNames(node),
   ]
@@ -276,4 +277,8 @@ export function countOnlineNodes(nodes: AdminNodeItem[]): number {
 
 export function countVisibleNodes(nodes: AdminNodeItem[]): number {
   return nodes.filter((node) => Boolean(node.show)).length
+}
+
+export function countAutoOnlineNodes(nodes: AdminNodeItem[]): number {
+  return nodes.filter((node) => Boolean(node.auto_online)).length
 }

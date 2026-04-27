@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "completed": 9,
+  "failed": 0,
+  "pending": 0,
+  "total": 9,
+  "done": 9,
+  "percent": 100,
+  "current": "节点自动上线功能已实现，前端构建通过，PHP 验证待具备 PHP 的环境补跑",
+  "updated_at": "2026-04-27 23:52:00"
+}

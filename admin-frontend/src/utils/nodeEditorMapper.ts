@@ -171,6 +171,7 @@ export function toNodeFormModel(node?: AdminNodeItem | null): NodeFormModel {
   form.serverPort = toStringValue(node.server_port)
   form.parentId = node.parent_id ?? null
   form.show = toBooleanValue(node.show, true)
+  form.autoOnline = toBooleanValue(node.auto_online)
   form.enabled = toBooleanValue(node.enabled, true)
   form.tlsMode = Number(protocolSettings.tls ?? 0)
   form.tlsServerName = toStringValue(tlsSettings.server_name || tlsObject.server_name)
@@ -491,5 +492,6 @@ export function toNodeSavePayload(form: NodeFormModel): AdminNodeSavePayload {
     rate_time_ranges: form.rateTimeEnable ? buildRateRanges(form) : [],
     protocol_settings: buildProtocolSettings(form),
     show: form.show ? 1 : 0,
+    auto_online: form.autoOnline,
   }
 }

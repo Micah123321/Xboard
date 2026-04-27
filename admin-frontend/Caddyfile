@@ -7,6 +7,14 @@
     reverse_proxy {$XBOARD_BACKEND_UPSTREAM:http://web:7001}
   }
 
+  @upload path /upload /upload/*
+  handle @upload {
+    uri strip_prefix /upload
+    reverse_proxy {$XBOARD_UPLOAD_UPSTREAM:https://pic.535888.xyz} {
+      header_up Host {upstream_hostport}
+    }
+  }
+
   redir / /assets/admin/ 308
   redir /assets/admin /assets/admin/ 308
 

@@ -31,6 +31,7 @@ export interface NodeFormModel {
   serverPort: string
   parentId: number | null
   show: boolean
+  autoOnline: boolean
   enabled: boolean
   tlsMode: number
   tlsServerName: string
@@ -241,6 +242,7 @@ export function createEmptyNodeForm(): NodeFormModel {
     serverPort: '',
     parentId: null,
     show: true,
+    autoOnline: false,
     enabled: true,
     tlsMode: 0,
     tlsServerName: '',

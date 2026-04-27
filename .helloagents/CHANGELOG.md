@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## [0.6.2] - 2026-04-27
+
+### 新增
+- **[admin-frontend]**: 为节点管理新增可控“自动上线”能力；节点可单独或批量开启后台托管，`sync:server-auto-online` 会按在线状态自动同步前台显示，在线 / 待同步时显示，离线时隐藏，未开启自动上线的节点继续保持手动显隐控制 — by yinjianm
+  - 方案: [202604272338_admin-frontend-node-auto-online](archive/2026-04/202604272338_admin-frontend-node-auto-online/)
+  - 决策: admin-frontend-node-auto-online#D001(自动上线使用独立字段与独立同步服务)
+
+## [0.6.1] - 2026-04-27
+
+### 快速修改
+- **[admin-frontend]**: 修复独立 admin 前端容器内 `/upload/rest/upload` 返回 404 的问题；`Caddyfile` 现在会把 `/upload/*` 去掉 `/upload` 前缀后反向代理到 `XBOARD_UPLOAD_UPSTREAM`，默认对齐开发环境的图片上传服务 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/Caddyfile:1-28
+
 ## [0.6.0] - 2026-04-27
 
 ### 新增

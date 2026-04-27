@@ -12,6 +12,7 @@
 - 默认构建输出仍为主仓 `public/assets/admin`；当 `ADMIN_BUILD_OUT_DIR` 存在时，构建输出需切换到外部指定目录，供容器镜像独立打包
 - 独立容器运行时通过 `Caddyfile` 把根路径重定向到 `/assets/admin/`，避免当前 `base: '/assets/admin/'` 资源前缀失效
 - 独立容器运行时会把 `/api` 反向代理到 `XBOARD_BACKEND_UPSTREAM`，compose 分支默认指向 `http://web:7001`，确保前端静态容器仍能直连 Laravel 后端
+- 独立容器运行时会把 `/upload/*` 去掉 `/upload` 前缀后反向代理到 `XBOARD_UPLOAD_UPSTREAM`，默认指向 `https://pic.535888.xyz`，保持与 Vite 开发代理一致的图片上传路径
 - 前端 GHCR 发布链路与 Laravel 主应用发布链路分离，避免把静态前端构建耦合进现有 PHP 镜像工作流
 - 登录成功后优先跳转 `redirect` 指定路由，否则回到 `/dashboard`
 - 受保护路由在未登录时会自动附加 `redirect` 查询参数
@@ -40,7 +41,8 @@
 - 节点新增 / 编辑 / 批量修改保存 `group_ids / route_ids` 时统一向后端提交字符串 ID，后端 `Server::whereGroupId()` 同时兼容历史字符串与数字 JSON 值，避免权限组保存后订阅侧无法命中节点
 - TUIC 表单默认以 V5 / V4 版本选择、`h3 / h2 / http/1.1` ALPN 选项和 `native / quic` UDP Relay Mode 对齐后端协议模板；AnyTLS Padding Scheme 默认值与 `Server` 模型完整模板保持一致
 - 节点排序采用本地草稿 + 上移 / 下移模式，保存时向 `server/manage/sort` 提交 `{ id, order }[]` 顺序 payload
-- 节点列表现支持本地分页、在线 / 离线筛选、父/子节点筛选，以及跨分页稳定勾选；批量修改 / 批量删除仅作用于已勾选节点，其中批量修改可统一更新 `host / group_ids / rate`
+- 节点列表现支持本地分页、在线 / 离线筛选、父/子节点筛选，以及跨分页稳定勾选；批量修改 / 批量删除仅作用于已勾选节点，其中批量修改可统一更新 `host / group_ids / rate / auto_online`
+- 节点管理页新增“自动上线”托管开关；开启后后台 `sync:server-auto-online` 会按节点在线状态自动同步 `show`，在线 / 待同步时显示、离线时隐藏，未开启的节点仍保持手动显隐控制
 - 节点管理页现支持墙状态展示、墙状态筛选与关键词搜索；父节点可通过行级或批量操作发起检测，子节点不单独检测并显示“随父节点”的继承状态
 - 节点行级菜单现已补齐“置顶节点”，会复用当前排序结果生成新的顺序 payload 并提交到 `server/manage/sort`
 - 权限组管理页使用真实后端 `server/group/fetch`、`server/group/save` 与 `server/group/drop`，支持关键字搜索、新增/编辑中央弹窗、删除确认，以及从节点数量列跳转到 `#/nodes?group={id}` 的筛选联动
@@ -96,7 +98,7 @@
 - 依赖 `src/utils/notices.ts` 负责公告表单转换、内容摘要、排序与显示字段归一化
 - 依赖 `src/utils/systemConfig.ts` 负责系统配置字段元信息、默认值、回填与保存序列化
 - 依赖 `src/utils/routes.ts` 负责路由动作映射、匹配规则序列化、节点引用摘要与搜索过滤
-- 依赖 `src/utils/nodes.ts` 负责节点在线状态、父/子节点、墙状态 meta、搜索文本和筛选逻辑
+- 依赖 `src/utils/nodes.ts` 负责节点在线状态、自动上线统计、父/子节点、墙状态 meta、搜索文本和筛选逻辑
 - 依赖 `src/views/tickets/useTicketReplyImages.ts` 收敛工单回复区图片点击上传、拖拽上传、粘贴上传、文件校验和 Markdown 插入
 - 依赖 Laravel 后端 `TicketService::reply()` 提供工单“再次回复自动重开”的统一业务语义
 - 依赖 Laravel 注入的 `window.settings`

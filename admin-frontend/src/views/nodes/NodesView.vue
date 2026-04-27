@@ -35,6 +35,7 @@ import NodeEditorDialog from './NodeEditorDialog.vue'
 import NodeSortDialog from './NodeSortDialog.vue'
 import {
   buildNodeTypeOptions,
+  countAutoOnlineNodes,
   countOnlineNodes,
   countVisibleNodes,
   filterNodes,
@@ -75,6 +76,7 @@ const pageSize = ref(20)
 const selectedNodeIds = ref<number[]>([])
 const syncingSelection = ref(false)
 const switchingIds = ref<number[]>([])
+const autoSwitchingIds = ref<number[]>([])
 const workingIds = ref<number[]>([])
 const editorVisible = ref(false)
 const editorMode = ref<NodeDialogMode>('create')
@@ -116,6 +118,7 @@ const summaryCards = computed(() => [
   { label: '节点总数', value: String(nodes.value.length) },
   { label: '在线节点', value: String(countOnlineNodes(nodes.value)) },
   { label: '显示中', value: String(countVisibleNodes(nodes.value)) },
+  { label: '自动上线', value: String(countAutoOnlineNodes(nodes.value)) },
   { label: '已勾选', value: String(selectedNodes.value.length) },
 ])
 
@@ -157,6 +160,10 @@ function markPending(list: typeof switchingIds, id: number, pending: boolean) {
 
 function isSwitching(id: number): boolean {
   return switchingIds.value.includes(id)
+}
+
+function isAutoSwitching(id: number): boolean {
+  return autoSwitchingIds.value.includes(id)
 }
 
 function isWorking(id: number): boolean {
@@ -285,6 +292,7 @@ async function handleBatchSubmit(payload: NodeBatchEditPayload) {
     host: payload.host,
     rate: payload.rate,
     group_ids: payload.group_ids,
+    auto_online: payload.auto_online,
   }
 
   try {
@@ -419,6 +427,29 @@ async function handleToggleShow(node: AdminNodeItem, nextValue: boolean) {
     ElMessage.error(error instanceof Error ? error.message : '显隐状态更新失败')
   } finally {
     markPending(switchingIds, node.id, false)
+  }
+}
+
+async function handleToggleAutoOnline(node: AdminNodeItem, nextValue: boolean) {
+  const previous = Boolean(node.auto_online)
+  if (previous === nextValue) {
+    return
+  }
+
+  node.auto_online = nextValue
+  markPending(autoSwitchingIds, node.id, true)
+
+  try {
+    await updateNode({
+      id: node.id,
+      auto_online: nextValue,
+    })
+    ElMessage.success(nextValue ? '已开启自动上线' : '已关闭自动上线')
+  } catch (error) {
+    node.auto_online = previous
+    ElMessage.error(error instanceof Error ? error.message : '自动上线状态更新失败')
+  } finally {
+    markPending(autoSwitchingIds, node.id, false)
   }
 }
 
@@ -689,7 +720,20 @@ watch(
               <ElSwitch
                 :model-value="Boolean(row.show)"
                 :loading="isSwitching(row.id)"
+                :disabled="Boolean(row.auto_online)"
                 @change="(value) => handleToggleShow(row, Boolean(value))"
+              />
+            </div>
+          </template>
+        </ElTableColumn>
+
+        <ElTableColumn label="自动上线" width="118">
+          <template #default="{ row }">
+            <div class="switch-shell switch-shell--auto">
+              <ElSwitch
+                :model-value="Boolean(row.auto_online)"
+                :loading="isAutoSwitching(row.id)"
+                @change="(value) => handleToggleAutoOnline(row, Boolean(value))"
               />
             </div>
           </template>
@@ -705,6 +749,15 @@ watch(
               <div class="node-cell__sub">
                 <ElTag round effect="plain" :type="getNodeStatusMeta(row).tagType">
                   {{ getNodeStatusMeta(row).label }}
+                </ElTag>
+                <ElTag
+                  v-if="row.auto_online"
+                  round
+                  effect="plain"
+                  type="primary"
+                  class="auto-online-tag"
+                >
+                  自动上线
                 </ElTag>
                 <ElTooltip :content="getNodeGfwTooltip(row)" placement="top">
                   <ElTag
@@ -991,6 +1044,10 @@ watch(
   --el-switch-on-color: var(--node-switch-color);
 }
 
+.switch-shell--auto :deep(.el-switch) {
+  --el-switch-on-color: #0071e3;
+}
+
 .node-cell,
 .stack-cell,
 .online-cell {
@@ -1055,7 +1112,8 @@ watch(
 
 .rate-tag,
 .id-tag,
-.gfw-tag {
+.gfw-tag,
+.auto-online-tag {
   font-variant-numeric: tabular-nums;
 }
 

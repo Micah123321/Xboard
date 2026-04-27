@@ -81,6 +81,7 @@ class ManageController extends Controller
         $params = $request->validate([
             'id' => 'required|integer',
             'show' => 'nullable|integer',
+            'auto_online' => 'nullable|boolean',
             'machine_id' => 'nullable|integer',
             'enabled' => 'nullable|boolean',
         ]);
@@ -92,6 +93,9 @@ class ManageController extends Controller
 
         if (array_key_exists('show', $params)) {
             $server->show = (int) $params['show'];
+        }
+        if (array_key_exists('auto_online', $params)) {
+            $server->auto_online = (bool) $params['auto_online'];
         }
         if (array_key_exists('machine_id', $params)) {
             $server->machine_id = $params['machine_id'] ?: null;
@@ -226,6 +230,7 @@ class ManageController extends Controller
             'ids' => 'required|array',
             'ids.*' => 'integer',
             'show' => 'nullable|integer|in:0,1',
+            'auto_online' => 'nullable|boolean',
             'enabled' => 'nullable|boolean',
             'machine_id' => 'nullable|integer',
             'host' => 'sometimes|required|string',
@@ -242,6 +247,9 @@ class ManageController extends Controller
         $update = [];
         if (array_key_exists('show', $params) && $params['show'] !== null) {
             $update['show'] = (int) $params['show'];
+        }
+        if (array_key_exists('auto_online', $params) && $params['auto_online'] !== null) {
+            $update['auto_online'] = (bool) $params['auto_online'];
         }
         if (array_key_exists('enabled', $params) && $params['enabled'] !== null) {
             $update['enabled'] = (bool) $params['enabled'];
