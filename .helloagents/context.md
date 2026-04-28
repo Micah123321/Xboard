@@ -14,6 +14,7 @@
 - 前端容器会通过 `XBOARD_BACKEND_UPSTREAM` 把 `/api` 反向代理到后端 `web` 服务；compose 分支当前默认值为 `http://web:7001`
 - 前端容器会通过 `XBOARD_UPLOAD_UPSTREAM` 把 `/upload/*` 去掉 `/upload` 前缀后反向代理到图片上传服务，默认值为 `https://pic.535888.xyz`
 - GHCR 前端镜像发布工作流位于 `.github/workflows/admin-frontend-docker-publish.yml`，镜像名为 `ghcr.io/<owner>/xboard-admin-frontend`
+- 后端镜像发布工作流位于 `.github/workflows/docker-publish.yml`，使用 `paths-ignore` 排除 `admin-frontend/**`、`.helloagents/**` 与前端发布 workflow；仅这些路径变化时不触发后端镜像发布，混有后端相关文件时仍会触发
 - 管理端 API 通过 `window.settings.secure_path` 或 `VITE_ADMIN_PATH` 解析 `/api/v2/{secure_path}` 前缀
 - 登录接口复用 `/api/v2/passport/auth/login`
 - 工单回复链路当前以 `TicketService::reply()` 为统一真相源：管理员或用户再次回复已关闭工单时都会自动把工单状态改回开启，同时继续维护 `reply_status` 与 `last_reply_user_id`
@@ -115,7 +116,7 @@
 - 管理端当前业务路由包含 `/dashboard`、`/users`、`/tickets`、`/nodes`、`/node-groups`、`/node-routes`、`/subscriptions/plans`、`/subscriptions/orders`、`/subscriptions/coupons`、`/subscriptions/gift-cards`、`/system/config`、`/system/notices`、`/system/payments`、`/system/plugins`、`/system/themes` 与 `/system/knowledge`
 - `#/nodes` 当前已升级为真实节点工作台：支持搜索、在线 / 离线筛选、父/子节点筛选、墙状态筛选、分页浏览、显隐切换、自动上线托管开关、墙检测托管开关、刷新数据、复制、单节点置顶、仅对已勾选节点生效的批量修改 / 批量删除，以及 11 种协议的新增 / 编辑弹窗和排序对话框
 - 节点自动上线由后端 `sync:server-auto-online` 定时命令执行，只处理 `auto_online=1` 的节点：在线 / 待同步时自动 `show=1`，离线时自动 `show=0`；未开启自动上线的节点继续保持手动显隐控制；墙状态为 `blocked` 或仍处于 `gfw_auto_hidden` 且未恢复正常时会否决自动显示
-- 节点自动墙检测由后端 `sync:server-gfw-checks` 定时命令执行，只为开启 `gfw_check_enabled` 的父节点创建检测任务；子节点不独立检测，但可控制是否随父节点自动隐藏 / 恢复
+- 节点自动墙检测由后端 `sync:server-gfw-checks` 定时命令执行，只为开启 `gfw_check_enabled` 的父节点创建检测任务；父节点兼容 `parent_id IS NULL` 与历史 `parent_id=0` 两种表示，`gfw_check_enabled` 仅明确为 `false` 时关闭；子节点不独立检测，但可控制是否随父节点自动隐藏 / 恢复
 - Compose 部署必须确保 Laravel Scheduler 持续运行；`deploy/xboard-server/compose.yaml` 通过独立 `scheduler` 服务执行 `php artisan schedule:work`，否则自动墙检测只会在手动触发时创建任务
 - Bearer Token 存储于 `sessionStorage/localStorage`
 - `admin-frontend` 的视觉方向当前以 Apple 风格为基线，优先纯色分区、系统字体栈和低装饰成本

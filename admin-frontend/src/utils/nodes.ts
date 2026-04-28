@@ -300,5 +300,5 @@ export function countAutoOnlineNodes(nodes: AdminNodeItem[]): number {
 }
 
 export function countAutoGfwCheckNodes(nodes: AdminNodeItem[]): number {
-  return nodes.filter((node) => node.gfw_check_enabled !== false).length
+  return nodes.filter((node) => !node.parent_id && node.gfw_check_enabled !== false).length
 }

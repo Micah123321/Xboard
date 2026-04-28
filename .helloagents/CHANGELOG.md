@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## [0.6.10] - 2026-04-28
+
+### 修复
+- **[node-gfw-check]**: 修复 `parent_id=0` 的父节点在管理端显示已开启墙检测托管、但不会被自动墙检任务入队而长期显示“未检测”的问题；自动墙检现在同时兼容 `parent_id IS NULL` 与 `parent_id=0`，并把未明确关闭的 `gfw_check_enabled` 视为开启，管理端自动墙检统计也改为只统计父节点 — by yinjianm
+  - 方案: [202604281441_fix-admin-node-gfw-null-enabled](archive/2026-04/202604281441_fix-admin-node-gfw-null-enabled/)
+  - 决策: fix-admin-node-gfw-null-enabled#D001(自动墙检查询对齐项目父节点与启用语义)
+
+## [0.6.9] - 2026-04-28
+
+### 修复
+- **[ci-workflows]**: 修复仅修改 `admin-frontend/**` 且附带 `.helloagents/**` 知识库记录时仍误触发后端 Docker 发布的问题；后端 workflow 现在会忽略 `.helloagents/**`，但混有后端相关文件时仍会正常运行 — by yinjianm
+  - 方案: [202604281432_ci-ignore-helloagents-for-backend-docker](archive/2026-04/202604281432_ci-ignore-helloagents-for-backend-docker/)
+  - 决策: ci-ignore-helloagents-for-backend-docker#D001(后端 Docker workflow 忽略 HelloAGENTS 知识库路径)
+
 ## [0.6.8] - 2026-04-28
 
 ### 快速修改

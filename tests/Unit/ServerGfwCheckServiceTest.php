@@ -15,6 +15,10 @@ class ServerGfwCheckServiceTest extends TestCase
     public function test_start_automatic_checks_only_enqueues_enabled_parent_nodes_without_active_task(): void
     {
         $eligible = $this->makeServer(['name' => 'eligible-parent']);
+        $zeroParent = $this->makeServer([
+            'name' => 'zero-parent',
+            'parent_id' => 0,
+        ]);
         $active = $this->makeServer(['name' => 'active-parent']);
         $stale = $this->makeServer(['name' => 'stale-parent']);
         $this->makeServer([
@@ -41,13 +45,17 @@ class ServerGfwCheckServiceTest extends TestCase
 
         $result = app(ServerGfwCheckService::class)->startAutomaticChecks();
 
-        $this->assertSame(3, $result['total']);
+        $this->assertSame(4, $result['total']);
         $this->assertSame(1, $result['active']);
         $this->assertSame(1, $result['expired']);
-        $this->assertSame([$eligible->id, $stale->id], array_column($result['started'], 'id'));
+        $this->assertSame([$eligible->id, $zeroParent->id, $stale->id], array_column($result['started'], 'id'));
         $this->assertCount(1, $result['skipped']);
         $this->assertDatabaseHas('server_gfw_checks', [
             'server_id' => $eligible->id,
+            'status' => ServerGfwCheck::STATUS_PENDING,
+        ]);
+        $this->assertDatabaseHas('server_gfw_checks', [
+            'server_id' => $zeroParent->id,
             'status' => ServerGfwCheck::STATUS_PENDING,
         ]);
         $this->assertDatabaseHas('server_gfw_checks', [

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Server;
 use App\Models\ServerGfwCheck;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 class ServerGfwCheckService
@@ -76,9 +77,7 @@ class ServerGfwCheckService
 
     public function startAutomaticChecks(?int $limit = null): array
     {
-        $query = Server::query()
-            ->whereNull('parent_id')
-            ->where('gfw_check_enabled', true)
+        $query = $this->whereGfwCheckEnabled($this->parentNodeQuery())
             ->orderBy('sort', 'ASC')
             ->orderBy('id', 'ASC');
 
@@ -158,8 +157,7 @@ class ServerGfwCheckService
             return [];
         }
 
-        $enabledSourceIds = Server::whereIn('id', $sourceIds)
-            ->where('gfw_check_enabled', true)
+        $enabledSourceIds = $this->whereGfwCheckEnabled(Server::whereIn('id', $sourceIds))
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->values();
@@ -400,6 +398,23 @@ class ServerGfwCheckService
     private function isGfwCheckEnabled(Server $server): bool
     {
         return (bool) ($server->gfw_check_enabled ?? true);
+    }
+
+    private function parentNodeQuery(): Builder
+    {
+        return Server::query()
+            ->where(function (Builder $query): void {
+                $query->whereNull('parent_id')
+                    ->orWhere('parent_id', 0);
+            });
+    }
+
+    private function whereGfwCheckEnabled(Builder $query): Builder
+    {
+        return $query->where(function (Builder $query): void {
+            $query->where('gfw_check_enabled', true)
+                ->orWhereNull('gfw_check_enabled');
+        });
     }
 
     private function determineStatus(?array $operators, string $reportedStatus, string $errorMessage): string

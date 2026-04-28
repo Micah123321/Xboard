@@ -5,6 +5,7 @@ on:
     branches: ["master", "new-dev"]
     paths-ignore:
       - "admin-frontend/**"
+      - ".helloagents/**"
       - ".github/workflows/admin-frontend-docker-publish.yml"
   workflow_dispatch:
 
