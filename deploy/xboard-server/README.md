@@ -59,16 +59,18 @@ docker compose exec -T web php artisan xboard:update
 docker compose up -d
 ```
 
-更新镜像但不自动迁移数据库：
+更新镜像并执行项目更新流程：
 
 ```sh
 sh ./scripts/update.sh
 ```
 
-更新镜像并显式执行数据库迁移：
+该脚本在交互终端中的等价命令：
 
 ```sh
-sh ./scripts/update.sh --migrate
+docker compose pull
+docker compose run -it --rm web php artisan xboard:update
+docker compose up -d
 ```
 
 查看服务状态：

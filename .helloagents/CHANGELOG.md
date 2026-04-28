@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.6.7] - 2026-04-28
+
+### 快速修改
+- **[deploy]**: 调整 `deploy/xboard-server` 更新脚本，改为拉取镜像后通过一次性 `web` 容器执行 `php artisan xboard:update`，再重新 `up -d` 拉起服务；README 同步更新后续升级命令 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: deploy/xboard-server/scripts/update.sh, deploy/xboard-server/README.md
+
 ## [0.6.6] - 2026-04-28
 
 ### 新增

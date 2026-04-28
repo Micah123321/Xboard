@@ -15,7 +15,7 @@
 - `.env.example` 同时覆盖 Docker Compose 变量和 Laravel 运行变量，但不得包含真实 `APP_KEY`、数据库密码、邮箱密码或真实业务域名
 - `scripts/init.sh` 只创建挂载目录并在 `.env` 不存在时复制模板，不执行数据库迁移
 - `scripts/deploy.sh` 只负责初始化、拉取镜像和启动服务，不自动执行生产数据库迁移
-- `scripts/update.sh --migrate` 才会显式执行 `php artisan migrate --force`
+- `scripts/update.sh` 执行 `docker compose pull`、`docker compose run -it --rm web php artisan xboard:update`、`docker compose up -d`；非交互终端会自动去掉 `-it`
 - `scripts/status.sh` 输出 compose 状态、scheduler 日志、`schedule:list` 结果和手动墙检测同步命令
 
 ## 依赖关系

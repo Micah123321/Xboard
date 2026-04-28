@@ -3,21 +3,16 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
-run_migrate=false
-
 for arg in "$@"; do
   case "$arg" in
-    --migrate)
-      run_migrate=true
-      ;;
     -h|--help)
-      echo "Usage: sh ./scripts/update.sh [--migrate]"
-      echo "  --migrate  Run 'php artisan migrate --force' after containers are updated."
+      echo "Usage: sh ./scripts/update.sh"
+      echo "Runs: docker compose pull && docker compose run -it --rm web php artisan xboard:update && docker compose up -d"
       exit 0
       ;;
     *)
       echo "Unknown option: $arg"
-      echo "Usage: sh ./scripts/update.sh [--migrate]"
+      echo "Usage: sh ./scripts/update.sh"
       exit 1
       ;;
   esac
@@ -34,12 +29,17 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 docker compose pull
-docker compose up -d
 
-if [ "$run_migrate" = "true" ]; then
-  docker compose exec -T web php artisan migrate --force
-else
-  echo "Migration skipped. Re-run with --migrate when the release requires database migrations."
+run_tty_args="-it"
+if [ ! -t 0 ] || [ ! -t 1 ]; then
+  run_tty_args=""
 fi
 
+if [ -n "$run_tty_args" ]; then
+  docker compose run -it --rm web php artisan xboard:update
+else
+  docker compose run --rm web php artisan xboard:update
+fi
+
+docker compose up -d
 docker compose ps

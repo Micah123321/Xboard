@@ -1,0 +1,71 @@
+services:
+  web:
+    image: ${XBOARD_IMAGE:-ghcr.io/micah123321/xboard:new}
+    restart: on-failure
+    depends_on:
+      - redis
+    command: php artisan octane:start --host=0.0.0.0 --port=7001
+    environment:
+      docker: "true"
+    ports:
+      - "${WEB_PORT:-7001}:7001"
+    volumes: &xboard-volumes
+      - redis-data:/data
+      - ./.env:/www/.env
+      - ./.docker/.data/:/www/.docker/.data
+      - ./storage/logs:/www/storage/logs
+      - ./storage/theme:/www/storage/theme
+      - ./plugins:/www/plugins
+
+  horizon:
+    image: ${XBOARD_IMAGE:-ghcr.io/micah123321/xboard:new}
+    restart: on-failure
+    depends_on:
+      - redis
+    command: php artisan horizon
+    environment:
+      docker: "true"
+    volumes: *xboard-volumes
+
+  scheduler:
+    image: ${XBOARD_IMAGE:-ghcr.io/micah123321/xboard:new}
+    restart: unless-stopped
+    depends_on:
+      - redis
+    command: php artisan schedule:work
+    environment:
+      docker: "true"
+    volumes: *xboard-volumes
+
+  admin:
+    image: ${XBOARD_ADMIN_IMAGE:-ghcr.io/micah123321/xboard-admin-frontend:new}
+    restart: unless-stopped
+    depends_on:
+      - web
+    environment:
+      XBOARD_BACKEND_UPSTREAM: ${XBOARD_BACKEND_UPSTREAM:-http://web:7001}
+      XBOARD_UPLOAD_UPSTREAM: ${XBOARD_UPLOAD_UPSTREAM:-https://pic.535888.xyz}
+    ports:
+      - "${ADMIN_PORT:-7002}:80"
+
+  ws-server:
+    image: ${XBOARD_IMAGE:-ghcr.io/micah123321/xboard:new}
+    restart: on-failure
+    depends_on:
+      - redis
+    command: php artisan ws-server start
+    environment:
+      docker: "true"
+    ports:
+      - "${WS_PORT:-8076}:8076"
+    volumes: *xboard-volumes
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:8-alpine}
+    restart: unless-stopped
+    command: redis-server --unixsocket /data/redis.sock --unixsocketperm 777 --save 900 1 --save 300 10 --save 60 10000
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
