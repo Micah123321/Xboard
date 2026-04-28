@@ -7,6 +7,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202604281921 | node-traffic-limit-enforcement | implementation | node-traffic-limit,admin-frontend,mi-node | node-traffic-limit-enforcement#D001,#D002 | ✅完成 |
 | 202604281625 | admin-frontend-node-traffic-hover | - | - | - | ✅完成 |
 | 202604281632 | admin-frontend-node-auto-online-immediate-sync | - | - | - | ✅完成 |
 | 202604281441 | fix-admin-node-gfw-null-enabled | implementation | node-gfw-check,admin-frontend | fix-admin-node-gfw-null-enabled#D001 | ✅完成 |
@@ -46,6 +47,7 @@
 ## 按月归档
 
 ### 2026-04
+- [202604281921_node-traffic-limit-enforcement](./2026-04/202604281921_node-traffic-limit-enforcement/) - 新增节点月流量限额强制下线能力，Xboard 负责配置、重置调度和状态展示，mi-node 负责本地额度累计、内核停止与重置恢复
 - [202604281441_fix-admin-node-gfw-null-enabled](./2026-04/202604281441_fix-admin-node-gfw-null-enabled/) - 修复 `parent_id=0` 父节点不会被自动墙检入队导致长期显示“未检测”的问题，并让自动墙检查询对齐项目父节点与启用语义
 - [202604281303_xboard-reusable-server-deploy](./2026-04/202604281303_xboard-reusable-server-deploy/) - 新增可复制到服务器的 Xboard Compose 部署模板，补齐独立 `scheduler` 服务，并提供 `.env.example`、初始化/部署/更新/状态检查脚本和部署说明
 - [202604281258_fix-send-email-job-timeout](./2026-04/202604281258_fix-send-email-job-timeout/) - 修复 `SendEmailJob` 10 秒超时导致 `send_email` 队列批量失败的问题，补齐邮件 job 超时/backoff、SMTP transport timeout、运行时 mailer 刷新和 MailLog 配置脱敏

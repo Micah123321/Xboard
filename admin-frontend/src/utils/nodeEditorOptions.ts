@@ -21,6 +21,11 @@ export interface NodeFormModel {
   name: string
   code: string
   rate: number
+  trafficLimitEnabled: boolean
+  trafficLimitGb: number | null
+  trafficLimitResetDay: number | null
+  trafficLimitResetTime: string
+  trafficLimitTimezone: string
   rateTimeEnable: boolean
   rateTimeRanges: NodeRateRangeForm[]
   tags: string[]
@@ -233,6 +238,11 @@ export function createEmptyNodeForm(): NodeFormModel {
     name: '',
     code: '',
     rate: 1,
+    trafficLimitEnabled: false,
+    trafficLimitGb: null,
+    trafficLimitResetDay: 1,
+    trafficLimitResetTime: '00:00',
+    trafficLimitTimezone: 'Asia/Shanghai',
     rateTimeEnable: false,
     rateTimeRanges: [createRateRange()],
     tags: [],
@@ -397,6 +407,17 @@ export function validateNodeForm(form: NodeFormModel): string | null {
     const validRanges = form.rateTimeRanges.filter((item) => item.start.trim() && item.end.trim() && Number(item.rate) > 0)
     if (validRanges.length === 0) {
       return '请至少填写一条有效的动态倍率规则'
+    }
+  }
+  if (form.trafficLimitEnabled) {
+    if (!Number.isFinite(Number(form.trafficLimitGb)) || Number(form.trafficLimitGb) <= 0) {
+      return '请输入大于 0 的月流量额度'
+    }
+    if (!Number.isInteger(Number(form.trafficLimitResetDay)) || Number(form.trafficLimitResetDay) < 1 || Number(form.trafficLimitResetDay) > 31) {
+      return '重置日期需为 1-31'
+    }
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(form.trafficLimitResetTime)) {
+      return '重置时间格式需为 HH:mm'
     }
   }
   if (form.type === 'shadowsocks' && !form.shadowsocksCipher.trim()) {

@@ -241,9 +241,14 @@ class ServerService
             'api' => $metrics['api'] ?? [],
             'ws' => $metrics['ws'] ?? [],
             'limits' => $metrics['limits'] ?? [],
+            'traffic_limit' => $metrics['traffic_limit'] ?? null,
             'updated_at' => now()->timestamp,
             'kernel_status' => (bool) ($metrics['kernel_status'] ?? false),
         ];
+
+        if (isset($metrics['traffic_limit']) && is_array($metrics['traffic_limit'])) {
+            app(ServerTrafficLimitService::class)->applyRuntimeMetrics($node, $metrics['traffic_limit']);
+        }
 
         Cache::put(
             CacheKey::get('SERVER_' . $nodeType . '_METRICS', $nodeId),
@@ -396,6 +401,8 @@ class ServerService
                 $response['cert_config'] = $certConfig;
             }
         }
+
+        $response['traffic_limit'] = app(ServerTrafficLimitService::class)->buildNodeConfig($node);
 
         return $response;
     }

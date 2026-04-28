@@ -47,6 +47,7 @@ import {
   getNodeGroupNames,
   getNodeIdLabel,
   getNodeStatusMeta,
+  getNodeTrafficLimitDetail,
   getNodeTrafficDetails,
   getNodeTypeLabel,
   type NodeRelationFilter,
@@ -921,11 +922,35 @@ watch(
                       <span>下行 {{ traffic.download }}</span>
                     </div>
                   </article>
+                  <article
+                    v-if="getNodeTrafficLimitDetail(row).enabled"
+                    class="node-traffic-row node-traffic-row--limit"
+                  >
+                    <div class="node-traffic-row__summary">
+                      <span>月额度</span>
+                      <strong>{{ getNodeTrafficLimitDetail(row).used }} / {{ getNodeTrafficLimitDetail(row).limit }}</strong>
+                    </div>
+                    <div class="node-traffic-limit-bar">
+                      <span :style="{ width: `${getNodeTrafficLimitDetail(row).percent}%` }" />
+                    </div>
+                    <div class="node-traffic-row__split">
+                      <span>{{ getNodeTrafficLimitDetail(row).statusLabel }}</span>
+                      <span>{{ getNodeTrafficLimitDetail(row).nextReset }}</span>
+                    </div>
+                  </article>
                 </div>
               </ElPopover>
               <div class="node-cell__sub">
                 <ElTag round effect="plain" :type="getNodeStatusMeta(row).tagType">
                   {{ getNodeStatusMeta(row).label }}
+                </ElTag>
+                <ElTag
+                  v-if="getNodeTrafficLimitDetail(row).enabled"
+                  round
+                  effect="plain"
+                  :type="getNodeTrafficLimitDetail(row).tagType"
+                >
+                  {{ getNodeTrafficLimitDetail(row).statusLabel }}
                 </ElTag>
                 <ElTag
                   v-if="row.auto_online"
@@ -1436,6 +1461,25 @@ watch(
 
 :global(.node-traffic-row__split span) {
   font-variant-numeric: tabular-nums;
+}
+
+:global(.node-traffic-row--limit) {
+  background: #fff7ed;
+}
+
+:global(.node-traffic-limit-bar) {
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+:global(.node-traffic-limit-bar span) {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #f97316;
 }
 
 @media (max-width: 1180px) {

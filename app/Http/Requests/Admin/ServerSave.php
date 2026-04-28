@@ -141,6 +141,10 @@ class ServerSave extends FormRequest
             'rate_time_ranges.*.rate' => 'required_with:rate_time_ranges|numeric|min:0',
             'protocol_settings' => 'array',
             'transfer_enable' => 'nullable|integer|min:0',
+            'traffic_limit_enabled' => 'nullable|boolean',
+            'traffic_limit_reset_day' => 'nullable|integer|min:1|max:31',
+            'traffic_limit_reset_time' => 'nullable|string|date_format:H:i',
+            'traffic_limit_timezone' => 'nullable|string|max:64',
         ];
     }
 
@@ -304,6 +308,11 @@ class ServerSave extends FormRequest
             'protocol_settings.*.in' => ':attribute 的值不合法',
             'transfer_enable.integer' => '流量上限必须是整数',
             'transfer_enable.min' => '流量上限不能小于0',
+            'traffic_limit_reset_day.integer' => '重置日期必须是整数',
+            'traffic_limit_reset_day.min' => '重置日期不能小于1',
+            'traffic_limit_reset_day.max' => '重置日期不能大于31',
+            'traffic_limit_reset_time.date_format' => '重置时间格式必须为HH:mm',
+            'traffic_limit_timezone.max' => '重置时区长度不能超过64个字符',
         ];
     }
 }

@@ -11,6 +11,7 @@ use App\Models\StatServer;
 use App\Services\ServerAutoOnlineService;
 use App\Services\ServerGfwCheckService;
 use App\Services\ServerService;
+use App\Services\ServerTrafficLimitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -134,6 +135,7 @@ class ManageController extends Controller
                     $params['gfw_auto_action_at'] = null;
                 }
                 $server->update($params);
+                app(ServerTrafficLimitService::class)->refreshSchedule($server->refresh());
                 $this->syncAutoOnlineIfEnabled($server);
                 return $this->success(true);
             } catch (\Exception $e) {
@@ -144,6 +146,7 @@ class ManageController extends Controller
 
         try {
             $server = Server::create($params);
+            app(ServerTrafficLimitService::class)->refreshSchedule($server->refresh());
             $this->syncAutoOnlineIfEnabled($server);
             return $this->success(true);
         } catch (\Exception $e) {
@@ -262,10 +265,8 @@ class ManageController extends Controller
         }
 
         try {
-            $server->u = 0;
-            $server->d = 0;
-            $server->save();
-            
+            app(ServerTrafficLimitService::class)->resetServer($server);
+
             Log::info("Server {$server->id} ({$server->name}) traffic reset by admin");
             return $this->success(true);
         } catch (\Exception $e) {
@@ -292,10 +293,10 @@ class ManageController extends Controller
         }
 
         try {
-            Server::whereIn('id', $ids)->update([
-                'u' => 0,
-                'd' => 0,
-            ]);
+            $service = app(ServerTrafficLimitService::class);
+            Server::whereIn('id', $ids)
+                ->get()
+                ->each(fn (Server $server) => $service->resetServer($server));
             
             Log::info("Servers " . implode(',', $ids) . " traffic reset by admin");
             return $this->success(true);

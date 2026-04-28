@@ -1,0 +1,10 @@
+{
+  "status": "completed",
+  "completed": 11,
+  "failed": 0,
+  "pending": 0,
+  "total": 11,
+  "percent": 100,
+  "current": "验收完成，准备归档",
+  "updated_at": "2026-04-28 20:37:00"
+}

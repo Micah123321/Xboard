@@ -859,6 +859,16 @@ export interface AdminNodeMetrics {
   active_connections?: number
   active_users?: number
   kernel_status?: boolean
+  traffic_limit?: {
+    enabled?: boolean
+    limit?: number
+    used?: number
+    suspended?: boolean
+    last_reset_at?: number
+    next_reset_at?: number
+    suspended_at?: number
+    status?: string
+  } | null
   updated_at?: number
 }
 
@@ -890,6 +900,14 @@ export interface AdminNodeItem {
   gfw_check_enabled?: boolean
   gfw_auto_hidden?: boolean
   gfw_auto_action_at?: number | null
+  traffic_limit_enabled?: boolean
+  traffic_limit_reset_day?: number | null
+  traffic_limit_reset_time?: string | null
+  traffic_limit_timezone?: string | null
+  traffic_limit_status?: string | null
+  traffic_limit_last_reset_at?: number | null
+  traffic_limit_next_reset_at?: number | null
+  traffic_limit_suspended_at?: number | null
   enabled?: boolean
   parent_id?: number | null
   rate?: number | null
@@ -988,6 +1006,11 @@ export interface AdminNodeSavePayload {
   show?: boolean | number
   auto_online?: boolean
   gfw_check_enabled?: boolean
+  transfer_enable?: number | null
+  traffic_limit_enabled?: boolean
+  traffic_limit_reset_day?: number | null
+  traffic_limit_reset_time?: string | null
+  traffic_limit_timezone?: string | null
 }
 
 declare global {

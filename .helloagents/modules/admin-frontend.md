@@ -47,6 +47,8 @@
 - 节点管理页现支持“墙检测托管”开关、批量设置和刷新数据按钮；父节点开启后参与 `sync:server-gfw-checks` 自动检测，自动墙检统计只计算父节点；子节点不独立检测但可控制是否随父节点自动隐藏 / 恢复
 - 节点行级菜单现已补齐“置顶节点”，会复用当前排序结果生成新的顺序 payload 并提交到 `server/manage/sort`
 - 节点列表中鼠标悬停节点名称会显示节点流量详情卡；`server/manage/getNodes` 会返回 `traffic_stats.today/month/total`，三组数据均来自 `v2_stat_server` 按节点聚合，前端统一按 B/KB/MB/GB/TB 自适应格式化展示上行、下行和合计
+- 节点新增 / 编辑弹窗现支持月流量限额配置，字段包含启用开关、月流量额度 GB、重置日期、重置时间和时区；保存时会把 GB 转为字节写入 `transfer_enable`，并提交 `traffic_limit_*` 字段
+- 节点流量详情卡会在启用限额时追加“月额度”进度、限额状态和下次重置时间，节点标签区同步显示正常 / 接近额度 / 已限额状态；搜索关键字可匹配“流量限额 / 月流量 / 超额下线”
 - 权限组管理页使用真实后端 `server/group/fetch`、`server/group/save` 与 `server/group/drop`，支持关键字搜索、新增/编辑中央弹窗、删除确认，以及从节点数量列跳转到 `#/nodes?group={id}` 的筛选联动
 - 路由管理页使用真实后端 `server/route/fetch`、`server/route/save` 与 `server/route/drop`，支持路由列表、关键词搜索、新增/编辑中央弹窗、删除与动作值展示
 - 路由管理页的节点引用摘要由 `server/manage/getNodes` 返回的 `route_ids` 推导，不在前端伪造额外接口
@@ -100,7 +102,7 @@
 - 依赖 `src/utils/notices.ts` 负责公告表单转换、内容摘要、排序与显示字段归一化
 - 依赖 `src/utils/systemConfig.ts` 负责系统配置字段元信息、默认值、回填与保存序列化
 - 依赖 `src/utils/routes.ts` 负责路由动作映射、匹配规则序列化、节点引用摘要与搜索过滤
-- 依赖 `src/utils/nodes.ts` 负责节点在线状态、自动上线统计、父/子节点、墙状态 meta、搜索文本和筛选逻辑
+- 依赖 `src/utils/nodes.ts` 负责节点在线状态、自动上线统计、父/子节点、墙状态 meta、节点限额展示、搜索文本和筛选逻辑
 - 依赖 `src/views/tickets/useTicketReplyImages.ts` 收敛工单回复区图片点击上传、拖拽上传、粘贴上传、文件校验和 Markdown 插入
 - 依赖 Laravel 后端 `TicketService::reply()` 提供工单“再次回复自动重开”的统一业务语义
 - 依赖 Laravel 注入的 `window.settings`

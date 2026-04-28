@@ -28,6 +28,18 @@ function toNullableNumber(value: unknown): number | null {
   return Number.isFinite(normalized) ? normalized : null
 }
 
+function bytesToGigabytes(value: unknown): number | null {
+  const normalized = Number(value)
+  if (!Number.isFinite(normalized) || normalized <= 0) return null
+  return Number((normalized / 1073741824).toFixed(2))
+}
+
+function gigabytesToBytes(value: unknown): number {
+  const normalized = Number(value)
+  if (!Number.isFinite(normalized) || normalized <= 0) return 0
+  return Math.round(normalized * 1073741824)
+}
+
 function toBooleanValue(value: unknown, fallback = false): boolean {
   if (typeof value === 'boolean') return value
   if (typeof value === 'number') return value !== 0
@@ -151,6 +163,11 @@ export function toNodeFormModel(node?: AdminNodeItem | null): NodeFormModel {
   form.name = toStringValue(node.name)
   form.code = toStringValue(node.code)
   form.rate = toNumberValue(node.rate, 1)
+  form.trafficLimitEnabled = toBooleanValue(node.traffic_limit_enabled)
+  form.trafficLimitGb = bytesToGigabytes(node.transfer_enable)
+  form.trafficLimitResetDay = toNullableNumber(node.traffic_limit_reset_day) ?? 1
+  form.trafficLimitResetTime = toStringValue(node.traffic_limit_reset_time || '00:00')
+  form.trafficLimitTimezone = toStringValue(node.traffic_limit_timezone || 'Asia/Shanghai')
   form.rateTimeEnable = toBooleanValue(node.rate_time_enable)
   form.rateTimeRanges = Array.isArray(node.rate_time_ranges) && node.rate_time_ranges.length > 0
     ? node.rate_time_ranges.map((item, index) => ({
@@ -495,5 +512,10 @@ export function toNodeSavePayload(form: NodeFormModel): AdminNodeSavePayload {
     show: form.show ? 1 : 0,
     auto_online: form.autoOnline,
     gfw_check_enabled: form.gfwCheckEnabled,
+    transfer_enable: form.trafficLimitEnabled ? gigabytesToBytes(form.trafficLimitGb) : 0,
+    traffic_limit_enabled: form.trafficLimitEnabled,
+    traffic_limit_reset_day: form.trafficLimitEnabled ? form.trafficLimitResetDay : null,
+    traffic_limit_reset_time: form.trafficLimitEnabled ? form.trafficLimitResetTime : null,
+    traffic_limit_timezone: form.trafficLimitEnabled ? form.trafficLimitTimezone.trim() || undefined : undefined,
   }
 }

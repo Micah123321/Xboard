@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.6.18] - 2026-04-28
+
+### 新增
+- **[node-traffic-limit]**: 新增节点月流量限额强制下线能力；Xboard 可为单节点配置月额度、重置日、重置时间和时区，下发 `traffic_limit` 给 mi-node，并在手动/定时重置和 metrics 回传时同步限额状态；管理端节点编辑与流量浮层同步展示限额配置、用量、状态和下次重置 — by yinjianm
+  - 方案: [202604281921_node-traffic-limit-enforcement](archive/2026-04/202604281921_node-traffic-limit-enforcement/)
+  - 决策: node-traffic-limit-enforcement#D001(由 mi-node 本地强制节点下线), node-traffic-limit-enforcement#D002(复用 `transfer_enable` 作为节点月额度)
+
 ## [0.6.17] - 2026-04-28
 
 ### 快速修改

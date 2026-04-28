@@ -46,6 +46,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('cleanup:online-status')->everyFiveMinutes()->onOneServer();
         $schedule->command('sync:server-auto-online')->everyFiveMinutes()->onOneServer()->withoutOverlapping(5);
         $schedule->command('sync:server-gfw-checks')->everyThirtyMinutes()->onOneServer()->withoutOverlapping(30);
+        $schedule->command('sync:server-traffic-limits')->everyMinute()->onOneServer()->withoutOverlapping(10);
         // backup Timing
         // if (env('ENABLE_AUTO_BACKUP_AND_UPDATE', false)) {
         //     $schedule->command('backup:database', ['true'])->daily()->onOneServer();

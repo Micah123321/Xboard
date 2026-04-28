@@ -29,6 +29,16 @@ export interface NodeTrafficDetail {
   total: string
 }
 
+export interface NodeTrafficLimitDetail {
+  enabled: boolean
+  used: string
+  limit: string
+  percent: number
+  statusLabel: string
+  tagType: 'success' | 'warning' | 'danger' | 'info'
+  nextReset: string
+}
+
 type TrafficAmountLike = {
   upload?: number | string | null
   download?: number | string | null
@@ -261,6 +271,50 @@ export function getNodeTrafficDetails(node: AdminNodeItem): NodeTrafficDetail[] 
   })
 }
 
+export function getNodeTrafficLimitDetail(node: AdminNodeItem): NodeTrafficLimitDetail {
+  const limit = normalizeTrafficValue(node.transfer_enable)
+  const metrics = node.metrics?.traffic_limit
+  const used = normalizeTrafficValue(metrics?.used) || normalizeTrafficValue(node.u) + normalizeTrafficValue(node.d)
+  const suspended = Boolean(metrics?.suspended) || node.traffic_limit_status === 'suspended'
+  const nextResetAt = normalizeTrafficValue(metrics?.next_reset_at) || normalizeTrafficValue(node.traffic_limit_next_reset_at)
+  const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0
+
+  let statusLabel = '未启用'
+  let tagType: NodeTrafficLimitDetail['tagType'] = 'info'
+  if (Boolean(node.traffic_limit_enabled) && limit > 0) {
+    if (suspended) {
+      statusLabel = '已限额'
+      tagType = 'danger'
+    } else if (percent >= 90) {
+      statusLabel = '接近额度'
+      tagType = 'warning'
+    } else {
+      statusLabel = '正常'
+      tagType = 'success'
+    }
+  }
+
+  return {
+    enabled: Boolean(node.traffic_limit_enabled) && limit > 0,
+    used: formatTrafficBytes(used),
+    limit: formatTrafficBytes(limit),
+    percent,
+    statusLabel,
+    tagType,
+    nextReset: formatTimestamp(nextResetAt),
+  }
+}
+
+function formatTimestamp(value: number): string {
+  if (!value) return '未设置'
+  return new Date(value * 1000).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 export function getNodeGroupNames(node: AdminNodeItem): string[] {
   return (node.groups ?? [])
     .map((group) => group.name)
@@ -285,6 +339,8 @@ function buildNodeSearchText(node: AdminNodeItem): string {
     node.server_port,
     getNodeTypeLabel(node.type),
     node.auto_online ? '自动上线 自动托管 auto online' : '',
+    node.traffic_limit_enabled ? '流量限额 月流量 超额下线 traffic limit quota' : '',
+    node.traffic_limit_status === 'suspended' ? '限额下线 已限额 suspended quota exceeded' : '',
     node.gfw_check_enabled === false ? '关闭墙检测 关闭自动墙检 gfw disabled' : '自动墙检 墙检测托管 gfw enabled',
     node.gfw_auto_hidden ? '自动隐藏 墙检测隐藏 疑似被墙已隐藏 gfw auto hidden' : '',
     getNodeGfwMeta(node).searchText,

@@ -26,6 +26,13 @@ class ServerObserver
             'custom_outbounds',
             'custom_routes',
             'cert_config',
+            'transfer_enable',
+            'traffic_limit_enabled',
+            'traffic_limit_reset_day',
+            'traffic_limit_reset_time',
+            'traffic_limit_timezone',
+            'traffic_limit_last_reset_at',
+            'traffic_limit_next_reset_at',
         ])) {
             NodeSyncService::notifyConfigUpdated($server->id);
         }

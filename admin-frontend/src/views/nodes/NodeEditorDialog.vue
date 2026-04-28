@@ -357,6 +357,68 @@ watch(
           </div>
         </section>
 
+        <section class="form-section">
+          <div class="section-head">
+            <div>
+              <h3>流量限额</h3>
+              <p>按节点月流量控制 mi-node 内核下线与恢复。</p>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <ElFormItem label="启用限额" class="form-grid--full">
+              <div class="switch-row">
+                <div>
+                  <strong>月流量限额</strong>
+                  <span>达到额度后节点内核停止，重置后恢复。</span>
+                </div>
+                <ElSwitch v-model="form.trafficLimitEnabled" />
+              </div>
+            </ElFormItem>
+
+            <ElFormItem label="月流量额度（GB）">
+              <ElInputNumber
+                v-model="form.trafficLimitGb"
+                :min="1"
+                :step="10"
+                :precision="2"
+                :controls="false"
+                :disabled="!form.trafficLimitEnabled"
+                class="full-width"
+              />
+            </ElFormItem>
+            <ElFormItem label="重置日期">
+              <ElInputNumber
+                v-model="form.trafficLimitResetDay"
+                :min="1"
+                :max="31"
+                :step="1"
+                :precision="0"
+                :controls="false"
+                :disabled="!form.trafficLimitEnabled"
+                class="full-width"
+              />
+            </ElFormItem>
+            <ElFormItem label="重置时间">
+              <ElTimePicker
+                v-model="form.trafficLimitResetTime"
+                value-format="HH:mm"
+                format="HH:mm"
+                placeholder="00:00"
+                :disabled="!form.trafficLimitEnabled"
+                class="full-width"
+              />
+            </ElFormItem>
+            <ElFormItem label="时区">
+              <ElInput
+                v-model="form.trafficLimitTimezone"
+                placeholder="Asia/Shanghai"
+                :disabled="!form.trafficLimitEnabled"
+              />
+            </ElFormItem>
+          </div>
+        </section>
+
         <section v-if="form.rateTimeEnable" class="form-section">
           <div class="section-head">
             <div>

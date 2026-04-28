@@ -28,6 +28,14 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property boolean $gfw_check_enabled 是否自动检测墙状态并同步显示
  * @property boolean $gfw_auto_hidden 是否由墙状态自动隐藏
  * @property int|null $gfw_auto_action_at 最近墙状态自动显隐时间
+ * @property boolean $traffic_limit_enabled 是否启用节点流量限额强制下线
+ * @property int|null $traffic_limit_reset_day 节点流量每月重置日
+ * @property string|null $traffic_limit_reset_time 节点流量重置时间
+ * @property string|null $traffic_limit_timezone 节点流量重置时区
+ * @property string|null $traffic_limit_status 节点流量限额运行状态
+ * @property int|null $traffic_limit_last_reset_at 节点流量最近重置时间
+ * @property int|null $traffic_limit_next_reset_at 节点流量下次重置时间
+ * @property int|null $traffic_limit_suspended_at 节点流量限额下线时间
  * @property string|null $allow_insecure 是否允许不安全
  * @property string|null $network 网络类型
  * @property int|null $parent_id 父节点ID
@@ -78,6 +86,8 @@ class Server extends Model
     public const STATUS_OFFLINE = 0;
     public const STATUS_ONLINE_NO_PUSH = 1;
     public const STATUS_ONLINE = 2;
+    public const TRAFFIC_LIMIT_STATUS_NORMAL = 'normal';
+    public const TRAFFIC_LIMIT_STATUS_SUSPENDED = 'suspended';
 
     public const CHECK_INTERVAL = 300; // 5 minutes in seconds
 
@@ -133,6 +143,11 @@ class Server extends Model
         'gfw_check_enabled' => 'boolean',
         'gfw_auto_hidden' => 'boolean',
         'gfw_auto_action_at' => 'integer',
+        'traffic_limit_enabled' => 'boolean',
+        'traffic_limit_reset_day' => 'integer',
+        'traffic_limit_last_reset_at' => 'integer',
+        'traffic_limit_next_reset_at' => 'integer',
+        'traffic_limit_suspended_at' => 'integer',
         'enabled' => 'boolean',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
