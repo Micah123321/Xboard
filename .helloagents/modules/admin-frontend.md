@@ -41,11 +41,12 @@
 - 节点新增 / 编辑 / 批量修改保存 `group_ids / route_ids` 时统一向后端提交字符串 ID，后端 `Server::whereGroupId()` 同时兼容历史字符串与数字 JSON 值，避免权限组保存后订阅侧无法命中节点
 - TUIC 表单默认以 V5 / V4 版本选择、`h3 / h2 / http/1.1` ALPN 选项和 `native / quic` UDP Relay Mode 对齐后端协议模板；AnyTLS Padding Scheme 默认值与 `Server` 模型完整模板保持一致
 - 节点排序采用本地草稿 + 上移 / 下移模式，保存时向 `server/manage/sort` 提交 `{ id, order }[]` 顺序 payload
-- 节点列表现支持本地分页、在线 / 离线筛选、父/子节点筛选，以及跨分页稳定勾选；批量修改 / 批量删除仅作用于已勾选节点，其中批量修改可统一更新 `host / group_ids / rate / auto_online`
-- 节点管理页新增“自动上线”托管开关；开启后后台 `sync:server-auto-online` 会按节点在线状态自动同步 `show`，在线 / 待同步时显示、离线时隐藏，未开启的节点仍保持手动显隐控制；疑似被墙或仍处于墙检测自动隐藏状态的节点不会被自动上线重新发布
+- 节点列表现支持本地分页、在线 / 离线筛选、显隐筛选、父/子节点筛选，以及跨分页稳定勾选；批量修改 / 批量删除仅作用于已勾选节点，其中批量修改可统一更新 `host / group_ids / rate / auto_online`
+- 节点管理页新增“自动上线”托管开关；开启后后台会按节点在线状态自动同步 `show`，在线 / 待同步时显示、离线时隐藏，未开启的节点仍保持手动显隐控制；管理端保存 / 开启自动上线、REST 心跳和 WebSocket 状态上报会触发当前节点即时同步，`sync:server-auto-online` 继续作为定时兜底；疑似被墙或仍处于墙检测自动隐藏状态的节点不会被自动上线重新发布
 - 节点管理页现支持墙状态展示、墙状态筛选与关键词搜索；父节点可通过行级或批量操作发起检测，子节点不单独检测并显示“随父节点”的继承状态
 - 节点管理页现支持“墙检测托管”开关、批量设置和刷新数据按钮；父节点开启后参与 `sync:server-gfw-checks` 自动检测，自动墙检统计只计算父节点；子节点不独立检测但可控制是否随父节点自动隐藏 / 恢复
 - 节点行级菜单现已补齐“置顶节点”，会复用当前排序结果生成新的顺序 payload 并提交到 `server/manage/sort`
+- 节点列表中鼠标悬停节点名称会显示节点流量详情卡；`server/manage/getNodes` 会返回 `traffic_stats.today/month/total`，其中今日和本月来自 `v2_stat_server` 按节点聚合，累计来自 `v2_server.u/d`，前端统一按 B/KB/MB/GB/TB 自适应格式化展示上行、下行和合计
 - 权限组管理页使用真实后端 `server/group/fetch`、`server/group/save` 与 `server/group/drop`，支持关键字搜索、新增/编辑中央弹窗、删除确认，以及从节点数量列跳转到 `#/nodes?group={id}` 的筛选联动
 - 路由管理页使用真实后端 `server/route/fetch`、`server/route/save` 与 `server/route/drop`，支持路由列表、关键词搜索、新增/编辑中央弹窗、删除与动作值展示
 - 路由管理页的节点引用摘要由 `server/manage/getNodes` 返回的 `route_ids` 推导，不在前端伪造额外接口

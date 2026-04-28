@@ -7,6 +7,8 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202604281625 | admin-frontend-node-traffic-hover | - | - | - | ✅完成 |
+| 202604281632 | admin-frontend-node-auto-online-immediate-sync | - | - | - | ✅完成 |
 | 202604281441 | fix-admin-node-gfw-null-enabled | implementation | node-gfw-check,admin-frontend | fix-admin-node-gfw-null-enabled#D001 | ✅完成 |
 | 202604281432 | ci-ignore-helloagents-for-backend-docker | implementation | ci-workflows | ci-ignore-helloagents-for-backend-docker#D001 | ✅完成 |
 | 202604281303 | xboard-reusable-server-deploy | implementation | deploy,node-gfw-check | xboard-reusable-server-deploy#D001,#D002 | ✅完成 |

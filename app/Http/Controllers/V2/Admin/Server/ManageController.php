@@ -7,6 +7,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ServerSave;
 use App\Models\Server;
 use App\Models\ServerGroup;
+use App\Models\StatServer;
+use App\Services\ServerAutoOnlineService;
 use App\Services\ServerGfwCheckService;
 use App\Services\ServerService;
 use Illuminate\Http\Request;
@@ -17,12 +19,78 @@ class ManageController extends Controller
 {
     public function getNodes(Request $request)
     {
-        $servers = app(ServerGfwCheckService::class)->decorateServers(ServerService::getAllServers())->map(function ($item) {
+        $servers = ServerService::getAllServers();
+        $trafficStats = $this->buildNodeTrafficStats($servers);
+
+        $servers = app(ServerGfwCheckService::class)->decorateServers($servers)->map(function ($item) use ($trafficStats) {
             $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])->get(['name', 'id']);
             $item['parent'] = $item->parent;
+            $item['traffic_stats'] = $trafficStats[(int) $item['id']] ?? $this->emptyNodeTrafficStats();
             return $item;
         });
         return $this->success($servers);
+    }
+
+    private function buildNodeTrafficStats($servers): array
+    {
+        $stats = [];
+        foreach ($servers as $server) {
+            $serverId = (int) $server->id;
+            $stats[$serverId] = $this->emptyNodeTrafficStats();
+            $stats[$serverId]['total'] = $this->buildTrafficAmount($server->u ?? 0, $server->d ?? 0);
+        }
+
+        if (empty($stats)) {
+            return [];
+        }
+
+        $this->fillTrafficWindow($stats, 'today', strtotime('today'));
+        $this->fillTrafficWindow($stats, 'month', strtotime(date('Y-m-01')));
+
+        return $stats;
+    }
+
+    private function fillTrafficWindow(array &$stats, string $key, int $startAt): void
+    {
+        $rows = StatServer::query()
+            ->selectRaw('server_id, COALESCE(SUM(u), 0) as upload, COALESCE(SUM(d), 0) as download')
+            ->whereIn('server_id', array_keys($stats))
+            ->where('record_type', 'd')
+            ->where('record_at', '>=', $startAt)
+            ->groupBy('server_id')
+            ->get();
+
+        foreach ($rows as $row) {
+            $stats[(int) $row->server_id][$key] = $this->buildTrafficAmount($row->upload, $row->download);
+        }
+    }
+
+    private function emptyNodeTrafficStats(): array
+    {
+        return [
+            'today' => $this->buildTrafficAmount(0, 0),
+            'month' => $this->buildTrafficAmount(0, 0),
+            'total' => $this->buildTrafficAmount(0, 0),
+        ];
+    }
+
+    private function buildTrafficAmount($upload, $download): array
+    {
+        $upload = max(0, (int) $upload);
+        $download = max(0, (int) $download);
+
+        return [
+            'upload' => $upload,
+            'download' => $download,
+            'total' => $upload + $download,
+        ];
+    }
+
+    private function syncAutoOnlineIfEnabled(Server $server): void
+    {
+        if ((bool) $server->auto_online) {
+            app(ServerAutoOnlineService::class)->syncServer($server);
+        }
     }
 
     public function sort(Request $request)
@@ -64,6 +132,7 @@ class ManageController extends Controller
                     $params['gfw_auto_action_at'] = null;
                 }
                 $server->update($params);
+                $this->syncAutoOnlineIfEnabled($server);
                 return $this->success(true);
             } catch (\Exception $e) {
                 Log::error($e);
@@ -72,7 +141,8 @@ class ManageController extends Controller
         }
 
         try {
-            Server::create($params);
+            $server = Server::create($params);
+            $this->syncAutoOnlineIfEnabled($server);
             return $this->success(true);
         } catch (\Exception $e) {
             Log::error($e);
@@ -117,6 +187,8 @@ class ManageController extends Controller
         if (!$server->save()) {
             return $this->fail([500, '保存失败']);
         }
+
+        $this->syncAutoOnlineIfEnabled($server);
 
         return $this->success(true);
     }
@@ -293,6 +365,12 @@ class ManageController extends Controller
                 /** @var Server $server */
                 foreach ($servers as $server) {
                     $server->update($update);
+                }
+            });
+            $servers->each(function (Server $server) {
+                $freshServer = $server->fresh();
+                if ($freshServer) {
+                    $this->syncAutoOnlineIfEnabled($freshServer);
                 }
             });
             return $this->success(true);

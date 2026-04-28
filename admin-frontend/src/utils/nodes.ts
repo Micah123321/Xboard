@@ -1,8 +1,9 @@
-import type { AdminNodeItem } from '@/types/api'
+import type { AdminNodeItem, TrafficAmount } from '@/types/api'
 
 export type NodeRelationFilter = 'all' | 'parent' | 'child'
 export type NodeGfwFilter = 'all' | 'normal' | 'blocked' | 'partial' | 'failed' | 'unchecked' | 'checking' | 'inherited'
 export type NodeStatusFilter = 'all' | 'online' | 'offline'
+export type NodeVisibilityFilter = 'all' | 'visible' | 'hidden'
 
 export interface NodeStatusMeta {
   label: string
@@ -20,6 +21,20 @@ export interface NodeGfwMeta {
   inherited: boolean
 }
 
+export interface NodeTrafficDetail {
+  key: 'today' | 'month' | 'total'
+  label: string
+  upload: string
+  download: string
+  total: string
+}
+
+type TrafficAmountLike = {
+  upload?: number | string | null
+  download?: number | string | null
+  total?: number | string | null
+}
+
 const NODE_TYPE_LABELS: Record<string, string> = {
   shadowsocks: 'Shadowsocks',
   trojan: 'Trojan',
@@ -34,8 +49,39 @@ const NODE_TYPE_LABELS: Record<string, string> = {
   mieru: 'Mieru',
 }
 
+const TRAFFIC_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim().toLowerCase()
+}
+
+function normalizeTrafficValue(value: unknown): number {
+  const normalized = Number(value)
+  return Number.isFinite(normalized) && normalized > 0 ? normalized : 0
+}
+
+function normalizeTrafficAmount(amount?: TrafficAmountLike | null): TrafficAmount {
+  const upload = normalizeTrafficValue(amount?.upload)
+  const download = normalizeTrafficValue(amount?.download)
+  const total = normalizeTrafficValue(amount?.total) || upload + download
+
+  return { upload, download, total }
+}
+
+export function formatTrafficBytes(value?: number | string | null): string {
+  let amount = normalizeTrafficValue(value)
+  let unitIndex = 0
+
+  while (amount >= 1024 && unitIndex < TRAFFIC_UNITS.length - 1) {
+    amount /= 1024
+    unitIndex += 1
+  }
+
+  if (unitIndex === 0) {
+    return `${Math.round(amount)} B`
+  }
+
+  return `${amount >= 100 ? amount.toFixed(0) : amount.toFixed(2)} ${TRAFFIC_UNITS[unitIndex]}`
 }
 
 export function getNodeTypeLabel(type: string): string {
@@ -190,6 +236,31 @@ export function formatNodeRate(rate?: number | null): string {
   return `${normalized.toFixed(2)} x`
 }
 
+export function getNodeTrafficDetails(node: AdminNodeItem): NodeTrafficDetail[] {
+  const stats = node.traffic_stats
+  const totalFallback = normalizeTrafficAmount({
+    upload: node.u ?? 0,
+    download: node.d ?? 0,
+  })
+
+  const rows: Array<{ key: NodeTrafficDetail['key']; label: string; source?: TrafficAmountLike | null }> = [
+    { key: 'today', label: '今日', source: stats?.today },
+    { key: 'month', label: '本月', source: stats?.month },
+    { key: 'total', label: '累计', source: stats?.total ?? totalFallback },
+  ]
+
+  return rows.map((row) => {
+    const amount = normalizeTrafficAmount(row.source)
+    return {
+      key: row.key,
+      label: row.label,
+      upload: formatTrafficBytes(amount.upload),
+      download: formatTrafficBytes(amount.download),
+      total: formatTrafficBytes(amount.total),
+    }
+  })
+}
+
 export function getNodeGroupNames(node: AdminNodeItem): string[] {
   return (node.groups ?? [])
     .map((group) => group.name)
@@ -231,6 +302,7 @@ export function filterNodes(
   typeFilter: string,
   groupFilter: string,
   statusFilter: NodeStatusFilter = 'all',
+  visibilityFilter: NodeVisibilityFilter = 'all',
   relationFilter: NodeRelationFilter = 'all',
   gfwFilter: NodeGfwFilter = 'all',
 ): AdminNodeItem[] {
@@ -238,6 +310,7 @@ export function filterNodes(
   const normalizedType = normalizeText(typeFilter)
   const normalizedGroup = normalizeText(groupFilter)
   const normalizedStatus = normalizeText(statusFilter)
+  const normalizedVisibility = normalizeText(visibilityFilter)
   const normalizedRelation = normalizeText(relationFilter)
   const normalizedGfw = normalizeText(gfwFilter)
 
@@ -263,6 +336,14 @@ export function filterNodes(
     }
 
     if (normalizedStatus === 'offline' && nodeStatus !== 'offline') {
+      return false
+    }
+
+    if (normalizedVisibility === 'visible' && !Boolean(node.show)) {
+      return false
+    }
+
+    if (normalizedVisibility === 'hidden' && Boolean(node.show)) {
       return false
     }
 

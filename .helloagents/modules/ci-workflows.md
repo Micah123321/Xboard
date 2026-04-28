@@ -13,6 +13,8 @@
 - 后端 workflow 使用 `paths-ignore` 排除 `admin-frontend/**`、`.helloagents/**` 和 `.github/workflows/admin-frontend-docker-publish.yml`
 - GitHub Actions 的 `paths-ignore` 语义是：push 中所有变更路径都被 ignore 覆盖时跳过 workflow；只要混有未被 ignore 的后端相关路径，后端 workflow 仍会运行
 - 管理端前端镜像发布工作流位于 `.github/workflows/admin-frontend-docker-publish.yml`，只关注 `admin-frontend/**` 和自身 workflow 变更
+- 管理端前端镜像发布默认只构建 `linux/amd64`，不启用 QEMU/ARM64 跨架构构建，以压缩 push 后的前端镜像发布时间
+- 管理端前端镜像发布使用 GitHub Actions Cache 作为 BuildKit 缓存来源，缓存导出采用 `mode=min`，避免每次发布完整导出多阶段构建缓存拖慢总耗时
 
 ## 依赖关系
 

@@ -862,6 +862,12 @@ export interface AdminNodeMetrics {
   updated_at?: number
 }
 
+export interface AdminNodeTrafficStats {
+  today: TrafficAmount
+  month: TrafficAmount
+  total: TrafficAmount
+}
+
 export interface AdminNodeRateTimeRange {
   start: string
   end: string
@@ -887,6 +893,9 @@ export interface AdminNodeItem {
   enabled?: boolean
   parent_id?: number | null
   rate?: number | null
+  transfer_enable?: number | null
+  u?: number | null
+  d?: number | null
   rate_time_enable?: boolean
   rate_time_ranges?: AdminNodeRateTimeRange[] | null
   sort?: number | null
@@ -898,6 +907,7 @@ export interface AdminNodeItem {
   last_check_at?: number | null
   last_push_at?: number | null
   metrics?: AdminNodeMetrics | null
+  traffic_stats?: AdminNodeTrafficStats | null
   groups?: AdminServerGroupItem[]
   parent?: AdminNodeParentRef | null
   gfw_check?: AdminNodeGfwCheck | null

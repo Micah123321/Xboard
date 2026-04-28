@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## [0.6.14] - 2026-04-28
+
+### 修复
+- **[admin-frontend]**: 修复复制节点后在自动上线开启状态下不会立即显示的问题；自动上线同步现在可针对单节点执行，管理端保存 / 开启自动上线、REST 心跳和 WebSocket 状态上报都会立即按在线与墙状态同步 `show`，`sync:server-auto-online` 继续作为定时兜底 — by yinjianm
+  - 方案: [202604281632_admin-frontend-node-auto-online-immediate-sync](archive/2026-04/202604281632_admin-frontend-node-auto-online-immediate-sync/)
+
+## [0.6.13] - 2026-04-28
+
+### 新增
+- **[admin-frontend]**: 为节点管理页补齐节点名称 hover 流量详情；`server/manage/getNodes` 现在返回节点级 `traffic_stats.today/month/total`，前端展示今日、本月、累计的上行、下行和合计流量 — by yinjianm
+  - 方案: [202604281625_admin-frontend-node-traffic-hover](archive/2026-04/202604281625_admin-frontend-node-traffic-hover/)
+  - 决策: admin-frontend-node-traffic-hover#D001(在 getNodes 聚合节点流量而不是 hover 拉取)
+
+## [0.6.12] - 2026-04-28
+
+### 快速修改
+- **[admin-frontend]**: 为节点管理页搜索过滤增加显隐条件，可按全部、显示中、已隐藏筛选节点，并同步重置与分页刷新逻辑 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/utils/nodes.ts, admin-frontend/src/views/nodes/NodesView.vue
+
+## [0.6.11] - 2026-04-28
+
+### 快速修改
+- **[ci-workflows]**: 优化管理端前端 Docker 发布耗时，默认只构建 `linux/amd64`，移除 QEMU/ARM64 跨架构构建，并将 BuildKit GHA 缓存导出收敛为 `mode=min` — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: .github/workflows/admin-frontend-docker-publish.yml:34-82, .helloagents/modules/ci-workflows.md:14-15
+
 ## [0.6.10] - 2026-04-28
 
 ### 修复

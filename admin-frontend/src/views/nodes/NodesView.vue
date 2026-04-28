@@ -47,10 +47,12 @@ import {
   getNodeGroupNames,
   getNodeIdLabel,
   getNodeStatusMeta,
+  getNodeTrafficDetails,
   getNodeTypeLabel,
   type NodeRelationFilter,
   type NodeGfwFilter,
   type NodeStatusFilter,
+  type NodeVisibilityFilter,
 } from '@/utils/nodes'
 import { sortNodesByOrder } from '@/utils/nodeEditor'
 
@@ -70,6 +72,7 @@ const keyword = ref('')
 const typeFilter = ref('all')
 const groupFilter = ref('all')
 const statusFilter = ref<NodeStatusFilter>('all')
+const visibilityFilter = ref<NodeVisibilityFilter>('all')
 const relationFilter = ref<NodeRelationFilter>('all')
 const gfwFilter = ref<NodeGfwFilter>('all')
 const currentPage = ref(1)
@@ -99,6 +102,7 @@ const filteredNodes = computed(() => sortNodesByOrder(filterNodes(
   typeFilter.value,
   groupFilter.value,
   statusFilter.value,
+  visibilityFilter.value,
   relationFilter.value,
   gfwFilter.value,
 )))
@@ -116,6 +120,7 @@ const hasActiveFilters = computed(() => (
   || typeFilter.value !== 'all'
   || groupFilter.value !== 'all'
   || statusFilter.value !== 'all'
+  || visibilityFilter.value !== 'all'
   || relationFilter.value !== 'all'
   || gfwFilter.value !== 'all'
 ))
@@ -304,6 +309,7 @@ function handleReset() {
   typeFilter.value = 'all'
   groupFilter.value = 'all'
   statusFilter.value = 'all'
+  visibilityFilter.value = 'all'
   relationFilter.value = 'all'
   gfwFilter.value = 'all'
   currentPage.value = 1
@@ -647,7 +653,7 @@ watch(
   },
 )
 
-watch([keyword, typeFilter, groupFilter, statusFilter, relationFilter, gfwFilter], () => {
+watch([keyword, typeFilter, groupFilter, statusFilter, visibilityFilter, relationFilter, gfwFilter], () => {
   currentPage.value = 1
 })
 
@@ -733,6 +739,12 @@ watch(
             <ElOption label="全部节点" value="all" />
             <ElOption label="在线节点" value="online" />
             <ElOption label="离线节点" value="offline" />
+          </ElSelect>
+
+          <ElSelect v-model="visibilityFilter" class="toolbar-select" placeholder="显隐">
+            <ElOption label="全部显隐" value="all" />
+            <ElOption label="显示中" value="visible" />
+            <ElOption label="已隐藏" value="hidden" />
           </ElSelect>
 
           <ElSelect v-model="relationFilter" class="toolbar-select" placeholder="节点关系">
@@ -878,10 +890,39 @@ watch(
         <ElTableColumn label="节点" min-width="280">
           <template #default="{ row }">
             <div class="node-cell">
-              <div class="node-cell__main">
-                <span class="node-dot" :class="getNodeStatusMeta(row).dotClass" />
-                <strong>{{ row.name }}</strong>
-              </div>
+              <ElPopover
+                placement="right-start"
+                trigger="hover"
+                popper-class="node-traffic-popover"
+                :width="360"
+              >
+                <template #reference>
+                  <button class="node-cell__main node-name-trigger" type="button">
+                    <span class="node-dot" :class="getNodeStatusMeta(row).dotClass" />
+                    <strong>{{ row.name }}</strong>
+                  </button>
+                </template>
+                <div class="node-traffic-card">
+                  <header class="node-traffic-card__header">
+                    <span>流量统计</span>
+                    <strong>{{ row.name }}</strong>
+                  </header>
+                  <article
+                    v-for="traffic in getNodeTrafficDetails(row)"
+                    :key="`${row.id}-${traffic.key}`"
+                    class="node-traffic-row"
+                  >
+                    <div class="node-traffic-row__summary">
+                      <span>{{ traffic.label }}</span>
+                      <strong>{{ traffic.total }}</strong>
+                    </div>
+                    <div class="node-traffic-row__split">
+                      <span>上行 {{ traffic.upload }}</span>
+                      <span>下行 {{ traffic.download }}</span>
+                    </div>
+                  </article>
+                </div>
+              </ElPopover>
               <div class="node-cell__sub">
                 <ElTag round effect="plain" :type="getNodeStatusMeta(row).tagType">
                   {{ getNodeStatusMeta(row).label }}
@@ -1227,6 +1268,32 @@ watch(
   gap: 8px;
 }
 
+.node-name-trigger {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.node-name-trigger strong {
+  transition: color 0.18s ease;
+}
+
+.node-name-trigger:hover strong,
+.node-name-trigger:focus-visible strong {
+  color: #0071e3;
+}
+
+.node-name-trigger:focus-visible {
+  outline: 2px solid #0071e3;
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
 .node-cell__sub {
   flex-wrap: wrap;
 }
@@ -1303,6 +1370,72 @@ watch(
 .footer-hint {
   justify-content: flex-end;
   color: var(--xboard-text-muted);
+}
+
+:global(.node-traffic-popover) {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 18px !important;
+  box-shadow: rgba(0, 0, 0, 0.18) 0 12px 36px 0 !important;
+}
+
+:global(.node-traffic-popover .node-traffic-card) {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  color: #1d1d1f;
+}
+
+:global(.node-traffic-card__header) {
+  display: grid;
+  gap: 3px;
+  padding: 2px 2px 6px;
+}
+
+:global(.node-traffic-card__header span) {
+  color: rgba(0, 0, 0, 0.48);
+  font-size: 12px;
+  line-height: 1.33;
+}
+
+:global(.node-traffic-card__header strong) {
+  color: #1d1d1f;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+:global(.node-traffic-row) {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f5f5f7;
+}
+
+:global(.node-traffic-row__summary),
+:global(.node-traffic-row__split) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+:global(.node-traffic-row__summary span),
+:global(.node-traffic-row__split span) {
+  color: rgba(0, 0, 0, 0.56);
+  font-size: 12px;
+  line-height: 1.33;
+}
+
+:global(.node-traffic-row__summary strong) {
+  color: #0071e3;
+  font-size: 17px;
+  line-height: 1.19;
+  font-variant-numeric: tabular-nums;
+}
+
+:global(.node-traffic-row__split span) {
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 1180px) {

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Server;
 use App\Models\ServerGfwCheck;
+use Illuminate\Support\Collection;
 
 class ServerAutoOnlineService
 {
@@ -12,50 +13,74 @@ class ServerAutoOnlineService
         $servers = Server::query()
             ->where('auto_online', true)
             ->get();
-        $gfwStatuses = app(ServerGfwCheckService::class)->getLatestStatusesForServers($servers);
 
-        $result = [
-            'total' => $servers->count(),
+        return $this->syncServers($servers);
+    }
+
+    public function syncServer(Server $server): array
+    {
+        if (!(bool) $server->auto_online) {
+            return $this->emptyResult();
+        }
+
+        return $this->syncServers(collect([$server]));
+    }
+
+    private function syncServers(Collection $servers): array
+    {
+        $gfwStatuses = app(ServerGfwCheckService::class)->getLatestStatusesForServers($servers);
+        $result = $this->emptyResult($servers->count());
+
+        foreach ($servers as $server) {
+            $this->syncServerWithStatuses($server, $gfwStatuses, $result);
+        }
+
+        return $result;
+    }
+
+    private function syncServerWithStatuses(Server $server, array $gfwStatuses, array &$result): void
+    {
+        $sourceNodeId = (int) ($server->parent_id ?: $server->id);
+        $gfwStatus = $gfwStatuses[$sourceNodeId] ?? null;
+        $isGfwManaged = (bool) ($server->gfw_check_enabled ?? true) && $gfwStatus !== null;
+        $isGfwBlocked = $isGfwManaged && $gfwStatus === ServerGfwCheck::STATUS_BLOCKED;
+        $isGfwHeld = $isGfwManaged
+            && (bool) $server->gfw_auto_hidden
+            && $gfwStatus !== ServerGfwCheck::STATUS_NORMAL;
+        $shouldShow = !$isGfwBlocked && !$isGfwHeld && (int) $server->available_status !== Server::STATUS_OFFLINE;
+        $shouldClearGfwAutoHidden = $gfwStatus === ServerGfwCheck::STATUS_NORMAL
+            && (bool) $server->gfw_auto_hidden;
+        $wasShown = (bool) $server->show;
+
+        if ($wasShown === $shouldShow && !$shouldClearGfwAutoHidden) {
+            $result['unchanged']++;
+            return;
+        }
+
+        $server->show = $shouldShow;
+        if ($isGfwBlocked) {
+            $server->gfw_auto_hidden = true;
+            $server->gfw_auto_action_at = time();
+        } elseif ($shouldClearGfwAutoHidden) {
+            $server->gfw_auto_hidden = false;
+            $server->gfw_auto_action_at = time();
+        }
+        $server->save();
+
+        $result['updated']++;
+        if ($wasShown !== $shouldShow) {
+            $shouldShow ? $result['shown']++ : $result['hidden']++;
+        }
+    }
+
+    private function emptyResult(int $total = 0): array
+    {
+        return [
+            'total' => $total,
             'updated' => 0,
             'shown' => 0,
             'hidden' => 0,
             'unchanged' => 0,
         ];
-
-        foreach ($servers as $server) {
-            $sourceNodeId = (int) ($server->parent_id ?: $server->id);
-            $gfwStatus = $gfwStatuses[$sourceNodeId] ?? null;
-            $isGfwManaged = (bool) ($server->gfw_check_enabled ?? true) && $gfwStatus !== null;
-            $isGfwBlocked = $isGfwManaged && $gfwStatus === ServerGfwCheck::STATUS_BLOCKED;
-            $isGfwHeld = $isGfwManaged
-                && (bool) $server->gfw_auto_hidden
-                && $gfwStatus !== ServerGfwCheck::STATUS_NORMAL;
-            $shouldShow = !$isGfwBlocked && !$isGfwHeld && (int) $server->available_status !== Server::STATUS_OFFLINE;
-            $shouldClearGfwAutoHidden = $gfwStatus === ServerGfwCheck::STATUS_NORMAL
-                && (bool) $server->gfw_auto_hidden;
-            $wasShown = (bool) $server->show;
-
-            if ($wasShown === $shouldShow && !$shouldClearGfwAutoHidden) {
-                $result['unchanged']++;
-                continue;
-            }
-
-            $server->show = $shouldShow;
-            if ($isGfwBlocked) {
-                $server->gfw_auto_hidden = true;
-                $server->gfw_auto_action_at = time();
-            } elseif ($shouldClearGfwAutoHidden) {
-                $server->gfw_auto_hidden = false;
-                $server->gfw_auto_action_at = time();
-            }
-            $server->save();
-
-            $result['updated']++;
-            if ($wasShown !== $shouldShow) {
-                $shouldShow ? $result['shown']++ : $result['hidden']++;
-            }
-        }
-
-        return $result;
     }
 }

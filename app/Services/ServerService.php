@@ -210,6 +210,10 @@ class ServerService
             time(),
             3600
         );
+
+        if ((bool) $node->auto_online) {
+            app(ServerAutoOnlineService::class)->syncServer($node);
+        }
     }
 
     /**

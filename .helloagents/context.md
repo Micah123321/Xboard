@@ -114,8 +114,8 @@
 
 - 管理端路由使用 Hash 模式
 - 管理端当前业务路由包含 `/dashboard`、`/users`、`/tickets`、`/nodes`、`/node-groups`、`/node-routes`、`/subscriptions/plans`、`/subscriptions/orders`、`/subscriptions/coupons`、`/subscriptions/gift-cards`、`/system/config`、`/system/notices`、`/system/payments`、`/system/plugins`、`/system/themes` 与 `/system/knowledge`
-- `#/nodes` 当前已升级为真实节点工作台：支持搜索、在线 / 离线筛选、父/子节点筛选、墙状态筛选、分页浏览、显隐切换、自动上线托管开关、墙检测托管开关、刷新数据、复制、单节点置顶、仅对已勾选节点生效的批量修改 / 批量删除，以及 11 种协议的新增 / 编辑弹窗和排序对话框
-- 节点自动上线由后端 `sync:server-auto-online` 定时命令执行，只处理 `auto_online=1` 的节点：在线 / 待同步时自动 `show=1`，离线时自动 `show=0`；未开启自动上线的节点继续保持手动显隐控制；墙状态为 `blocked` 或仍处于 `gfw_auto_hidden` 且未恢复正常时会否决自动显示
+- `#/nodes` 当前已升级为真实节点工作台：支持搜索、在线 / 离线筛选、显隐筛选、父/子节点筛选、墙状态筛选、分页浏览、显隐切换、自动上线托管开关、墙检测托管开关、刷新数据、复制、单节点置顶、仅对已勾选节点生效的批量修改 / 批量删除，以及 11 种协议的新增 / 编辑弹窗和排序对话框
+- 节点自动上线由后端 `ServerAutoOnlineService` 统一执行，只处理 `auto_online=1` 的节点：在线 / 待同步时自动 `show=1`，离线时自动 `show=0`；管理端保存 / 开启自动上线、REST 心跳和 WebSocket 状态上报会触发当前节点即时同步，`sync:server-auto-online` 每 5 分钟继续兜底；未开启自动上线的节点继续保持手动显隐控制；墙状态为 `blocked` 或仍处于 `gfw_auto_hidden` 且未恢复正常时会否决自动显示
 - 节点自动墙检测由后端 `sync:server-gfw-checks` 定时命令执行，只为开启 `gfw_check_enabled` 的父节点创建检测任务；父节点兼容 `parent_id IS NULL` 与历史 `parent_id=0` 两种表示，`gfw_check_enabled` 仅明确为 `false` 时关闭；子节点不独立检测，但可控制是否随父节点自动隐藏 / 恢复
 - Compose 部署必须确保 Laravel Scheduler 持续运行；`deploy/xboard-server/compose.yaml` 通过独立 `scheduler` 服务执行 `php artisan schedule:work`，否则自动墙检测只会在手动触发时创建任务
 - Bearer Token 存储于 `sessionStorage/localStorage`

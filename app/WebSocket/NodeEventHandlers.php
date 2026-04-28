@@ -29,8 +29,7 @@ class NodeEventHandlers
         $node = Server::find($nodeId);
         if (!$node) return;
 
-        $nodeType = strtoupper($node->type);
-        Cache::put(\App\Utils\CacheKey::get('SERVER_' . $nodeType . '_LAST_CHECK_AT', $nodeId), time(), 3600);
+        ServerService::touchNode($node);
         ServerService::updateMetrics($node, $data);
 
         Log::debug("[WS] Node#{$nodeId} status updated");
