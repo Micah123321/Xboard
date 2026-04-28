@@ -44,6 +44,8 @@ return [
 
     'port' => env('MAIL_PORT', 587),
 
+    'timeout' => env('MAIL_TIMEOUT', 30),
+
     /*
     |--------------------------------------------------------------------------
     | Global "From" Address

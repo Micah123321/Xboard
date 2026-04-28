@@ -7,6 +7,8 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202604281303 | xboard-reusable-server-deploy | implementation | deploy,node-gfw-check | xboard-reusable-server-deploy#D001,#D002 | ✅完成 |
+| 202604281258 | fix-send-email-job-timeout | implementation | queue-mail | fix-send-email-job-timeout#D001 | ✅完成 |
 | 202604280024 | node-gfw-auto-check-and-online | implementation | node-gfw-check,admin-frontend | node-gfw-auto-check-and-online#D001,#D002 | ✅完成 |
 | 202604272338 | admin-frontend-node-auto-online | - | - | - | ✅完成 |
 | 202604272325 | node-gfw-check | implementation | node-gfw-check,admin-frontend,mi-node | node-gfw-check#D001,#D002 | ✅完成 |
@@ -40,6 +42,8 @@
 ## 按月归档
 
 ### 2026-04
+- [202604281303_xboard-reusable-server-deploy](./2026-04/202604281303_xboard-reusable-server-deploy/) - 新增可复制到服务器的 Xboard Compose 部署模板，补齐独立 `scheduler` 服务，并提供 `.env.example`、初始化/部署/更新/状态检查脚本和部署说明
+- [202604281258_fix-send-email-job-timeout](./2026-04/202604281258_fix-send-email-job-timeout/) - 修复 `SendEmailJob` 10 秒超时导致 `send_email` 队列批量失败的问题，补齐邮件 job 超时/backoff、SMTP transport timeout、运行时 mailer 刷新和 MailLog 配置脱敏
 - [202604280024_node-gfw-auto-check-and-online](./2026-04/202604280024_node-gfw-auto-check-and-online/) - 为节点墙状态检测打通自动检测与自动显隐，支持开启托管的父节点定时检测、疑似被墙自动隐藏、恢复正常自动显示，并让自动上线尊重 blocked 状态
 - [202604272325_node-gfw-check](./2026-04/202604272325_node-gfw-check/) - 新增节点墙状态检测闭环，支持父节点检测、子节点继承、管理端展示筛选，以及 mi-node WS/REST 检测上报
 - [202604272310_ticket-chat-image-dnd-paste-upload](./2026-04/202604272310_ticket-chat-image-dnd-paste-upload/) - 为工单工作台回复区补齐图片拖拽上传与剪贴板粘贴上传，并将上传逻辑与样式从超大 SFC 中拆分

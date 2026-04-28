@@ -32,6 +32,7 @@ RUN composer install --no-cache --no-dev --no-security-blocking \
 ENV ENABLE_WEB=true \
     ENABLE_HORIZON=true \
     ENABLE_REDIS=true \
+    ENABLE_SCHEDULE=true \
     ENABLE_WS_SERVER=true \
     ENABLE_CADDY=true
 

@@ -1,11 +1,25 @@
 # CHANGELOG
 
+## [0.6.6] - 2026-04-28
+
+### 新增
+- **[deploy]**: 新增 `deploy/xboard-server` 可复用服务器部署模板，基于生产 compose 拓扑补齐 `scheduler` 服务，并提供 `.env.example`、初始化/部署/更新/状态检查脚本和部署说明 — by yinjianm
+  - 方案: [202604281303_xboard-reusable-server-deploy](archive/2026-04/202604281303_xboard-reusable-server-deploy/)
+  - 决策: xboard-reusable-server-deploy#D001(使用独立 scheduler 服务驱动 Laravel Scheduler), xboard-reusable-server-deploy#D002(默认不把 MySQL 纳入一键模板)
+
+## [0.6.5] - 2026-04-28
+
+### 修复
+- **[queue-mail]**: 修复 `SendEmailJob` 10 秒超时导致 `send_email` 队列邮件作业批量失败的问题；邮件 job 现在使用 60 秒超时、明确 backoff、timeout 失败直接 fail，并把邮件发送错误交给队列异常机制处理。同时新增 `MAIL_TIMEOUT` / `QUEUE_RETRY_AFTER` 配置、刷新 Horizon 长驻 worker 的运行时 mailer 配置，并对 `MailLog.config` 中的敏感字段脱敏 — by yinjianm
+  - 方案: [202604281258_fix-send-email-job-timeout](archive/2026-04/202604281258_fix-send-email-job-timeout/)
+  - 决策: fix-send-email-job-timeout#D001(保留队列结构并修复 job 与 mail transport 超时)
+
 ## [0.6.4] - 2026-04-28
 
 ### 修复
-- **[node-gfw-check]**: 修复墙检测任务卡在 `pending/checking` 后会长期占用 active 状态的问题；超过 5 分钟未被节点端领取或未上报的任务会标记为检测失败，管理端区分展示“等待节点领取”和“检测中”。同时修正 mi-node 的 ping 成功判定，避免正常可达但平均延迟解析不到时被误判为超时 — by yinjianm
+- **[node-gfw-check]**: 修复墙检测任务卡在 `pending/checking` 后会长期占用 active 状态的问题；超过 5 分钟未被节点端领取或未上报的任务会标记为检测失败，管理端区分展示“等待节点领取”和“检测中”，并在开启父节点墙检测托管时立即发起一次检测。同时补齐 Docker/supervisor 的 `schedule:work` 进程和 compose scheduler 样例，确保自动墙检测调度会持续运行；修正 mi-node 的 ping 成功判定，避免正常可达但平均延迟解析不到时被误判为超时 — by yinjianm
   - 类型: 快速修改（无方案包）
-  - 文件: app/Services/ServerGfwCheckService.php, app/Console/Commands/SyncServerGfwChecks.php, admin-frontend/src/utils/nodes.ts, admin-frontend/src/views/nodes/NodesView.vue, E:/code/go/mi-node/internal/gfwcheck/gfwcheck.go
+  - 文件: app/Services/ServerGfwCheckService.php, app/Console/Commands/SyncServerGfwChecks.php, admin-frontend/src/utils/nodes.ts, admin-frontend/src/views/nodes/NodesView.vue, .docker/supervisor/supervisord.conf, .docker/entrypoint.sh, Dockerfile, compose.sample.yaml, E:/code/go/mi-node/internal/gfwcheck/gfwcheck.go
 
 ## [0.6.3] - 2026-04-28
 

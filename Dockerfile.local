@@ -27,6 +27,7 @@ RUN composer install --no-cache --no-dev \
 
 ENV ENABLE_WEB=true \
     ENABLE_HORIZON=true \
+    ENABLE_SCHEDULE=true \
     ENABLE_REDIS=false
 
 EXPOSE 7001

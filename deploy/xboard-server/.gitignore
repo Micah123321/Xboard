@@ -1,0 +1,6 @@
+.env
+.docker/.data/
+storage/logs/
+storage/theme/
+plugins/
+*.log

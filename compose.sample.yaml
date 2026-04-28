@@ -43,6 +43,19 @@ services:
     command: php artisan horizon
     depends_on:
       - redis
+  scheduler:
+    image: xboard-local:latest
+    volumes:
+      - ./.docker/.data/redis/:/data/
+      - ./.env:/www/.env
+      - ./.docker/.data/:/www/.docker/.data
+      - ./storage/logs:/www/storage/logs
+      - ./plugins:/www/plugins
+    restart: on-failure
+    # network_mode: host
+    command: php artisan schedule:work
+    depends_on:
+      - redis
   ws-server:
     image: xboard-local:latest
     volumes:

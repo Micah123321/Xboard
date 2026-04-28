@@ -312,9 +312,22 @@ async function handleBatchSubmit(payload: NodeBatchEditPayload) {
 
     batchSubmitting.value = true
     await batchUpdateNodes(updatePayload)
+    let started = 0
+    let skipped = 0
+    if (payload.gfw_check_enabled === true) {
+      const response = await checkNodeGfw(updatePayload.ids)
+      started = response.data?.started?.length ?? 0
+      skipped = response.data?.skipped?.length ?? 0
+    }
     batchEditVisible.value = false
     clearSelection()
-    ElMessage.success(`已批量更新 ${updatePayload.ids.length} 个节点`)
+    if (started > 0) {
+      ElMessage.success(`已批量更新 ${updatePayload.ids.length} 个节点，并发起 ${started} 个父节点墙检测`)
+    } else if (payload.gfw_check_enabled === true && skipped > 0) {
+      ElMessage.info('已批量开启墙检测托管，所选父节点已有任务或所选节点为子节点')
+    } else {
+      ElMessage.success(`已批量更新 ${updatePayload.ids.length} 个节点`)
+    }
     await loadNodeBoard()
   } catch (error) {
     if (error === 'cancel' || error === 'close') {
@@ -476,7 +489,19 @@ async function handleToggleGfwCheck(node: AdminNodeItem, nextValue: boolean) {
       id: node.id,
       gfw_check_enabled: nextValue,
     })
-    ElMessage.success(nextValue ? '已开启墙检测托管' : '已关闭墙检测托管')
+    if (nextValue && !node.parent_id) {
+      const response = await checkNodeGfw([node.id])
+      const started = response.data?.started?.length ?? 0
+      if (started > 0) {
+        ElMessage.success('已开启墙检测托管，并发起墙状态检测')
+      } else {
+        const reason = response.data?.skipped?.[0]?.reason
+        ElMessage.info(reason || '已开启墙检测托管，已有检测任务等待节点领取或上报')
+      }
+    } else {
+      ElMessage.success(nextValue ? '已开启墙检测托管' : '已关闭墙检测托管')
+    }
+    await loadNodeBoard()
   } catch (error) {
     node.gfw_check_enabled = previous
     ElMessage.error(error instanceof Error ? error.message : '墙检测托管状态更新失败')

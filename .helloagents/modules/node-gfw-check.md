@@ -14,8 +14,9 @@
 - `server_gfw_checks.status` 使用 `pending / checking / normal / blocked / partial / failed / skipped`
 - 管理端 `POST server/manage/checkGfw` 接收 `{ ids: number[] }`，响应中区分 `started` 与 `skipped`
 - 后端定时命令 `sync:server-gfw-checks` 会自动为 `gfw_check_enabled=1` 的父节点创建检测任务；已有未超时的 `pending/checking` 任务时跳过，超过 5 分钟未领取或未上报的任务会自动标记为 `failed`
+- Docker all-in-one 镜像通过 supervisor 独立运行 `php artisan schedule:work`；`compose.sample.yaml` 的分进程样例和 `deploy/xboard-server/compose.yaml` 服务器部署模板也包含 `scheduler` 服务，确保 `sync:server-gfw-checks` 和其他 Laravel Scheduler 任务会持续执行
 - 节点端 `GET server/gfw/task` 只向父节点返回待执行任务；节点端 `POST server/gfw/report` 必须校验 `check_id` 归属当前节点
-- `v2_server.gfw_check_enabled` 控制节点是否参与自动墙检测与墙状态自动显隐；父节点开启时会自动创建检测任务，子节点不独立检测但可单独关闭随父节点自动隐藏 / 恢复
+- `v2_server.gfw_check_enabled` 控制节点是否参与自动墙检测与墙状态自动显隐；管理端开启父节点墙检测托管时会立即发起一次检测，后续由定时命令持续检测；子节点不独立检测但可单独关闭随父节点自动隐藏 / 恢复
 - `blocked` 结果会自动隐藏仍开启墙检测托管且当前显示中的父节点及其子节点，并设置 `gfw_auto_hidden=1`
 - `normal` 结果只恢复 `gfw_auto_hidden=1` 的节点，避免误恢复管理员手动隐藏的节点；`partial/failed` 只记录状态，不触发自动上线或下线
 - `sync:server-auto-online` 会把最新墙状态 `blocked` 和未恢复的 `gfw_auto_hidden` 作为显示否决条件，防止自动上线重新发布疑似被墙节点
@@ -32,6 +33,7 @@
 - 依赖 `app/Http/Controllers/V2/Server/ServerController.php` 暴露节点端任务领取和上报接口
 - 依赖 `app/Services/NodeSyncService.php` 与 Workerman WS 通道向在线节点推送 `gfw.check`
 - 依赖 `app/Console/Commands/SyncServerGfwChecks.php` 与 Laravel Scheduler 自动创建检测任务
+- 依赖 `.docker/supervisor/supervisord.conf`、`deploy/xboard-server/compose.yaml` 中的 `scheduler` 服务，或部署环境中的 `schedule:work` / `cron + schedule:run` 持续驱动 Laravel Scheduler
 - 依赖 `app/Services/ServerAutoOnlineService.php` 在自动上线同步时尊重墙状态否决
 - 依赖 `E:/code/go/mi-node/internal/gfwcheck` 执行 ping 检测和结果判定
 - 依赖 `E:/code/go/mi-node/internal/panel`、`internal/controlplane` 与 `internal/service` 接收任务、轮询兜底并上报结果
