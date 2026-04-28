@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.6.8] - 2026-04-28
+
+### 快速修改
+- **[admin-frontend]**: 精简节点管理页批量操作与工作台说明文案，并在表格底部新增基于 `sync:server-gfw-checks` 30 分钟调度节奏估算的下次自动墙检倒计时提示 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/views/nodes/NodesView.vue
+
 ## [0.6.7] - 2026-04-28
 
 ### 快速修改

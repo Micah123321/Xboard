@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { TableInstance } from 'element-plus'
@@ -88,6 +88,10 @@ const batchEditVisible = ref(false)
 const batchSubmitting = ref(false)
 const batchDeleting = ref(false)
 const batchGfwChecking = ref(false)
+const currentTimestamp = ref(Math.floor(Date.now() / 1000))
+let autoCheckCountdownTimer: number | undefined
+
+const GFW_AUTO_CHECK_INTERVAL_MINUTES = 30
 
 const filteredNodes = computed(() => sortNodesByOrder(filterNodes(
   nodes.value,
@@ -125,11 +129,25 @@ const summaryCards = computed(() => [
   { label: '已勾选', value: String(selectedNodes.value.length) },
 ])
 
-const batchTargetLabel = computed(() => (
-  hasSelectedNodes.value
-    ? `当前已选 ${selectedNodes.value.length} 个节点`
-    : '批量修改 / 删除仅作用于已勾选节点'
-))
+const batchTargetLabel = computed(() => (hasSelectedNodes.value ? `当前已选 ${selectedNodes.value.length} 个节点` : ''))
+const autoGfwParentNodes = computed(() => nodes.value.filter((node) => !node.parent_id && node.gfw_check_enabled !== false))
+const hasRunningAutoGfwTask = computed(() => autoGfwParentNodes.value.some((node) => {
+  const status = String(node.gfw_check?.status ?? '').toLowerCase()
+  return status === 'pending' || status === 'checking'
+}))
+
+const nextAutoGfwCheckHint = computed(() => {
+  if (autoGfwParentNodes.value.length === 0) {
+    return '未开启父节点自动墙检'
+  }
+
+  if (hasRunningAutoGfwTask.value) {
+    return '本轮自动墙检进行中'
+  }
+
+  const nextTimestamp = getNextAutoGfwCheckTimestamp(currentTimestamp.value)
+  return `下次自动墙检：${formatCountdown(nextTimestamp - currentTimestamp.value)}（${formatClockTime(nextTimestamp)}）`
+})
 
 function getRouteGroupQuery(): string {
   const rawValue = route.query.group
@@ -175,6 +193,33 @@ function isGfwSwitching(id: number): boolean {
 
 function isWorking(id: number): boolean {
   return workingIds.value.includes(id)
+}
+
+function getNextAutoGfwCheckTimestamp(timestamp: number): number {
+  const nextRun = new Date(timestamp * 1000)
+  const minutes = nextRun.getMinutes()
+  nextRun.setSeconds(0, 0)
+
+  if (minutes < GFW_AUTO_CHECK_INTERVAL_MINUTES) {
+    nextRun.setMinutes(GFW_AUTO_CHECK_INTERVAL_MINUTES)
+  } else {
+    nextRun.setHours(nextRun.getHours() + 1)
+    nextRun.setMinutes(0)
+  }
+
+  return Math.floor(nextRun.getTime() / 1000)
+}
+
+function formatCountdown(seconds: number): string {
+  const minutes = Math.max(1, Math.ceil(seconds / 60))
+  return `${minutes} 分钟后`
+}
+
+function formatClockTime(timestamp: number): string {
+  return new Date(timestamp * 1000).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 function openCreateEditor() {
@@ -582,7 +627,17 @@ async function handleAction(action: NodeAction, node: AdminNodeItem) {
 }
 
 onMounted(() => {
+  currentTimestamp.value = Math.floor(Date.now() / 1000)
+  autoCheckCountdownTimer = window.setInterval(() => {
+    currentTimestamp.value = Math.floor(Date.now() / 1000)
+  }, 30 * 1000)
   void loadNodeBoard()
+})
+
+onBeforeUnmount(() => {
+  if (autoCheckCountdownTimer !== undefined) {
+    window.clearInterval(autoCheckCountdownTimer)
+  }
 })
 
 watch(
@@ -699,7 +754,7 @@ watch(
         </div>
 
         <div class="toolbar-actions">
-          <span class="scope-hint">{{ batchTargetLabel }}</span>
+          <span v-if="batchTargetLabel" class="scope-hint">{{ batchTargetLabel }}</span>
           <ElButton :disabled="!hasSelectedNodes || batchDeleting" @click="openBatchEditor">批量修改</ElButton>
           <ElButton
             :disabled="!hasSelectedNodes || batchGfwChecking"
@@ -736,7 +791,7 @@ watch(
       </header>
 
       <div v-if="hasSelectedNodes" class="selection-summary">
-        <span class="selection-summary__label">已勾选 {{ selectedNodes.length }} 个节点，批量修改与批量删除只会作用于这些节点。</span>
+        <span class="selection-summary__label">已勾选 {{ selectedNodes.length }} 个节点</span>
         <ElButton text @click="clearSelection">清空勾选</ElButton>
       </div>
 
@@ -974,10 +1029,15 @@ watch(
           background
           class="footer-pagination"
         />
-        <div class="footer-hint">
-          <ElIcon><Connection /></ElIcon>
-          <span>节点新增、编辑、置顶、排序、批量修改与批量删除已收敛到同一工作台。</span>
-        </div>
+        <ElTooltip
+          content="按 Laravel Scheduler 每 30 分钟调度估算；scheduler 未运行时不会自动创建检测任务。"
+          placement="top"
+        >
+          <div class="footer-hint">
+            <ElIcon><Connection /></ElIcon>
+            <span>{{ nextAutoGfwCheckHint }}</span>
+          </div>
+        </ElTooltip>
       </footer>
     </section>
 
