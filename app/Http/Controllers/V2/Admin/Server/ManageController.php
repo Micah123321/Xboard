@@ -37,7 +37,6 @@ class ManageController extends Controller
         foreach ($servers as $server) {
             $serverId = (int) $server->id;
             $stats[$serverId] = $this->emptyNodeTrafficStats();
-            $stats[$serverId]['total'] = $this->buildTrafficAmount($server->u ?? 0, $server->d ?? 0);
         }
 
         if (empty($stats)) {
@@ -46,17 +45,20 @@ class ManageController extends Controller
 
         $this->fillTrafficWindow($stats, 'today', strtotime('today'));
         $this->fillTrafficWindow($stats, 'month', strtotime(date('Y-m-01')));
+        $this->fillTrafficWindow($stats, 'total');
 
         return $stats;
     }
 
-    private function fillTrafficWindow(array &$stats, string $key, int $startAt): void
+    private function fillTrafficWindow(array &$stats, string $key, ?int $startAt = null): void
     {
         $rows = StatServer::query()
             ->selectRaw('server_id, COALESCE(SUM(u), 0) as upload, COALESCE(SUM(d), 0) as download')
             ->whereIn('server_id', array_keys($stats))
             ->where('record_type', 'd')
-            ->where('record_at', '>=', $startAt)
+            ->when($startAt !== null, function ($query) use ($startAt) {
+                $query->where('record_at', '>=', $startAt);
+            })
             ->groupBy('server_id')
             ->get();
 

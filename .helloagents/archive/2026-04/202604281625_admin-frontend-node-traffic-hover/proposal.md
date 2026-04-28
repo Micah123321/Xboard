@@ -42,7 +42,7 @@
 ## 2. 方案
 
 ### 技术方案
-在后端 `ManageController::getNodes()` 中基于当前节点 ID 集合批量聚合 `v2_stat_server`，按今日起点和本月起点计算 `SUM(u)`、`SUM(d)`、`SUM(u + d)`；累计流量以 `v2_server.u/d` 为节点当前累计真相源。三组结果统一挂载到每个节点的 `traffic_stats` 字段。前端扩展节点类型定义和 `nodes.ts` 工具函数，提供统一的流量格式化与详情数据结构；`NodesView.vue` 将节点名称区域包裹为 Element Plus popover，并以 Apple 风格的克制统计网格展示日、月、总三组上下行数据。
+在后端 `ManageController::getNodes()` 中基于当前节点 ID 集合批量聚合 `v2_stat_server`，按今日起点、本月起点和全量统计三种窗口计算 `SUM(u)`、`SUM(d)`、`SUM(u + d)`。三组结果统一挂载到每个节点的 `traffic_stats` 字段。前端扩展节点类型定义和 `nodes.ts` 工具函数，提供统一的流量格式化与详情数据结构；`NodesView.vue` 将节点名称区域包裹为 Element Plus popover，并以 Apple 风格的克制统计网格展示日、月、总三组上下行数据。
 
 ### 影响范围
 ```yaml
@@ -61,7 +61,7 @@
 
 ### 方案取舍
 ```yaml
-唯一方案理由: 当前需求需要“日、月、总”三种统计，后端已有 StatServer 日志表和 Server.u/d 累计字段，最合理路径是在 getNodes 返回时一次性挂载聚合结果，前端只负责展示。
+唯一方案理由: 当前需求需要“日、月、总”三种统计，后端已有 StatServer 日志表，最合理路径是在 getNodes 返回时一次性挂载聚合结果，前端只负责展示。
 放弃的替代路径:
   - 前端逐节点请求统计接口: 会产生 N+1 网络请求，表格分页和 hover 体验不稳定
   - 只展示 v2_server.u/d: 只能表示节点当前累计字段，不能满足日/月维度
@@ -77,7 +77,6 @@
 ```mermaid
 flowchart TD
     A[StatServer v2_stat_server] --> B[ManageController getNodes 批量聚合]
-    G[Server u/d] --> B
     C[ServerService getAllServers] --> B
     B --> D[traffic_stats today/month/total]
     D --> E[AdminNodeItem 类型]
@@ -103,7 +102,7 @@ traffic_stats?: {
 | `traffic_stats.today.download` | number | 今日节点下行字节数 |
 | `traffic_stats.today.total` | number | 今日节点总流量 |
 | `traffic_stats.month.*` | number | 本月节点流量统计 |
-| `traffic_stats.total.*` | number | 节点当前累计流量统计，来源为 `v2_server.u/d` |
+| `traffic_stats.total.*` | number | 节点全量统计流量，来源为 `v2_stat_server` |
 
 ---
 

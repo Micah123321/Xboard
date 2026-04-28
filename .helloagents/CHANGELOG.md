@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## [0.6.16] - 2026-04-28
+
+### 快速修改
+- **[ci-workflows]**: 优化后端 Docker 构建缓存命中；`composer.lock` 现在进入镜像构建上下文，Composer 依赖安装提前到源码复制前并使用 BuildKit 缓存挂载，构建期不再重复执行全量 `chown/chmod` — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: Dockerfile:1-44, .dockerignore:18-22
+
+## [0.6.15] - 2026-04-28
+
+### 快速修改
+- **[admin-frontend]**: 修正节点 hover 流量详情的累计统计口径，今日、本月、累计现在全部从 `v2_stat_server` 按节点聚合，避免节点当前累计字段被重置后出现“本月大于累计”的展示错误 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: app/Http/Controllers/V2/Admin/Server/ManageController.php:34-66, .helloagents/modules/admin-frontend.md:49
+
 ## [0.6.14] - 2026-04-28
 
 ### 修复
