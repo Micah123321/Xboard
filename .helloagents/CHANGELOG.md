@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.6.17] - 2026-04-28
+
+### 快速修改
+- **[ci-workflows]**: 修复后端 Docker 构建在 `composer dump-autoload` 阶段因旧锁文件中的 `laravel/reverb` provider 自动发现而失败的问题；项目未启用 Reverb，Composer package discovery 现在会跳过 `laravel/reverb` — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: composer.json:53-60
+
 ## [0.6.16] - 2026-04-28
 
 ### 快速修改
