@@ -1,0 +1,10 @@
+{
+  "status": "completed",
+  "completed": 5,
+  "failed": 0,
+  "pending": 0,
+  "total": 5,
+  "percent": 100,
+  "current": "节点昨日流量统计已实现并完成验证",
+  "updated_at": "2026-04-29 01:50:00"
+}

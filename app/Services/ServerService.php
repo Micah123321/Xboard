@@ -247,7 +247,8 @@ class ServerService
         ];
 
         if (isset($metrics['traffic_limit']) && is_array($metrics['traffic_limit'])) {
-            app(ServerTrafficLimitService::class)->applyRuntimeMetrics($node, $metrics['traffic_limit']);
+            $metricsData['traffic_limit'] = app(ServerTrafficLimitService::class)
+                ->applyRuntimeMetrics($node, $metrics['traffic_limit']);
         }
 
         Cache::put(

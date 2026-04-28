@@ -874,8 +874,24 @@ export interface AdminNodeMetrics {
 
 export interface AdminNodeTrafficStats {
   today: TrafficAmount
+  yesterday: TrafficAmount
   month: TrafficAmount
   total: TrafficAmount
+}
+
+export interface AdminNodeTrafficLimitSnapshot {
+  enabled: boolean
+  limit: number
+  used: number
+  percent: number
+  suspended: boolean
+  last_reset_at?: number
+  cycle_start_at?: number
+  next_reset_at?: number
+  suspended_at?: number
+  status?: string
+  scope_key?: string
+  scope_node_ids?: number[]
 }
 
 export interface AdminNodeRateTimeRange {
@@ -909,6 +925,7 @@ export interface AdminNodeItem {
   traffic_limit_next_reset_at?: number | null
   traffic_limit_suspended_at?: number | null
   enabled?: boolean
+  machine_id?: number | null
   parent_id?: number | null
   rate?: number | null
   transfer_enable?: number | null
@@ -926,6 +943,7 @@ export interface AdminNodeItem {
   last_push_at?: number | null
   metrics?: AdminNodeMetrics | null
   traffic_stats?: AdminNodeTrafficStats | null
+  traffic_limit_snapshot?: AdminNodeTrafficLimitSnapshot | null
   groups?: AdminServerGroupItem[]
   parent?: AdminNodeParentRef | null
   gfw_check?: AdminNodeGfwCheck | null

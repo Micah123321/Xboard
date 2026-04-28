@@ -46,9 +46,9 @@
 - 节点管理页现支持墙状态展示、墙状态筛选与关键词搜索；父节点可通过行级或批量操作发起检测，子节点不单独检测并显示“随父节点”的继承状态
 - 节点管理页现支持“墙检测托管”开关、批量设置和刷新数据按钮；父节点开启后参与 `sync:server-gfw-checks` 自动检测，自动墙检统计只计算父节点；子节点不独立检测但可控制是否随父节点自动隐藏 / 恢复
 - 节点行级菜单现已补齐“置顶节点”，会复用当前排序结果生成新的顺序 payload 并提交到 `server/manage/sort`
-- 节点列表中鼠标悬停节点名称会显示节点流量详情卡；`server/manage/getNodes` 会返回 `traffic_stats.today/month/total`，三组数据均来自 `v2_stat_server` 按节点聚合，前端统一按 B/KB/MB/GB/TB 自适应格式化展示上行、下行和合计
+- 节点列表中鼠标悬停节点名称会显示节点流量详情卡；`server/manage/getNodes` 会返回 `traffic_stats.today/yesterday/month/total`，其中今日、昨日和本月按半开时间窗口从 `v2_stat_server` 聚合，累计不加时间窗口，前端统一按 B/KB/MB/GB/TB 自适应格式化展示上行、下行和合计
 - 节点新增 / 编辑弹窗现支持月流量限额配置，字段包含启用开关、月流量额度 GB、重置日期、重置时间和时区；保存时会把 GB 转为字节写入 `transfer_enable`，并提交 `traffic_limit_*` 字段
-- 节点流量详情卡会在启用限额时追加“月额度”进度、限额状态和下次重置时间，节点标签区同步显示正常 / 接近额度 / 已限额状态；搜索关键字可匹配“流量限额 / 月流量 / 超额下线”
+- 节点流量详情卡会在启用限额时追加“月额度”进度、限额状态和下次重置时间，优先使用 `server/manage/getNodes` 返回的 `traffic_limit_snapshot` 展示同 `machine_id` 或同 host 的共享当前账期用量；后端缺少快照时回退 mi-node metrics / `u+d`，节点标签区同步显示正常 / 接近额度 / 已限额状态；搜索关键字可匹配“流量限额 / 月流量 / 超额下线”
 - 权限组管理页使用真实后端 `server/group/fetch`、`server/group/save` 与 `server/group/drop`，支持关键字搜索、新增/编辑中央弹窗、删除确认，以及从节点数量列跳转到 `#/nodes?group={id}` 的筛选联动
 - 路由管理页使用真实后端 `server/route/fetch`、`server/route/save` 与 `server/route/drop`，支持路由列表、关键词搜索、新增/编辑中央弹窗、删除与动作值展示
 - 路由管理页的节点引用摘要由 `server/manage/getNodes` 返回的 `route_ids` 推导，不在前端伪造额外接口

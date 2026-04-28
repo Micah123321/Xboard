@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## [0.6.22] - 2026-04-29
+
+### 修复
+- **[node-traffic-limit]**: 修复父节点自动下线后子节点仍可能保持上线的问题；新增 `parent_auto_hidden` 标记和父节点显隐联动服务，自动上线离线、流量限额 suspended 会隐藏当时仍显示的直接子节点，自动恢复或限额重置后只恢复这批由联动逻辑隐藏的子节点，手动隐藏的子节点不被误上线 — by yinjianm
+  - 方案: [202604290153_parent-node-auto-visibility](archive/2026-04/202604290153_parent-node-auto-visibility/)
+  - 决策: parent-node-auto-visibility#D001(使用独立父级自动隐藏标记)
+
+## [0.6.21] - 2026-04-29
+
+### 修复
+- **[node-traffic-limit]**: 修正节点管理月额度使用量口径；同 `machine_id` 或同 host 节点现在共享当前账期用量，`server/manage/getNodes` 返回 `traffic_limit_snapshot`，mi-node 下发的 `traffic_limit.current_used` 也改为共享账期统计，管理端优先显示快照并保留旧 metrics / `u+d` 回退 — by yinjianm
+  - 方案: [202604290132_shared-node-traffic-limit](archive/2026-04/202604290132_shared-node-traffic-limit/)
+  - 决策: shared-node-traffic-limit#D001(共享范围优先 machine_id，兜底 host)
+
+## [0.6.20] - 2026-04-29
+
+### 新增
+- **[admin-frontend]**: 节点流量详情卡新增“昨日”统计；`server/manage/getNodes` 现在返回 `traffic_stats.today/yesterday/month/total`，今日、昨日和本月均使用半开时间窗口聚合，便于对比“今日下行多、本月上行多”的流量分布来源 — by yinjianm
+  - 方案: [202604290123_node-traffic-yesterday-stats](archive/2026-04/202604290123_node-traffic-yesterday-stats/)
+  - 决策: node-traffic-yesterday-stats#D001(保持 u/d 语义并新增后端 yesterday 字段)
+
+## [0.6.19] - 2026-04-29
+
+### 快速修改
+- **[node-traffic-limit]**: 修复节点提高月流量额度后管理端仍显示“已限额”的问题；保存配置、缓存 metrics 回写和节点下发配置现在都会按当前已用流量与新额度重新计算 suspended 状态，旧额度产生的 stale metrics 不会再把节点重新标记为限额下线 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: app/Services/ServerTrafficLimitService.php:16-320, app/Services/ServerService.php:247-252, tests/Unit/ServerTrafficLimitServiceTest.php:60-148, E:/code/go/mi-node/internal/trafficlimit/manager_test.go:120-157
+
 ## [0.6.18] - 2026-04-28
 
 ### 新增

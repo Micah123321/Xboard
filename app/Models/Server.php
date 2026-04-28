@@ -28,6 +28,8 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property boolean $gfw_check_enabled 是否自动检测墙状态并同步显示
  * @property boolean $gfw_auto_hidden 是否由墙状态自动隐藏
  * @property int|null $gfw_auto_action_at 最近墙状态自动显隐时间
+ * @property boolean $parent_auto_hidden 是否由父节点自动状态联动隐藏
+ * @property int|null $parent_auto_action_at 最近父节点自动联动显隐时间
  * @property boolean $traffic_limit_enabled 是否启用节点流量限额强制下线
  * @property int|null $traffic_limit_reset_day 节点流量每月重置日
  * @property string|null $traffic_limit_reset_time 节点流量重置时间
@@ -143,6 +145,8 @@ class Server extends Model
         'gfw_check_enabled' => 'boolean',
         'gfw_auto_hidden' => 'boolean',
         'gfw_auto_action_at' => 'integer',
+        'parent_auto_hidden' => 'boolean',
+        'parent_auto_action_at' => 'integer',
         'traffic_limit_enabled' => 'boolean',
         'traffic_limit_reset_day' => 'integer',
         'traffic_limit_last_reset_at' => 'integer',

@@ -53,6 +53,7 @@ class ServerAutoOnlineService
         $wasShown = (bool) $server->show;
 
         if ($wasShown === $shouldShow && !$shouldClearGfwAutoHidden) {
+            $this->syncChildrenForFinalState($server, $shouldShow, $result);
             $result['unchanged']++;
             return;
         }
@@ -71,6 +72,24 @@ class ServerAutoOnlineService
         if ($wasShown !== $shouldShow) {
             $shouldShow ? $result['shown']++ : $result['hidden']++;
         }
+        $this->syncChildrenForFinalState($server, $shouldShow, $result);
+    }
+
+    private function syncChildrenForFinalState(Server $server, bool $shouldShow, array &$result): void
+    {
+        $childResult = app(ServerParentVisibilityService::class)
+            ->syncChildrenForParent($server, $shouldShow);
+        $hidden = (int) ($childResult['hidden'] ?? 0);
+        $restored = (int) ($childResult['restored'] ?? 0);
+        $childUpdates = $hidden + $restored;
+
+        if ($childUpdates <= 0) {
+            return;
+        }
+
+        $result['updated'] += $childUpdates;
+        $result['hidden'] += $hidden;
+        $result['shown'] += $restored;
     }
 
     private function emptyResult(int $total = 0): array

@@ -22,7 +22,7 @@ export interface NodeGfwMeta {
 }
 
 export interface NodeTrafficDetail {
-  key: 'today' | 'month' | 'total'
+  key: 'today' | 'yesterday' | 'month' | 'total'
   label: string
   upload: string
   download: string
@@ -68,6 +68,15 @@ function normalizeText(value: unknown): string {
 function normalizeTrafficValue(value: unknown): number {
   const normalized = Number(value)
   return Number.isFinite(normalized) && normalized > 0 ? normalized : 0
+}
+
+function normalizeOptionalTrafficValue(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  const normalized = Number(value)
+  return Number.isFinite(normalized) && normalized >= 0 ? normalized : null
 }
 
 function normalizeTrafficAmount(amount?: TrafficAmountLike | null): TrafficAmount {
@@ -255,6 +264,7 @@ export function getNodeTrafficDetails(node: AdminNodeItem): NodeTrafficDetail[] 
 
   const rows: Array<{ key: NodeTrafficDetail['key']; label: string; source?: TrafficAmountLike | null }> = [
     { key: 'today', label: '今日', source: stats?.today },
+    { key: 'yesterday', label: '昨日', source: stats?.yesterday },
     { key: 'month', label: '本月', source: stats?.month },
     { key: 'total', label: '累计', source: stats?.total ?? totalFallback },
   ]
@@ -272,16 +282,25 @@ export function getNodeTrafficDetails(node: AdminNodeItem): NodeTrafficDetail[] 
 }
 
 export function getNodeTrafficLimitDetail(node: AdminNodeItem): NodeTrafficLimitDetail {
-  const limit = normalizeTrafficValue(node.transfer_enable)
+  const snapshot = node.traffic_limit_snapshot
   const metrics = node.metrics?.traffic_limit
-  const used = normalizeTrafficValue(metrics?.used) || normalizeTrafficValue(node.u) + normalizeTrafficValue(node.d)
-  const suspended = Boolean(metrics?.suspended) || node.traffic_limit_status === 'suspended'
-  const nextResetAt = normalizeTrafficValue(metrics?.next_reset_at) || normalizeTrafficValue(node.traffic_limit_next_reset_at)
+  const limit = normalizeOptionalTrafficValue(snapshot?.limit)
+    ?? normalizeOptionalTrafficValue(metrics?.limit)
+    ?? normalizeTrafficValue(node.transfer_enable)
+  const used = normalizeOptionalTrafficValue(snapshot?.used)
+    ?? normalizeOptionalTrafficValue(metrics?.used)
+    ?? normalizeTrafficValue(node.u) + normalizeTrafficValue(node.d)
+  const status = normalizeText(snapshot?.status || metrics?.status || node.traffic_limit_status)
+  const suspended = Boolean(snapshot?.suspended) || Boolean(metrics?.suspended) || status === 'suspended'
+  const nextResetAt = normalizeOptionalTrafficValue(snapshot?.next_reset_at)
+    ?? normalizeOptionalTrafficValue(metrics?.next_reset_at)
+    ?? normalizeTrafficValue(node.traffic_limit_next_reset_at)
   const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0
+  const enabled = (snapshot ? Boolean(snapshot.enabled) : Boolean(node.traffic_limit_enabled)) && limit > 0
 
   let statusLabel = '未启用'
   let tagType: NodeTrafficLimitDetail['tagType'] = 'info'
-  if (Boolean(node.traffic_limit_enabled) && limit > 0) {
+  if (enabled) {
     if (suspended) {
       statusLabel = '已限额'
       tagType = 'danger'
@@ -295,7 +314,7 @@ export function getNodeTrafficLimitDetail(node: AdminNodeItem): NodeTrafficLimit
   }
 
   return {
-    enabled: Boolean(node.traffic_limit_enabled) && limit > 0,
+    enabled,
     used: formatTrafficBytes(used),
     limit: formatTrafficBytes(limit),
     percent,

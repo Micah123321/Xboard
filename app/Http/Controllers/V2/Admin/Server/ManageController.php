@@ -10,9 +10,11 @@ use App\Models\ServerGroup;
 use App\Models\StatServer;
 use App\Services\ServerAutoOnlineService;
 use App\Services\ServerGfwCheckService;
+use App\Services\ServerParentVisibilityService;
 use App\Services\ServerService;
 use App\Services\ServerTrafficLimitService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -22,11 +24,13 @@ class ManageController extends Controller
     {
         $servers = ServerService::getAllServers();
         $trafficStats = $this->buildNodeTrafficStats($servers);
+        $trafficLimitSnapshots = app(ServerTrafficLimitService::class)->buildSnapshotsForServers($servers);
 
-        $servers = app(ServerGfwCheckService::class)->decorateServers($servers)->map(function ($item) use ($trafficStats) {
+        $servers = app(ServerGfwCheckService::class)->decorateServers($servers)->map(function ($item) use ($trafficStats, $trafficLimitSnapshots) {
             $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])->get(['name', 'id']);
             $item['parent'] = $item->parent;
             $item['traffic_stats'] = $trafficStats[(int) $item['id']] ?? $this->emptyNodeTrafficStats();
+            $item['traffic_limit_snapshot'] = $trafficLimitSnapshots[(int) $item['id']] ?? null;
             return $item;
         });
         return $this->success($servers);
@@ -44,14 +48,45 @@ class ManageController extends Controller
             return [];
         }
 
-        $this->fillTrafficWindow($stats, 'today', strtotime('today'));
-        $this->fillTrafficWindow($stats, 'month', strtotime(date('Y-m-01')));
+        foreach ($this->resolveNodeTrafficWindows() as $key => $window) {
+            $this->fillTrafficWindow($stats, $key, $window['start'], $window['end']);
+        }
         $this->fillTrafficWindow($stats, 'total');
 
         return $stats;
     }
 
-    private function fillTrafficWindow(array &$stats, string $key, ?int $startAt = null): void
+    /**
+     * Resolve half-open node traffic windows for daily and monthly stats.
+     *
+     * @param int|null $referenceTimestamp Unix timestamp used as the current time.
+     * @return array<string, array{start: int, end: int}>
+     */
+    protected function resolveNodeTrafficWindows(?int $referenceTimestamp = null): array
+    {
+        $reference = Carbon::createFromTimestamp(
+            $referenceTimestamp ?? time(),
+            config('app.timezone', date_default_timezone_get())
+        );
+        $todayStart = $reference->copy()->startOfDay()->timestamp;
+
+        return [
+            'today' => [
+                'start' => $todayStart,
+                'end' => $reference->copy()->addDay()->startOfDay()->timestamp,
+            ],
+            'yesterday' => [
+                'start' => $reference->copy()->subDay()->startOfDay()->timestamp,
+                'end' => $todayStart,
+            ],
+            'month' => [
+                'start' => $reference->copy()->startOfMonth()->timestamp,
+                'end' => $reference->copy()->addMonthNoOverflow()->startOfMonth()->timestamp,
+            ],
+        ];
+    }
+
+    private function fillTrafficWindow(array &$stats, string $key, ?int $startAt = null, ?int $endAt = null): void
     {
         $rows = StatServer::query()
             ->selectRaw('server_id, COALESCE(SUM(u), 0) as upload, COALESCE(SUM(d), 0) as download')
@@ -60,11 +95,17 @@ class ManageController extends Controller
             ->when($startAt !== null, function ($query) use ($startAt) {
                 $query->where('record_at', '>=', $startAt);
             })
+            ->when($endAt !== null, function ($query) use ($endAt) {
+                $query->where('record_at', '<', $endAt);
+            })
             ->groupBy('server_id')
             ->get();
 
         foreach ($rows as $row) {
-            $stats[(int) $row->server_id][$key] = $this->buildTrafficAmount($row->upload, $row->download);
+            $stats[(int) $row->server_id][$key] = $this->buildTrafficAmount(
+                $row->getAttribute('upload'),
+                $row->getAttribute('download')
+            );
         }
     }
 
@@ -72,6 +113,7 @@ class ManageController extends Controller
     {
         return [
             'today' => $this->buildTrafficAmount(0, 0),
+            'yesterday' => $this->buildTrafficAmount(0, 0),
             'month' => $this->buildTrafficAmount(0, 0),
             'total' => $this->buildTrafficAmount(0, 0),
         ];
@@ -133,6 +175,8 @@ class ManageController extends Controller
                 if (array_key_exists('show', $params)) {
                     $params['gfw_auto_hidden'] = false;
                     $params['gfw_auto_action_at'] = null;
+                    $params['parent_auto_hidden'] = false;
+                    $params['parent_auto_action_at'] = null;
                 }
                 $server->update($params);
                 app(ServerTrafficLimitService::class)->refreshSchedule($server->refresh());
@@ -175,6 +219,7 @@ class ManageController extends Controller
             $server->show = (int) $params['show'];
             $server->gfw_auto_hidden = false;
             $server->gfw_auto_action_at = null;
+            app(ServerParentVisibilityService::class)->clearParentAutoHidden($server);
         }
         if (array_key_exists('auto_online', $params)) {
             $server->auto_online = (bool) $params['auto_online'];
@@ -335,6 +380,8 @@ class ManageController extends Controller
             $update['show'] = (int) $params['show'];
             $update['gfw_auto_hidden'] = false;
             $update['gfw_auto_action_at'] = null;
+            $update['parent_auto_hidden'] = false;
+            $update['parent_auto_action_at'] = null;
         }
         if (array_key_exists('auto_online', $params) && $params['auto_online'] !== null) {
             $update['auto_online'] = (bool) $params['auto_online'];
@@ -415,7 +462,7 @@ class ManageController extends Controller
         }
 
         $copiedServer = $server->replicate();
-        $copiedServer->show = 0;
+        $copiedServer->show = false;
         $copiedServer->code = null;
         $copiedServer->u = 0;
         $copiedServer->d = 0;

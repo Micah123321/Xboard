@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Models\Server;
 use App\Models\ServerGfwCheck;
 use App\Services\ServerAutoOnlineService;
+use App\Services\ServerParentVisibilityService;
 use App\Services\ServerService;
 use App\Utils\CacheKey;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -14,6 +15,13 @@ use Tests\TestCase;
 class ServerAutoOnlineServiceTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Cache::flush();
+    }
 
     public function test_sync_updates_only_nodes_with_auto_online_enabled(): void
     {
@@ -115,6 +123,42 @@ class ServerAutoOnlineServiceTest extends TestCase
         $this->assertTrue($managedOnline->fresh()->show);
     }
 
+    public function test_parent_auto_online_sync_hides_and_restores_only_auto_hidden_children(): void
+    {
+        $parent = $this->makeServer([
+            'name' => 'parent-auto-managed',
+            'show' => true,
+            'auto_online' => true,
+        ]);
+        $visibleChild = $this->makeServer([
+            'name' => 'visible-child',
+            'parent_id' => $parent->id,
+            'show' => true,
+        ]);
+        $manualHiddenChild = $this->makeServer([
+            'name' => 'manual-hidden-child',
+            'parent_id' => $parent->id,
+            'show' => false,
+        ]);
+
+        app(ServerAutoOnlineService::class)->sync();
+
+        $this->assertFalse($parent->fresh()->show);
+        $this->assertFalse($visibleChild->fresh()->show);
+        $this->assertTrue($visibleChild->fresh()->parent_auto_hidden);
+        $this->assertFalse($manualHiddenChild->fresh()->show);
+        $this->assertFalse($manualHiddenChild->fresh()->parent_auto_hidden);
+
+        $this->markNodeOnline($parent);
+        app(ServerAutoOnlineService::class)->sync();
+
+        $this->assertTrue($parent->fresh()->show);
+        $this->assertTrue($visibleChild->fresh()->show);
+        $this->assertFalse($visibleChild->fresh()->parent_auto_hidden);
+        $this->assertFalse($manualHiddenChild->fresh()->show);
+        $this->assertFalse($manualHiddenChild->fresh()->parent_auto_hidden);
+    }
+
     public function test_touch_node_syncs_auto_online_node_immediately(): void
     {
         $managedOnline = $this->makeServer([
@@ -126,6 +170,22 @@ class ServerAutoOnlineServiceTest extends TestCase
         ServerService::touchNode($managedOnline);
 
         $this->assertTrue($managedOnline->fresh()->show);
+    }
+
+    public function test_clear_parent_auto_hidden_prevents_later_parent_restore_from_overriding_manual_choice(): void
+    {
+        $child = $this->makeServer([
+            'name' => 'manually-adjusted-child',
+            'show' => false,
+            'parent_auto_hidden' => true,
+            'parent_auto_action_at' => 123456,
+        ]);
+
+        app(ServerParentVisibilityService::class)->clearParentAutoHidden($child);
+        $child->save();
+
+        $this->assertFalse($child->fresh()->parent_auto_hidden);
+        $this->assertNull($child->fresh()->parent_auto_action_at);
     }
 
     private function makeServer(array $attributes = []): Server
@@ -142,6 +202,7 @@ class ServerAutoOnlineServiceTest extends TestCase
             'auto_online' => false,
             'gfw_check_enabled' => true,
             'gfw_auto_hidden' => false,
+            'parent_auto_hidden' => false,
             'enabled' => true,
         ], $attributes));
     }

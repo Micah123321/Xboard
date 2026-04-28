@@ -7,6 +7,9 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202604290153 | parent-node-auto-visibility | - | - | - | ✅完成 |
+| 202604290132 | shared-node-traffic-limit | implementation | node-traffic-limit,admin-frontend | shared-node-traffic-limit#D001 | ✅完成 |
+| 202604290123 | node-traffic-yesterday-stats | implementation | admin-frontend,backend-admin-api | node-traffic-yesterday-stats#D001 | ✅完成 |
 | 202604281921 | node-traffic-limit-enforcement | implementation | node-traffic-limit,admin-frontend,mi-node | node-traffic-limit-enforcement#D001,#D002 | ✅完成 |
 | 202604281625 | admin-frontend-node-traffic-hover | - | - | - | ✅完成 |
 | 202604281632 | admin-frontend-node-auto-online-immediate-sync | - | - | - | ✅完成 |
@@ -47,6 +50,8 @@
 ## 按月归档
 
 ### 2026-04
+- [202604290132_shared-node-traffic-limit](./2026-04/202604290132_shared-node-traffic-limit/) - 修正节点管理月额度使用量口径，同 `machine_id` 或同 host 节点共享当前账期用量，并由后端快照统一服务管理端展示和 mi-node 下发
+- [202604290123_node-traffic-yesterday-stats](./2026-04/202604290123_node-traffic-yesterday-stats/) - 节点流量详情卡新增“昨日”统计，并让今日、昨日和本月统计按半开窗口聚合，便于核对上行/下行流量分布
 - [202604281921_node-traffic-limit-enforcement](./2026-04/202604281921_node-traffic-limit-enforcement/) - 新增节点月流量限额强制下线能力，Xboard 负责配置、重置调度和状态展示，mi-node 负责本地额度累计、内核停止与重置恢复
 - [202604281441_fix-admin-node-gfw-null-enabled](./2026-04/202604281441_fix-admin-node-gfw-null-enabled/) - 修复 `parent_id=0` 父节点不会被自动墙检入队导致长期显示“未检测”的问题，并让自动墙检查询对齐项目父节点与启用语义
 - [202604281303_xboard-reusable-server-deploy](./2026-04/202604281303_xboard-reusable-server-deploy/) - 新增可复制到服务器的 Xboard Compose 部署模板，补齐独立 `scheduler` 服务，并提供 `.env.example`、初始化/部署/更新/状态检查脚本和部署说明
