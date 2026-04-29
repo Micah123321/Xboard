@@ -14,18 +14,14 @@ class GuestRoute
         $router->group([
             'prefix' => 'guest'
         ], function ($router) {
-            $router->group([
-                'middleware' => 'user.frontend'
-            ], function ($router) {
-                // Plan
-                $router->get('/plan/fetch', [PlanController::class, 'fetch']);
-                // Comm
-                $router->get('/comm/config', [CommController::class, 'config']);
-            });
+            // Plan
+            $router->get('/plan/fetch', [PlanController::class, 'fetch']);
             // Telegram
             $router->post('/telegram/webhook', [TelegramController::class, 'webhook']);
             // Payment
             $router->match(['get', 'post'], '/payment/notify/{method}/{uuid}', [PaymentController::class, 'notify']);
+            // Comm
+            $router->get('/comm/config', [CommController::class, 'config']);
         });
     }
 }

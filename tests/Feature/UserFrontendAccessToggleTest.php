@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Http\Middleware\InitializePlugins;
 use App\Support\Setting;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class UserFrontendAccessToggleTest extends TestCase
@@ -35,15 +37,17 @@ class UserFrontendAccessToggleTest extends TestCase
         $response->assertContent('');
     }
 
-    public function test_disabled_frontend_hides_user_routes(): void
+    public function test_disabled_frontend_does_not_hide_user_api_routes(): void
     {
         $this->setFrontendEnabled(false);
 
-        $this->postJson('/api/v1/passport/auth/login', [])->assertStatus(404)->assertContent('');
-        $this->getJson('/api/v1/user/info')->assertStatus(404)->assertContent('');
-        $this->get('/s/example-token')->assertStatus(404)->assertContent('');
-        $this->getJson('/api/v1/guest/plan/fetch')->assertStatus(404)->assertContent('');
-        $this->getJson('/api/v2/client/app/getVersion?token=example-token')->assertStatus(404)->assertContent('');
+        $this->postJson('/api/v1/passport/auth/login', [])->assertStatus(422);
+        $this->getJson('/api/v1/user/info')->assertStatus(403);
+
+        $this->assertRouteDoesNotUseFrontendGate('GET', '/s/example-token');
+        $this->assertRouteDoesNotUseFrontendGate('GET', '/api/v1/guest/plan/fetch');
+        $this->assertRouteDoesNotUseFrontendGate('GET', '/api/v1/guest/comm/config');
+        $this->assertRouteDoesNotUseFrontendGate('GET', '/api/v2/client/app/getVersion');
     }
 
     public function test_disabled_frontend_does_not_hide_node_api(): void
@@ -61,6 +65,13 @@ class UserFrontendAccessToggleTest extends TestCase
         $this->bindSettings([
             'frontend_enable' => $enabled ? 1 : 0,
         ]);
+    }
+
+    private function assertRouteDoesNotUseFrontendGate(string $method, string $uri): void
+    {
+        $route = Route::getRoutes()->match(Request::create($uri, $method));
+
+        $this->assertNotContains('user.frontend', $route->gatherMiddleware());
     }
 
     private function bindSettings(array $settings = []): void

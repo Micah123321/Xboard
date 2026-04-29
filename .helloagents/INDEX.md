@@ -23,7 +23,7 @@ active_package: 无
 - [order-payment](modules/order-payment.md): 订单支付成功快照、第三方回调元信息透传与后台支付成功信息展示
 - [queue-mail](modules/queue-mail.md): 邮件发送队列、SMTP 运行时配置、Horizon 超时与失败重试边界
 - [subscription-protocols](modules/subscription-protocols.md): 客户端订阅导出入口、协议适配器与版本兼容过滤
-- [user-frontend-access](modules/user-frontend-access.md): 用户前端访问开关、用户侧 API 隐藏边界与节点 API 白名单
+- [user-frontend-access](modules/user-frontend-access.md): 用户前端首页访问开关与 API 保留边界
 
 ## 归档与变更
 

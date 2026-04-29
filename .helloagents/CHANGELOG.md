@@ -3,7 +3,7 @@
 ## [0.6.23] - 2026-04-29
 
 ### 新增
-- **[user-frontend-access]**: 新增用户前端访问开关；后台站点设置可切换 `frontend_enable`，关闭后 `/`、订阅入口和用户侧 API 返回空 404，不渲染站点标题或用户主题内容，同时保留节点 API 与管理后台原有访问边界 — by yinjianm
+- **[user-frontend-access]**: 新增用户前端访问开关；后台站点设置可切换 `frontend_enable`，关闭后仅用户首页 `/` 返回空 404，不渲染站点标题或用户主题内容，订阅/API、节点 API 与管理后台保持原有访问边界 — by yinjianm
   - 方案: [202604291559_user-frontend-access-toggle](archive/2026-04/202604291559_user-frontend-access-toggle/)
   - 决策: user-frontend-access-toggle#D001(使用路由级中间件控制用户入口)
 

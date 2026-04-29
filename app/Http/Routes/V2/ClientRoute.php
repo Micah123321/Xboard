@@ -10,7 +10,7 @@ class ClientRoute
     {
         $router->group([
             'prefix' => 'client',
-            'middleware' => ['user.frontend', 'client']
+            'middleware' => 'client'
         ], function ($router) {
             // App
             $router->get('/app/getConfig', [AppController::class, 'getConfig']);

@@ -119,7 +119,7 @@ export const systemConfigSections: SystemConfigSectionSchema[] = [
       { key: 'logo', label: 'LOGO', type: 'url', fullWidth: true, nullable: true, placeholder: 'https://cdn.example.com/logo.png' },
       { key: 'subscribe_url', label: '订阅 URL', type: 'textarea', fullWidth: true, rows: 3, nullable: true, placeholder: '可填写一个或多个订阅入口地址' },
       { key: 'tos_url', label: '用户条款 (TOS) URL', type: 'url', fullWidth: true, nullable: true, placeholder: 'https://example.com/tos' },
-      { key: 'frontend_enable', label: '开放用户前端', type: 'switch', defaultValue: true, helper: '关闭后首页和用户接口返回 404，节点接口不受影响。' },
+      { key: 'frontend_enable', label: '开放用户前端', type: 'switch', defaultValue: true, helper: '关闭后首页返回空 404，API 不受影响。' },
       { key: 'stop_register', label: '停止新用户注册', type: 'switch' },
       { key: 'ticket_must_wait_reply', label: '工单等待回复限制', type: 'switch' },
       { key: 'try_out_plan_id', label: '注册试用套餐', type: 'select', optionSource: 'plans', valueType: 'number', defaultValue: 0, helper: '选择 0 表示关闭试用。' },

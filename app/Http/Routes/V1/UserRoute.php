@@ -22,7 +22,7 @@ class UserRoute
     {
         $router->group([
             'prefix' => 'user',
-            'middleware' => ['user.frontend', 'user']
+            'middleware' => 'user'
         ], function ($router) {
             // User
             $router->get('/resetSecurity', [UserController::class, 'resetSecurity']);

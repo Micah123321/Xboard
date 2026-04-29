@@ -10,8 +10,7 @@ class PassportRoute
     public function map(Registrar $router)
     {
         $router->group([
-            'prefix' => 'passport',
-            'middleware' => 'user.frontend'
+            'prefix' => 'passport'
         ], function ($router) {
             // Auth
             $router->post('/auth/register', [AuthController::class, 'register']);
