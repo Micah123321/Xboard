@@ -71,7 +71,7 @@ Route::get('/', function (Request $request) {
         ]);
         abort(500, '主题加载失败');
     }
-});
+})->middleware('user.frontend');
 
 //TODO:: 兼容
 Route::get('/' . admin_setting('secure_path', admin_setting('frontend_admin_path', hash('crc32b', config('app.key')))), function () {
@@ -88,5 +88,5 @@ Route::get('/' . admin_setting('secure_path', admin_setting('frontend_admin_path
 });
 
 Route::get('/' . (admin_setting('subscribe_path', 's')) . '/{token}', [\App\Http\Controllers\V1\Client\ClientController::class, 'subscribe'])
-    ->middleware('client')
+    ->middleware(['user.frontend', 'client'])
     ->name('client.subscribe');

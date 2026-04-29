@@ -24,6 +24,7 @@ class ConfigSave extends FormRequest
         // site
         'logo' => 'nullable|url',
         'force_https' => '',
+        'frontend_enable' => 'boolean',
         'stop_register' => '',
         'app_name' => '',
         'app_description' => '',

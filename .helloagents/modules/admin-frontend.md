@@ -70,6 +70,7 @@
 - 优惠券编辑弹窗支持金额/比例两种优惠类型、有效期范围、批量生成、自定义券码、指定周期与指定订阅限制
 - 系统管理新增独立“系统管理”侧边栏分组，当前已完整实现 `#/system/config`、`#/system/themes`、`#/system/plugins`、`#/system/notices`、`#/system/payments` 与 `#/system/knowledge`
 - 系统配置页使用真实后端 `config/fetch`、`config/save`、`config/testSendMail` 与 `config/setTelegramWebhook`，并按站点、安全、订阅、邀请佣金、节点、邮件、Telegram、APP、订阅模板 9 个分组组织长表单
+- 系统配置页的站点设置包含“开放用户前端”开关；关闭后由后端让用户首页和用户侧 API 返回空 404，节点 API 与管理后台不受影响
 - 主题管理页使用真实后端 `theme/getThemes`、`theme/getThemeConfig`、`theme/saveThemeConfig`、`theme/upload`，并通过 `config/save(frontend_theme)` 完成当前主题切换
 - 主题配置抽屉按后端返回的动态 schema 渲染 `input / textarea / select` 字段，不在前端猜测额外配置项
 - 插件管理页使用真实后端 `plugin/types`、`plugin/getPlugins`、`plugin/upload`、`plugin/install`、`plugin/uninstall`、`plugin/enable`、`plugin/disable`、`plugin/config` 与 `plugin/upgrade`

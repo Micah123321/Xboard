@@ -7,6 +7,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202604291559 | user-frontend-access-toggle | implementation | user-frontend-access,admin-frontend | user-frontend-access-toggle#D001 | ✅完成 |
 | 202604290153 | parent-node-auto-visibility | - | - | - | ✅完成 |
 | 202604290132 | shared-node-traffic-limit | implementation | node-traffic-limit,admin-frontend | shared-node-traffic-limit#D001 | ✅完成 |
 | 202604290123 | node-traffic-yesterday-stats | implementation | admin-frontend,backend-admin-api | node-traffic-yesterday-stats#D001 | ✅完成 |

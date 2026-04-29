@@ -11,7 +11,7 @@ class ClientRoute
     {
         $router->group([
             'prefix' => 'client',
-            'middleware' => 'client'
+            'middleware' => ['user.frontend', 'client']
         ], function ($router) {
             // Client
             $router->get('/subscribe', [ClientController::class, 'subscribe'])->name('client.subscribe.legacy');
