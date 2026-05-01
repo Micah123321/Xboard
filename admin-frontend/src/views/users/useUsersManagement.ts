@@ -66,6 +66,7 @@ export function useUsersManagement() {
       planFilter.value,
       advancedFilters.value,
     ),
+    ...scopedActions.scopedUserFilters.value,
     ...scopedActions.scopedInviteFilters.value,
   ])
 
@@ -75,7 +76,10 @@ export function useUsersManagement() {
     planFilter.value,
     advancedFilters.value,
     plans.value,
-  ).concat(scopedActions.scopedInviteSummaries.value))
+  ).concat(
+    scopedActions.scopedUserSummaries.value,
+    scopedActions.scopedInviteSummaries.value,
+  ))
 
   const batchActions = useUsersBatchActions({
     loading,
@@ -148,9 +152,11 @@ export function useUsersManagement() {
     statusFilter.value = 'all'
     planFilter.value = 'all'
     advancedFilters.value = []
-    void scopedActions.clearScopedInviteQuery().finally(() => {
-      refreshUsers(true)
-    })
+    void scopedActions.clearScopedUserQuery()
+      .then(() => scopedActions.clearScopedInviteQuery())
+      .finally(() => {
+        refreshUsers(true)
+      })
   }
 
   function clearAdvancedFilters() {
@@ -280,6 +286,8 @@ export function useUsersManagement() {
 
   watch(
     () => [
+      scopedActions.route.query.user_id,
+      scopedActions.route.query.user_email,
       scopedActions.route.query.invite_user_id,
       scopedActions.route.query.invite_user_email,
     ],

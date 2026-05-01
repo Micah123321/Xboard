@@ -1,4 +1,12 @@
 services:
+  user:
+    image: ${VUE_XBOARD_THEME_MICAH_IMAGE:-ghcr.io/micah123321/vue-xboard-theme-micah:new}
+    restart: unless-stopped
+    environment:
+      XBOARD_BACKEND_UPSTREAM: ${XBOARD_BACKEND_UPSTREAM:-http://web:7001}
+      XBOARD_UPLOAD_UPSTREAM: ${XBOARD_UPLOAD_UPSTREAM:-https://pic.535888.xyz}
+    ports:
+      - "${ADMIN_PORT:-7003}:80"
   web:
     image: ${XBOARD_IMAGE:-ghcr.io/micah123321/xboard:new}
     restart: on-failure

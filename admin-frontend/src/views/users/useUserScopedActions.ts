@@ -15,6 +15,19 @@ export function useUserScopedActions() {
   const trafficLogUserEmail = ref('')
   const resettingTrafficId = ref<number | null>(null)
 
+  const scopedUserId = computed(() => {
+    const raw = route.query.user_id
+    const value = Array.isArray(raw) ? raw[0] : raw
+    const numeric = Number(value)
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null
+  })
+
+  const scopedUserEmail = computed(() => {
+    const raw = route.query.user_email
+    const value = Array.isArray(raw) ? raw[0] : raw
+    return typeof value === 'string' ? value : ''
+  })
+
   const scopedInviteUserId = computed(() => {
     const raw = route.query.invite_user_id
     const value = Array.isArray(raw) ? raw[0] : raw
@@ -34,6 +47,21 @@ export function useUserScopedActions() {
       : []
   ))
 
+  const scopedUserFilters = computed<AdminUserFilter[]>(() => (
+    scopedUserId.value
+      ? [{ id: 'id', value: `eq:${scopedUserId.value}` }]
+      : []
+  ))
+
+  const scopedUserSummaries = computed(() => {
+    if (!scopedUserId.value) {
+      return []
+    }
+
+    const label = scopedUserEmail.value || `用户 #${scopedUserId.value}`
+    return [`用户：${label}`]
+  })
+
   const scopedInviteSummaries = computed(() => {
     if (!scopedInviteUserId.value) {
       return []
@@ -42,6 +70,17 @@ export function useUserScopedActions() {
     const label = scopedInviteUserEmail.value || `用户 #${scopedInviteUserId.value}`
     return [`邀请人：${label}`]
   })
+
+  function clearScopedUserQuery() {
+    if (!scopedUserId.value && !scopedUserEmail.value) {
+      return Promise.resolve()
+    }
+
+    const nextQuery = { ...route.query }
+    delete nextQuery.user_id
+    delete nextQuery.user_email
+    return router.replace({ name: 'Users', query: nextQuery })
+  }
 
   function clearScopedInviteQuery() {
     if (!scopedInviteUserId.value && !scopedInviteUserEmail.value) {
@@ -116,9 +155,13 @@ export function useUserScopedActions() {
     trafficLogUserId,
     trafficLogUserEmail,
     resettingTrafficId,
+    scopedUserId,
+    scopedUserFilters,
+    scopedUserSummaries,
     scopedInviteUserId,
     scopedInviteFilters,
     scopedInviteSummaries,
+    clearScopedUserQuery,
     clearScopedInviteQuery,
     openAssignOrder,
     handleAssignOrderSuccess,

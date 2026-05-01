@@ -12,7 +12,7 @@
 ## LIVE_STATUS
 
 ```json
-{"status":"completed","completed":6,"failed":0,"pending":0,"total":6,"percent":100,"current":"用户前端访问开关、路由拦截、后台配置与验证已完成","updated_at":"2026-04-29 16:16:00"}
+{"status":"completed","completed":6,"failed":0,"pending":0,"total":6,"percent":100,"current":"用户前端首页访问开关、路由边界、后台配置与验证已完成","updated_at":"2026-04-29 16:20:00"}
 ```
 
 ## 进度概览
@@ -28,7 +28,7 @@
 ### 1. 后端访问控制
 
 - [√] 1.1 新增 `app/Http/Middleware/EnsureUserFrontendEnabled.php`
-  - 预期变更: 读取 `frontend_enable` 设置，关闭时对用户入口返回 404，开启时放行。
+  - 预期变更: 读取 `frontend_enable` 设置，关闭时对用户首页 `/` 返回空 404，开启时放行。
   - 完成标准: 中间件能正确识别 `true/false/1/0` 等设置值。
   - 验证方式: `vendor/bin/phpunit tests/Feature/UserFrontendAccessToggleTest.php`
   - depends_on: []
@@ -39,9 +39,9 @@
   - 验证方式: `php artisan route:list` 不报中间件解析错误。
   - depends_on: [1.1]
 
-- [√] 1.3 修改 `routes/web.php` 与用户侧 API 路由类
-  - 预期变更: 用户首页、订阅入口、V1 Passport/User/Client、V2 Client、V1 Guest 的公开展示接口挂载 `user.frontend`；节点 API 与后台 API 不挂载。
-  - 完成标准: `frontend_enable=false` 时用户侧入口返回 404，`/api/v1/server/*` 不被该中间件拦截。
+- [√] 1.3 修改 `routes/web.php` 并复核用户侧 API 路由类
+  - 预期变更: 仅用户首页 `/` 挂载 `user.frontend`；订阅入口、V1 Passport/User/Client、V2 User/Client、V1 Guest、节点 API 与后台 API 不挂载。
+  - 完成标准: `frontend_enable=false` 时 `/` 返回空 404，订阅/API/节点接口不被该中间件拦截。
   - 验证方式: `vendor/bin/phpunit tests/Feature/UserFrontendAccessToggleTest.php`
   - depends_on: [1.2]
 
@@ -62,7 +62,7 @@
 ### 3. 验证与同步
 
 - [√] 3.1 新增并执行验证
-  - 预期变更: 增加 `tests/Feature/UserFrontendAccessToggleTest.php`，覆盖默认开启、关闭隐藏、节点 API 不被隐藏。
+  - 预期变更: 增加 `tests/Feature/UserFrontendAccessToggleTest.php`，覆盖默认开启、关闭隐藏首页、用户 API/订阅/节点 API 不被隐藏。
   - 完成标准: 相关 PHPUnit 测试通过；管理端构建通过或明确记录阻断原因。
   - 验证方式: `vendor/bin/phpunit tests/Feature/UserFrontendAccessToggleTest.php`、`npm --prefix admin-frontend run build`
   - depends_on: [1.3, 2.2]

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.6.24] - 2026-05-01
+
+### 新增
+- **[admin-frontend]**: 为工单工作台对话页新增“查看用户 / 用户订单”跳转入口；当前工单用户可直接进入用户管理并按 `user_id` 精准筛选，或进入订单管理查看该用户订单 — by yinjianm
+  - 方案: [202605011828_admin-ticket-user-order-links](archive/2026-05/202605011828_admin-ticket-user-order-links/)
+  - 决策: admin-ticket-user-order-links#D001(使用路由 query 承载跨页面用户作用域)
+
 ## [0.6.23] - 2026-04-29
 
 ### 新增
