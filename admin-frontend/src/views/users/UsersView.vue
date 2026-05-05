@@ -260,6 +260,11 @@ const {
             {{ row.expired_at ? formatDateTime(row.expired_at) : '长期有效' }}
           </template>
         </ElTableColumn>
+        <ElTableColumn label="注册时间" width="140">
+          <template #default="{ row }">
+            {{ formatDateTime(row.created_at) }}
+          </template>
+        </ElTableColumn>
         <ElTableColumn label="操作" width="104" fixed="right">
           <template #default="{ row }">
             <ElDropdown trigger="click" @command="(command) => handleAction(command as UserAction, row)">

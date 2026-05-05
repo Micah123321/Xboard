@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.6.25] - 2026-05-05
+
+### 快速修改
+- **[admin-frontend]**: 用户管理列表新增注册时间列，复用现有时间格式化逻辑展示 `created_at` — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/views/users/UsersView.vue:263-265
+
 ## [0.6.24] - 2026-05-01
 
 ### 新增
