@@ -67,6 +67,13 @@ const dashboardEntryNotice = computed(() => {
   return '已从仪表盘进入工单工作台。'
 })
 
+const ticketQueryId = computed(() => {
+  const raw = route.query.ticket_id
+  const value = Array.isArray(raw) ? raw[0] : raw
+  const numeric = Number(value)
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null
+})
+
 function statusValueToParam() {
   if (statusFilter.value === 'opening') {
     return 0
@@ -101,6 +108,15 @@ async function loadTickets() {
 
 function openWorkspace(ticket: AdminTicketListItem) {
   activeTicketId.value = ticket.id
+  workspaceVisible.value = true
+}
+
+function openWorkspaceById(ticketId: number | null) {
+  if (!ticketId) {
+    return
+  }
+
+  activeTicketId.value = ticketId
   workspaceVisible.value = true
 }
 
@@ -161,8 +177,16 @@ watch(
   },
 )
 
+watch(
+  () => route.query.ticket_id,
+  () => {
+    openWorkspaceById(ticketQueryId.value)
+  },
+)
+
 onMounted(() => {
   applyDashboardFocus()
+  openWorkspaceById(ticketQueryId.value)
   void loadTickets()
 })
 </script>

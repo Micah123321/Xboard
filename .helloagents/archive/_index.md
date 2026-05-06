@@ -7,6 +7,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202605070140 | admin-frontend-ticket-return-manual-subscribe-copy | implementation | admin-frontend | admin-frontend-ticket-return-manual-subscribe-copy#D001 | ✅完成 |
 | 202605011828 | admin-ticket-user-order-links | implementation | admin-frontend | admin-ticket-user-order-links#D001 | ✅完成 |
 | 202604291559 | user-frontend-access-toggle | implementation | user-frontend-access,admin-frontend | user-frontend-access-toggle#D001 | ✅完成 |
 | 202604290153 | parent-node-auto-visibility | - | - | - | ✅完成 |
@@ -50,6 +51,9 @@
 | 202604161655 | merge-upstream-preserve-local | - | - | - | ✅完成 |
 
 ## 按月归档
+
+### 2026-05
+- [202605070140_admin-frontend-ticket-return-manual-subscribe-copy](./2026-05/202605070140_admin-frontend-ticket-return-manual-subscribe-copy/) - 修复订阅地址复制失败后无地址可手动复制的问题，并为工单外跳到用户页/订单页补齐“返回工单聊天”入口
 
 ### 2026-04
 - [202604290132_shared-node-traffic-limit](./2026-04/202604290132_shared-node-traffic-limit/) - 修正节点管理月额度使用量口径，同 `machine_id` 或同 host 节点共享当前账期用量，并由后端快照统一服务管理端展示和 mi-node 下发

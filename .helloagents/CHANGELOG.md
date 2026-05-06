@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.6.26] - 2026-05-07
+
+### 修复
+- **[admin-frontend]**: 修复订阅地址复制失败后无地址可手动复制的问题，并为工单外跳到用户页/订单页补齐“返回工单聊天”入口，返回后会自动打开原工单会话 — by yinjianm
+  - 方案: [202605070140_admin-frontend-ticket-return-manual-subscribe-copy](archive/2026-05/202605070140_admin-frontend-ticket-return-manual-subscribe-copy/)
+  - 决策: admin-frontend-ticket-return-manual-subscribe-copy#D001(使用 query 传递工单返回上下文)
+
 ## [0.6.25] - 2026-05-05
 
 ### 快速修改

@@ -1,4 +1,4 @@
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   deleteUser,
@@ -186,14 +186,33 @@ export function useUsersManagement() {
     refreshUsers(false)
   }
 
+  async function showManualSubscribeUrl(url: string) {
+    await ElMessageBox.alert(
+      h('textarea', {
+        class: 'manual-subscribe-url',
+        readonly: true,
+        value: url,
+      }),
+      '手动复制订阅地址',
+      {
+        confirmButtonText: '我已复制',
+        customClass: 'manual-subscribe-url-dialog',
+      },
+    )
+  }
+
   async function copySubscribeUrl(user: AdminUserListItem) {
     if (!navigator.clipboard?.writeText) {
-      ElMessage.warning('当前环境不支持复制，请手动复制订阅地址')
+      await showManualSubscribeUrl(user.subscribe_url)
       return
     }
 
-    await navigator.clipboard.writeText(user.subscribe_url)
-    ElMessage.success('订阅地址已复制')
+    try {
+      await navigator.clipboard.writeText(user.subscribe_url)
+      ElMessage.success('订阅地址已复制')
+    } catch {
+      await showManualSubscribeUrl(user.subscribe_url)
+    }
   }
 
   async function toggleBan(user: AdminUserListItem) {

@@ -137,6 +137,29 @@ select {
   color: var(--xboard-text-strong);
 }
 
+.manual-subscribe-url-dialog {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.manual-subscribe-url {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px 14px;
+  border: 1px solid var(--xboard-border);
+  border-radius: 12px;
+  resize: vertical;
+  color: var(--xboard-text-strong);
+  background: var(--xboard-surface-soft);
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.manual-subscribe-url:focus {
+  outline: none;
+  border-color: rgba(0, 113, 227, 0.36);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.12);
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

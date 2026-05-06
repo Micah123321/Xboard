@@ -37,6 +37,35 @@
   line-height: 1.47;
 }
 
+.users-hero__side {
+  display: grid;
+  align-content: space-between;
+  justify-items: end;
+  gap: 16px;
+}
+
+.ticket-return-button {
+  max-width: 360px;
+}
+
+.ticket-return-button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket-return-button--dark {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.ticket-return-button--dark:hover {
+  border-color: rgba(41, 151, 255, 0.42);
+  background: rgba(41, 151, 255, 0.18);
+  color: #ffffff;
+}
+
 .hero-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -207,6 +236,14 @@
   .table-footer {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .users-hero__side {
+    justify-items: stretch;
+  }
+
+  .ticket-return-button {
+    max-width: none;
   }
 
   .hero-stats {

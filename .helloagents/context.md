@@ -18,7 +18,7 @@
 - 管理端 API 通过 `window.settings.secure_path` 或 `VITE_ADMIN_PATH` 解析 `/api/v2/{secure_path}` 前缀
 - 登录接口复用 `/api/v2/passport/auth/login`
 - 用户前端访问由 `frontend_enable` 控制，默认开启；关闭后仅用户首页 `/` 返回空 404，不输出站点标题或主题内容，订阅/API、节点 API 与管理后台不受影响
-- 工单回复链路当前以 `TicketService::reply()` 为统一真相源：管理员或用户再次回复已关闭工单时都会自动把工单状态改回开启，同时继续维护 `reply_status` 与 `last_reply_user_id`
+- 工单回复链路当前以 `TicketService::reply()` 为统一真相源：管理员或用户再次回复已关闭工单时都会自动把工单状态改回开启，同时继续维护 `reply_status` 与 `last_reply_user_id`；管理端工单外跳会携带 `ticket_return_id/ticket_return_subject`，用户页和订单页可返回并自动打开原工单会话
 - 邮件发送链路当前以 `SendEmailJob` + `MailService` 为统一入口：`send_email` 队列的单个 job 超时为 60 秒，SMTP 传输超时默认由 `MAIL_TIMEOUT=30` 控制，Redis `retry_after` 默认由 `QUEUE_RETRY_AFTER=90` 控制。
 - 管理端仪表盘现已接入:
   - `stat/getStats`

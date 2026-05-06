@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { CircleCheck, MoreFilled, Plus, RefreshRight, Search, TopRight } from '@element-plus/icons-vue'
+import { ChatLineRound, CircleCheck, MoreFilled, Plus, RefreshRight, Search, TopRight } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   cancelOrder,
@@ -37,6 +37,7 @@ import {
   type OrderFilterValue,
   type OrderPeriodKey,
 } from '@/utils/orders'
+import { useTicketReturnLink } from '@/views/tickets/useTicketReturnLink'
 import OrderAssignDrawer from './OrderAssignDrawer.vue'
 import OrderDetailDrawer from './OrderDetailDrawer.vue'
 
@@ -48,6 +49,11 @@ const metaLoading = ref(false)
 const errorMessage = ref('')
 const route = useRoute()
 const router = useRouter()
+const {
+  hasTicketReturn,
+  ticketReturnLabel,
+  returnToTicket,
+} = useTicketReturnLink()
 
 const orders = ref<AdminOrderListItem[]>([])
 const plans = ref<AdminPlanListItem[]>([])
@@ -290,7 +296,10 @@ function clearFilters() {
   commissionWorkbench.value = 'all'
   sortState.value = { id: 'created_at', desc: true }
   if (scopedUserId.value) {
-    void router.replace({ name: 'SubscriptionOrders' }).finally(() => {
+    const nextQuery = { ...route.query }
+    delete nextQuery.user_id
+    delete nextQuery.user_email
+    void router.replace({ name: 'SubscriptionOrders', query: nextQuery }).finally(() => {
       refreshOrders(true)
     })
     return
@@ -481,6 +490,15 @@ onMounted(() => {
         <h1>订单管理</h1>
         <span>在这里可以查看用户订单，包括分配、查看、删除等操作。</span>
       </div>
+
+      <ElButton
+        v-if="hasTicketReturn"
+        class="ticket-return-button"
+        @click="returnToTicket"
+      >
+        <ElIcon><ChatLineRound /></ElIcon>
+        <span>{{ ticketReturnLabel }}</span>
+      </ElButton>
     </section>
 
     <section class="orders-shell">

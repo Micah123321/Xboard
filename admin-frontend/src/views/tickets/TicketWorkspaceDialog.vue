@@ -14,6 +14,7 @@ import {
 } from '@/utils/tickets'
 import TrafficLogDialog from './TrafficLogDialog.vue'
 import { useTicketReplyImages } from './useTicketReplyImages'
+import { buildTicketReturnQuery } from './useTicketReturnLink'
 
 const props = defineProps<{
   visible: boolean
@@ -150,6 +151,7 @@ async function openTicketUser() {
     query: {
       user_id: String(detail.value.user.id),
       user_email: detail.value.user.email,
+      ...buildTicketReturnQuery(detail.value),
     },
   })
 }
@@ -164,6 +166,7 @@ async function openTicketUserOrders() {
     query: {
       user_id: String(detail.value.user.id),
       user_email: detail.value.user.email,
+      ...buildTicketReturnQuery(detail.value),
     },
   })
 }

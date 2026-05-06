@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { MoreFilled, Plus, RefreshRight, Search } from '@element-plus/icons-vue'
+import { ChatLineRound, MoreFilled, Plus, RefreshRight, Search } from '@element-plus/icons-vue'
 import { formatDateTime, formatTraffic } from '@/utils/dashboard'
 import { getUserStatusMeta, getUserUsagePercent } from '@/utils/users'
 import OrderAssignDrawer from '@/views/subscriptions/OrderAssignDrawer.vue'
 import TrafficLogDialog from '@/views/tickets/TrafficLogDialog.vue'
+import { useTicketReturnLink } from '@/views/tickets/useTicketReturnLink'
 import UserAdvancedFilterDialog from './UserAdvancedFilterDialog.vue'
 import UserBatchMailDialog from './UserBatchMailDialog.vue'
 import UserFormDrawer from './UserFormDrawer.vue'
@@ -63,6 +64,12 @@ const {
   submitBatchMail,
   handleAssignOrderSuccess,
 } = useUsersManagement()
+
+const {
+  hasTicketReturn,
+  ticketReturnLabel,
+  returnToTicket,
+} = useTicketReturnLink()
 </script>
 
 <template>
@@ -74,11 +81,22 @@ const {
         <span>现在可以在同一页完成快捷筛选、高级筛选、行级维护与批量操作，继续保持 Apple 风格的轻量运营节奏。</span>
       </div>
 
-      <div class="hero-stats">
-        <article v-for="item in pageStats" :key="item.label">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </article>
+      <div class="users-hero__side">
+        <ElButton
+          v-if="hasTicketReturn"
+          class="ticket-return-button ticket-return-button--dark"
+          @click="returnToTicket"
+        >
+          <ElIcon><ChatLineRound /></ElIcon>
+          <span>{{ ticketReturnLabel }}</span>
+        </ElButton>
+
+        <div class="hero-stats">
+          <article v-for="item in pageStats" :key="item.label">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+          </article>
+        </div>
       </div>
     </section>
 
