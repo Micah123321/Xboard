@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ChatLineRound, DataAnalysis, Picture, Search, Tickets, User } from '@element-plus/icons-vue'
-import { closeTicket, fetchTickets, getPlans, getTicketById, replyTicket } from '@/api/admin'
+import { ChatLineRound, DataAnalysis, Picture, Plus, Search, Tickets, User } from '@element-plus/icons-vue'
+import {
+  assignUserTemporaryTraffic,
+  closeTicket,
+  fetchTickets,
+  getPlans,
+  getTicketById,
+  replyTicket,
+} from '@/api/admin'
 import type { AdminPlanListItem, AdminTicketDetail, AdminTicketListItem } from '@/types/api'
 import { formatDateTime } from '@/utils/dashboard'
 import {
@@ -12,6 +19,7 @@ import {
   renderTicketMarkdown,
 } from '@/utils/tickets'
 import UserFormDrawer from '@/views/users/UserFormDrawer.vue'
+import UserTemporaryTrafficDialog from '@/views/users/UserTemporaryTrafficDialog.vue'
 import TicketOrdersDialog from './TicketOrdersDialog.vue'
 import TrafficLogDialog from './TrafficLogDialog.vue'
 import { useTicketReplyImages } from './useTicketReplyImages'
@@ -40,6 +48,8 @@ const replyMessage = ref('')
 const trafficVisible = ref(false)
 const userEditorVisible = ref(false)
 const ordersVisible = ref(false)
+const temporaryTrafficVisible = ref(false)
+const temporaryTrafficSubmitting = ref(false)
 
 const {
   uploadingImage,
@@ -177,9 +187,40 @@ function openTicketUserOrders() {
   ordersVisible.value = true
 }
 
+function openTicketTemporaryTraffic() {
+  if (!detail.value?.user?.id) {
+    return
+  }
+
+  temporaryTrafficVisible.value = true
+}
+
 async function handleUserSaved() {
   await refreshWorkspace()
   emit('updated')
+}
+
+async function submitTicketTemporaryTraffic(payload: { trafficGb: number }) {
+  const user = detail.value?.user
+  if (!user?.id) {
+    return
+  }
+
+  temporaryTrafficSubmitting.value = true
+  try {
+    await assignUserTemporaryTraffic({
+      id: user.id,
+      traffic_gb: payload.trafficGb,
+    })
+    ElMessage.success('一次性流量已分配')
+    temporaryTrafficVisible.value = false
+    await refreshWorkspace()
+    emit('updated')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '流量分配失败')
+  } finally {
+    temporaryTrafficSubmitting.value = false
+  }
 }
 
 function closeDialog() {
@@ -187,6 +228,7 @@ function closeDialog() {
   userEditorVisible.value = false
   ordersVisible.value = false
   trafficVisible.value = false
+  temporaryTrafficVisible.value = false
   emit('update:visible', false)
 }
 
@@ -263,6 +305,16 @@ watch(
           >
             <ElIcon><DataAnalysis /></ElIcon>
             流量日志
+          </ElButton>
+          <ElButton
+            v-if="detail?.user?.id"
+            text
+            class="ghost-action"
+            :loading="temporaryTrafficSubmitting"
+            @click="openTicketTemporaryTraffic"
+          >
+            <ElIcon><Plus /></ElIcon>
+            分配流量
           </ElButton>
           <ElButton
             v-if="detail && detail.status !== 1"
@@ -430,6 +482,13 @@ watch(
       :user="detail?.user ?? null"
       :plans="plans"
       @success="handleUserSaved"
+    />
+
+    <UserTemporaryTrafficDialog
+      v-model:visible="temporaryTrafficVisible"
+      :user="detail?.user ?? null"
+      :loading="temporaryTrafficSubmitting"
+      @submit="submitTicketTemporaryTraffic"
     />
   </ElDialog>
 </template>

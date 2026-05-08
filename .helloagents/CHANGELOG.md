@@ -7,6 +7,11 @@
   - 方案: [202605090034_code-review-temporary-traffic-reset-lock](archive/2026-05/202605090034_code-review-temporary-traffic-reset-lock/)
   - 决策: code-review-temporary-traffic-reset-lock#D001(重置事务内重新锁定用户行)
 
+### 快速修改
+- **[admin-frontend]**: 工单工作台新增“分配流量”入口，复用用户管理的一次性临时流量弹窗与 `user/assignTemporaryTraffic` 接口，分配成功后刷新当前工单详情 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/views/tickets/TicketWorkspaceDialog.vue:1-348, admin-frontend/src/views/users/UserTemporaryTrafficDialog.vue:46-53
+
 ## [0.7.2] - 2026-05-09
 
 ### 新增

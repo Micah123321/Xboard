@@ -53,6 +53,7 @@ watch(
     :model-value="props.visible"
     title="分配流量"
     width="min(420px, calc(100vw - 32px))"
+    append-to-body
     class="temporary-traffic-dialog"
     @close="closeDialog"
     @update:model-value="emit('update:visible', $event)"
