@@ -3,15 +3,15 @@
 ```yaml
 kb_version: 2
 project: Xboard-new
-updated_at: 2026-04-29
+updated_at: 2026-05-09
 active_package: 无
 ```
 
 ## 项目概览
 
 - 类型: PHP Laravel 主仓 + `admin-frontend` Vue3 管理端前端
-- 当前重点模块: `admin-frontend`、`deploy`、`node-gfw-check`、`node-traffic-limit`、`order-payment`、`queue-mail`、`subscription-protocols`、`user-frontend-access`
-- 最新归档: `202604291559_user-frontend-access-toggle`
+- 当前重点模块: `admin-frontend`、`deploy`、`node-gfw-check`、`node-traffic-limit`、`order-payment`、`queue-mail`、`subscription-protocols`、`user-frontend-access`、`user-temporary-traffic`
+- 最新归档: `202605090034_code-review-temporary-traffic-reset-lock`
 
 ## 活跃模块
 
@@ -24,6 +24,7 @@ active_package: 无
 - [queue-mail](modules/queue-mail.md): 邮件发送队列、SMTP 运行时配置、Horizon 超时与失败重试边界
 - [subscription-protocols](modules/subscription-protocols.md): 客户端订阅导出入口、协议适配器与版本兼容过滤
 - [user-frontend-access](modules/user-frontend-access.md): 用户前端首页访问开关与 API 保留边界
+- [user-temporary-traffic](modules/user-temporary-traffic.md): 管理员分配一次性临时流量、套餐重置和套餐切换时的清理规则
 
 ## 归档与变更
 

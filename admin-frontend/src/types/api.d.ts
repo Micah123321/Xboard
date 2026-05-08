@@ -637,6 +637,13 @@ export interface AdminOrderDetail extends AdminOrderListItem {
   surplus_orders?: AdminOrderListItem[]
 }
 
+export interface AdminOrderBatchCommissionResult {
+  confirmed: number
+  skipped: number
+  total: number
+  skipped_ids: number[]
+}
+
 export interface AdminOrderFilter {
   id: string
   value: string | number | Array<string | number>
@@ -665,6 +672,7 @@ export interface AdminUserListItem {
   plan_id: number | null
   group_id: number | null
   transfer_enable: number
+  temporary_transfer_enable?: number | null
   u: number
   d: number
   total_used: number
@@ -752,6 +760,17 @@ export interface AdminUserUpdatePayload {
   speed_limit?: number | null
   device_limit?: number | null
   invite_user_email?: string | null
+}
+
+export interface AdminUserTemporaryTrafficPayload {
+  id: number
+  traffic_gb: number
+}
+
+export interface AdminUserTemporaryTrafficResult {
+  user_id: number
+  transfer_enable: number
+  temporary_transfer_enable: number
 }
 
 export interface AdminTicketMessage {

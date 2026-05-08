@@ -131,6 +131,7 @@ watch(
     :title="drawerTitle"
     size="min(520px, 100vw)"
     class="user-form-drawer"
+    append-to-body
     destroy-on-close
     @close="closeDrawer"
     @update:model-value="emit('update:visible', $event)"

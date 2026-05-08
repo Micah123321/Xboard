@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## [0.7.3] - 2026-05-09
+
+### 修复
+- **[user-temporary-traffic]**: 修复流量重置路径未在事务内锁定刷新用户的问题；重置现在基于数据库最新用户状态扣除 `temporary_transfer_enable`，避免管理员分配临时流量与套餐重置并发时被旧模型覆盖 — by yinjianm
+  - 方案: [202605090034_code-review-temporary-traffic-reset-lock](archive/2026-05/202605090034_code-review-temporary-traffic-reset-lock/)
+  - 决策: code-review-temporary-traffic-reset-lock#D001(重置事务内重新锁定用户行)
+
+## [0.7.2] - 2026-05-09
+
+### 新增
+- **[user-temporary-traffic]**: 新增管理员一次性临时流量分配能力；用户管理可给用户当前周期追加流量，后端用 `temporary_transfer_enable` 记录临时额度并同步增加 `transfer_enable`，套餐重置、升级、新购、一次性套餐购买和套餐强制同步都会清空临时额度，确保临时流量不进入新套餐或新周期 — by yinjianm
+  - 方案: [202605082348_admin-temporary-user-traffic](archive/2026-05/202605082348_admin-temporary-user-traffic/)
+  - 决策: admin-temporary-user-traffic#D001(临时流量独立字段并物化到当前总额度)
+
+## [0.7.1] - 2026-05-09
+
+### 修复
+- **[admin-frontend]**: 修复工单工作台内联用户编辑和订单详情嵌套弹层的 body 挂载与关闭状态残留问题，用户编辑抽屉和订单详情抽屉可在工单弹窗内稳定打开，关闭订单列表后不再恢复旧详情抽屉 — by yinjianm
+  - 方案: [202605090014_code-review-ticket-inline-dialog-state](archive/2026-05/202605090014_code-review-ticket-inline-dialog-state/)
+
+## [0.7.0] - 2026-05-08
+
+### 新增
+- **[admin-frontend]**: 工单工作台新增内联“编辑用户”和“用户订单”入口；管理员可在当前工单会话内编辑用户资料、查看该用户订单列表并打开订单详情，订单详情继续复用现有标记已支付、取消订单和佣金状态维护动作 — by yinjianm
+  - 方案: [202605082344_ticket-inline-user-orders](archive/2026-05/202605082344_ticket-inline-user-orders/)
+  - 决策: ticket-inline-user-orders#D001(工单工作台采用内联弹窗复用现有业务组件)
+- **[order-payment]**: 新增后台批量同意邀请佣金能力；订单页可勾选多笔订单后批量确认，后端在事务内只把真实待确认佣金订单更新为发放中，已发放、无效、无佣金或未完成订单自动跳过并返回统计 — by yinjianm
+  - 方案: [202605082347_batch-approve-invite-commission](archive/2026-05/202605082347_batch-approve-invite-commission/)
+  - 决策: batch-approve-invite-commission#D001(批量确认必须由后端统一筛选)
+
 ## [0.6.26] - 2026-05-07
 
 ### 修复

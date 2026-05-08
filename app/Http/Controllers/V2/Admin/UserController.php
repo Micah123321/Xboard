@@ -4,6 +4,7 @@ namespace App\Http\Controllers\V2\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UserGenerate;
+use App\Http\Requests\Admin\UserAssignTemporaryTraffic;
 use App\Http\Requests\Admin\UserSendMail;
 use App\Http\Requests\Admin\UserUpdate;
 use App\Jobs\SendEmailJob;
@@ -326,6 +327,29 @@ class UserController extends Controller
             return $this->fail([500, '保存失败']);
         }
         return $this->success(true);
+    }
+
+    public function assignTemporaryTraffic(UserAssignTemporaryTraffic $request)
+    {
+        $user = User::find($request->input('id'));
+        if (!$user) {
+            return $this->fail([400202, '用户不存在']);
+        }
+
+        $bytes = (int) round((float) $request->input('traffic_gb') * 1073741824);
+
+        try {
+            $updatedUser = app(UserService::class)->assignTemporaryTraffic($user, $bytes);
+        } catch (\Throwable $e) {
+            Log::error($e);
+            return $this->fail([500, '分配失败']);
+        }
+
+        return $this->success([
+            'user_id' => $updatedUser->id,
+            'transfer_enable' => (int) $updatedUser->transfer_enable,
+            'temporary_transfer_enable' => (int) ($updatedUser->temporary_transfer_enable ?? 0),
+        ]);
     }
 
     // Export users to CSV.

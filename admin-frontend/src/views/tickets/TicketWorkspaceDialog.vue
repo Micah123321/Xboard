@@ -2,9 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChatLineRound, DataAnalysis, Picture, Search, Tickets, User } from '@element-plus/icons-vue'
-import { useRouter } from 'vue-router'
-import { closeTicket, fetchTickets, getTicketById, replyTicket } from '@/api/admin'
-import type { AdminTicketDetail, AdminTicketListItem } from '@/types/api'
+import { closeTicket, fetchTickets, getPlans, getTicketById, replyTicket } from '@/api/admin'
+import type { AdminPlanListItem, AdminTicketDetail, AdminTicketListItem } from '@/types/api'
 import { formatDateTime } from '@/utils/dashboard'
 import {
   buildTicketFilters,
@@ -12,9 +11,10 @@ import {
   getTicketStatusMeta,
   renderTicketMarkdown,
 } from '@/utils/tickets'
+import UserFormDrawer from '@/views/users/UserFormDrawer.vue'
+import TicketOrdersDialog from './TicketOrdersDialog.vue'
 import TrafficLogDialog from './TrafficLogDialog.vue'
 import { useTicketReplyImages } from './useTicketReplyImages'
-import { buildTicketReturnQuery } from './useTicketReturnLink'
 
 const props = defineProps<{
   visible: boolean
@@ -27,16 +27,19 @@ const emit = defineEmits<{
   updated: []
 }>()
 
-const router = useRouter()
 const loadingSidebar = ref(false)
 const loadingDetail = ref(false)
+const plansLoading = ref(false)
 const replying = ref(false)
 const sidebarTickets = ref<AdminTicketListItem[]>([])
+const plans = ref<AdminPlanListItem[]>([])
 const activeTicketId = ref<number | null>(null)
 const detail = ref<AdminTicketDetail | null>(null)
 const keyword = ref('')
 const replyMessage = ref('')
 const trafficVisible = ref(false)
+const userEditorVisible = ref(false)
+const ordersVisible = ref(false)
 
 const {
   uploadingImage,
@@ -103,6 +106,22 @@ async function refreshWorkspace() {
   }
 }
 
+async function ensurePlansLoaded() {
+  if (plans.value.length || plansLoading.value) {
+    return
+  }
+
+  plansLoading.value = true
+  try {
+    const response = await getPlans()
+    plans.value = response.data ?? []
+  } catch (error) {
+    ElMessage.warning(error instanceof Error ? error.message : '订阅计划加载失败')
+  } finally {
+    plansLoading.value = false
+  }
+}
+
 async function handleReply() {
   if (!detail.value || !replyMessage.value.trim()) {
     return
@@ -141,38 +160,33 @@ async function handleCloseTicket() {
   }
 }
 
-async function openTicketUser() {
+async function openTicketUserEditor() {
   if (!detail.value?.user?.id) {
     return
   }
 
-  await router.push({
-    name: 'Users',
-    query: {
-      user_id: String(detail.value.user.id),
-      user_email: detail.value.user.email,
-      ...buildTicketReturnQuery(detail.value),
-    },
-  })
+  await ensurePlansLoaded()
+  userEditorVisible.value = true
 }
 
-async function openTicketUserOrders() {
+function openTicketUserOrders() {
   if (!detail.value?.user?.id) {
     return
   }
 
-  await router.push({
-    name: 'SubscriptionOrders',
-    query: {
-      user_id: String(detail.value.user.id),
-      user_email: detail.value.user.email,
-      ...buildTicketReturnQuery(detail.value),
-    },
-  })
+  ordersVisible.value = true
+}
+
+async function handleUserSaved() {
+  await refreshWorkspace()
+  emit('updated')
 }
 
 function closeDialog() {
   resetReplyDragState()
+  userEditorVisible.value = false
+  ordersVisible.value = false
+  trafficVisible.value = false
   emit('update:visible', false)
 }
 
@@ -226,10 +240,11 @@ watch(
             v-if="detail?.user?.id"
             text
             class="ghost-action"
-            @click="openTicketUser"
+            :loading="plansLoading"
+            @click="openTicketUserEditor"
           >
             <ElIcon><User /></ElIcon>
-            查看用户
+            编辑用户
           </ElButton>
           <ElButton
             v-if="detail?.user?.id"
@@ -401,6 +416,20 @@ watch(
       v-model:visible="trafficVisible"
       :user-id="detail?.user?.id ?? null"
       :user-email="detail?.user?.email"
+    />
+
+    <TicketOrdersDialog
+      v-model:visible="ordersVisible"
+      :user-id="detail?.user?.id ?? null"
+      :user-email="detail?.user?.email"
+    />
+
+    <UserFormDrawer
+      v-model:visible="userEditorVisible"
+      mode="edit"
+      :user="detail?.user ?? null"
+      :plans="plans"
+      @success="handleUserSaved"
     />
   </ElDialog>
 </template>

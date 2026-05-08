@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChatLineRound, CircleCheck, MoreFilled, Plus, RefreshRight, Search, TopRight } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  batchConfirmOrderCommissions,
   cancelOrder,
   fetchOrders,
   getOrderDetail,
@@ -77,6 +78,8 @@ const paying = ref(false)
 const cancelling = ref(false)
 const updatingCommission = ref(false)
 const quickConfirmTradeNo = ref('')
+const selectedOrders = ref<AdminOrderListItem[]>([])
+const batchConfirmingCommission = ref(false)
 
 const filterButtonLabels = computed(() => ({
   type: typeFilter.value === 'all' ? '类型' : `类型 · ${getOrderFilterLabel(typeFilter.value)}`,
@@ -167,6 +170,18 @@ const commissionWorkbenchNotice = computed(() => {
   return ''
 })
 
+const confirmableSelectedOrders = computed(() => (
+  selectedOrders.value.filter((order) => canQuickConfirmCommission(order))
+))
+
+const selectedOrderCount = computed(() => selectedOrders.value.length)
+
+const batchConfirmDisabled = computed(() => (
+  loading.value
+  || batchConfirmingCommission.value
+  || selectedOrderCount.value === 0
+))
+
 async function loadPlans() {
   metaLoading.value = true
   try {
@@ -202,11 +217,17 @@ async function loadOrders() {
 
     orders.value = response.data ?? []
     total.value = response.total ?? 0
+    pruneSelectedOrders()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '订单列表加载失败'
   } finally {
     loading.value = false
   }
+}
+
+function pruneSelectedOrders() {
+  const currentIds = new Set(orders.value.map((order) => order.id))
+  selectedOrders.value = selectedOrders.value.filter((order) => currentIds.has(order.id))
 }
 
 function refreshOrders(resetPage: boolean = false) {
@@ -432,6 +453,52 @@ async function handleQuickConfirmCommission(order: AdminOrderListItem) {
   }
 }
 
+async function handleBatchConfirmCommission() {
+  if (selectedOrders.value.length === 0) {
+    ElMessage.warning('请先勾选需要处理的订单')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确认批量处理 ${selectedOrders.value.length} 笔订单吗？系统只会同意待确认邀请佣金，其他记录会自动跳过。`,
+      '批量确认佣金',
+      { type: 'warning' },
+    )
+
+    batchConfirmingCommission.value = true
+    const submittedOrders = [...selectedOrders.value]
+    const response = await batchConfirmOrderCommissions(submittedOrders.map((order) => order.id))
+    const result = response.data
+    const skipped = result.skipped ?? 0
+    const confirmed = result.confirmed ?? 0
+
+    if (skipped > 0) {
+      ElMessage.warning(`已确认 ${confirmed} 笔佣金，跳过 ${skipped} 笔`)
+    } else {
+      ElMessage.success(`已确认 ${confirmed} 笔佣金`)
+    }
+
+    selectedOrders.value = []
+    const shouldReloadDetail = detailOrder.value
+      ? submittedOrders.some((order) => order.trade_no === detailOrder.value?.trade_no)
+      : false
+
+    await Promise.all([
+      loadOrders(),
+      shouldReloadDetail ? reloadDetail() : Promise.resolve(),
+    ])
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') {
+      return
+    }
+
+    ElMessage.error(error instanceof Error ? error.message : '批量确认佣金失败')
+  } finally {
+    batchConfirmingCommission.value = false
+  }
+}
+
 async function handleRowAction(command: OrderRowAction, order: AdminOrderListItem) {
   if (command === 'detail') {
     await openDetail(order)
@@ -441,6 +508,10 @@ async function handleRowAction(command: OrderRowAction, order: AdminOrderListIte
   if (command === 'confirm-commission') {
     await handleQuickConfirmCommission(order)
   }
+}
+
+function handleSelectionChange(selection: AdminOrderListItem[]) {
+  selectedOrders.value = selection
 }
 
 function handleAssignSuccess() {
@@ -613,6 +684,15 @@ onMounted(() => {
         </div>
 
         <div class="toolbar-right">
+          <ElButton
+            type="primary"
+            :disabled="batchConfirmDisabled"
+            :loading="batchConfirmingCommission"
+            @click="handleBatchConfirmCommission"
+          >
+            <ElIcon><CircleCheck /></ElIcon>
+            批量确认佣金
+          </ElButton>
           <ElButton class="toolbar-ghost" @click="clearFilters">
             重置筛选
           </ElButton>
@@ -682,7 +762,10 @@ onMounted(() => {
         row-key="id"
         empty-text="当前筛选条件下暂无订单"
         @sort-change="handleSortChange"
+        @selection-change="handleSelectionChange"
       >
+        <ElTableColumn type="selection" width="48" />
+
         <ElTableColumn label="订单号" min-width="180">
           <template #default="{ row }">
             <ElButton text class="order-link" @click="openDetail(row)">
@@ -775,7 +858,9 @@ onMounted(() => {
       </ElTable>
 
       <footer class="table-footer">
-        <span>已选择 0 项，共 {{ total }} 项</span>
+        <span>
+          已选择 {{ selectedOrderCount }} 项，可确认 {{ confirmableSelectedOrders.length }} 项，共 {{ total }} 项
+        </span>
         <ElPagination
           v-model:current-page="current"
           v-model:page-size="pageSize"

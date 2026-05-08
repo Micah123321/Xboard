@@ -18,7 +18,7 @@
 - 管理端 API 通过 `window.settings.secure_path` 或 `VITE_ADMIN_PATH` 解析 `/api/v2/{secure_path}` 前缀
 - 登录接口复用 `/api/v2/passport/auth/login`
 - 用户前端访问由 `frontend_enable` 控制，默认开启；关闭后仅用户首页 `/` 返回空 404，不输出站点标题或主题内容，订阅/API、节点 API 与管理后台不受影响
-- 工单回复链路当前以 `TicketService::reply()` 为统一真相源：管理员或用户再次回复已关闭工单时都会自动把工单状态改回开启，同时继续维护 `reply_status` 与 `last_reply_user_id`；管理端工单外跳会携带 `ticket_return_id/ticket_return_subject`，用户页和订单页可返回并自动打开原工单会话
+- 工单回复链路当前以 `TicketService::reply()` 为统一真相源：管理员或用户再次回复已关闭工单时都会自动把工单状态改回开启，同时继续维护 `reply_status` 与 `last_reply_user_id`；管理端工单工作台可在当前会话内直接编辑当前工单用户、查看该用户订单和流量日志，用户页和订单页仍保留 `ticket_return_id/ticket_return_subject` 返回工单能力
 - 邮件发送链路当前以 `SendEmailJob` + `MailService` 为统一入口：`send_email` 队列的单个 job 超时为 60 秒，SMTP 传输超时默认由 `MAIL_TIMEOUT=30` 控制，Redis `retry_after` 默认由 `QUEUE_RETRY_AFTER=90` 控制。
 - 管理端仪表盘现已接入:
   - `stat/getStats`
@@ -30,6 +30,7 @@
   - `user/fetch`
   - `user/generate`
   - `user/update`
+  - `user/assignTemporaryTraffic`
   - `user/dumpCSV`
   - `user/sendMail`
   - `user/ban`
@@ -37,6 +38,7 @@
   - `user/destroy`
   - `plan/fetch`
   - `traffic-reset/reset-user`
+- 管理端用户管理可分配一次性临时流量：后端使用 `v2_user.temporary_transfer_enable` 记录管理员分配的临时额度，分配时同步增加 `transfer_enable`；套餐流量重置会扣除并清空临时额度，套餐升级、新购、一次性套餐购买和套餐强制同步也会清空临时额度，确保该额度不进入新套餐或新周期
 - 管理端节点管理现已接入:
   - `server/manage/getNodes`
   - `server/manage/save`
@@ -107,6 +109,7 @@
 ## 项目概述
 
 - 主仓仍以 Laravel 为后端真相源
+- 用户当前总流量仍以 `v2_user.transfer_enable` 为读取真相源；管理员一次性临时流量通过 `temporary_transfer_enable` 记录来源，只在重置或套餐重写时用于扣回和清空
 - `admin-frontend` 负责独立管理后台 UI 与交互逻辑
 - `admin-frontend` 现在同时支持两种交付路径：仓内构建产物写回 `public/assets/admin`，或独立构建为 GHCR 静态镜像供 compose 分支部署
 - `deploy/xboard-server/` 是可复制到服务器的一键部署模板，包含 `web / horizon / scheduler / admin / ws-server / redis` Compose 拓扑、`.env.example`、初始化/部署/更新/状态检查脚本和部署说明

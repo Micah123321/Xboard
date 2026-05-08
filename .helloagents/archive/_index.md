@@ -7,6 +7,11 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202605090034 | code-review-temporary-traffic-reset-lock | - | - | - | ✅完成 |
+| 202605082348 | admin-temporary-user-traffic | - | - | - | ✅完成 |
+| 202605090014 | code-review-ticket-inline-dialog-state | implementation | admin-frontend | - | ✅完成 |
+| 202605082347 | batch-approve-invite-commission | - | - | - | ✅完成 |
+| 202605082344 | ticket-inline-user-orders | implementation | admin-frontend | ticket-inline-user-orders#D001 | ✅完成 |
 | 202605070140 | admin-frontend-ticket-return-manual-subscribe-copy | implementation | admin-frontend | admin-frontend-ticket-return-manual-subscribe-copy#D001 | ✅完成 |
 | 202605011828 | admin-ticket-user-order-links | implementation | admin-frontend | admin-ticket-user-order-links#D001 | ✅完成 |
 | 202604291559 | user-frontend-access-toggle | implementation | user-frontend-access,admin-frontend | user-frontend-access-toggle#D001 | ✅完成 |
@@ -53,6 +58,8 @@
 ## 按月归档
 
 ### 2026-05
+- [202605090014_code-review-ticket-inline-dialog-state](./2026-05/202605090014_code-review-ticket-inline-dialog-state/) - 修复工单内联用户编辑和订单详情嵌套弹层的 body 挂载与关闭状态残留问题
+- [202605082344_ticket-inline-user-orders](./2026-05/202605082344_ticket-inline-user-orders/) - 工单工作台新增内联编辑用户和用户订单入口，管理员可在当前工单会话内处理用户资料与订单详情动作
 - [202605070140_admin-frontend-ticket-return-manual-subscribe-copy](./2026-05/202605070140_admin-frontend-ticket-return-manual-subscribe-copy/) - 修复订阅地址复制失败后无地址可手动复制的问题，并为工单外跳到用户页/订单页补齐“返回工单聊天”入口
 
 ### 2026-04

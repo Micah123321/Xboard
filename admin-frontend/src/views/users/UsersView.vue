@@ -8,10 +8,12 @@ import { useTicketReturnLink } from '@/views/tickets/useTicketReturnLink'
 import UserAdvancedFilterDialog from './UserAdvancedFilterDialog.vue'
 import UserBatchMailDialog from './UserBatchMailDialog.vue'
 import UserFormDrawer from './UserFormDrawer.vue'
+import UserTemporaryTrafficDialog from './UserTemporaryTrafficDialog.vue'
 import { useUsersManagement } from './useUsersManagement'
 
 type UserAction =
   | 'edit'
+  | 'assign-temporary-traffic'
   | 'assign-order'
   | 'copy'
   | 'reset-secret'
@@ -46,6 +48,9 @@ const {
   drawerVisible,
   drawerMode,
   activeUser,
+  temporaryTrafficDialogVisible,
+  temporaryTrafficUser,
+  temporaryTrafficSubmitting,
   selectedUsers,
   pageStats,
   appliedFilterSummaries,
@@ -59,6 +64,7 @@ const {
   handleSelectionChange,
   openCreateDrawer,
   handleUserSaved,
+  submitTemporaryTraffic,
   handleAction,
   handleBatchCommand,
   submitBatchMail,
@@ -257,7 +263,12 @@ const {
         </ElTableColumn>
         <ElTableColumn label="总流量" width="120">
           <template #default="{ row }">
-            {{ formatTraffic(row.transfer_enable) }}
+            <div class="stack-cell">
+              <strong>{{ formatTraffic(row.transfer_enable) }}</strong>
+              <span v-if="row.temporary_transfer_enable">
+                临时 {{ formatTraffic(row.temporary_transfer_enable) }}
+              </span>
+            </div>
           </template>
         </ElTableColumn>
         <ElTableColumn label="在线设备" width="118">
@@ -293,6 +304,7 @@ const {
                 <ElDropdownMenu>
                   <ElDropdownItem command="edit">编辑</ElDropdownItem>
                   <ElDropdownItem command="assign-order">分配订单</ElDropdownItem>
+                  <ElDropdownItem command="assign-temporary-traffic">分配流量</ElDropdownItem>
                   <ElDropdownItem command="copy">复制订阅URL</ElDropdownItem>
                   <ElDropdownItem command="reset-secret">重置UUID及订阅URL</ElDropdownItem>
                   <ElDropdownItem command="view-orders">TA的订单</ElDropdownItem>
@@ -336,6 +348,13 @@ const {
       :filters="advancedFilters"
       :plans="plans"
       @apply="applyAdvancedFilters"
+    />
+
+    <UserTemporaryTrafficDialog
+      v-model:visible="temporaryTrafficDialogVisible"
+      :user="temporaryTrafficUser"
+      :loading="temporaryTrafficSubmitting"
+      @submit="submitTemporaryTraffic"
     />
 
     <UserBatchMailDialog

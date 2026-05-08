@@ -1,6 +1,7 @@
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  assignUserTemporaryTraffic,
   deleteUser,
   fetchUsers,
   getPlans,
@@ -24,6 +25,7 @@ import { useUserScopedActions } from './useUserScopedActions'
 type DrawerMode = 'create' | 'edit'
 type UserAction =
   | 'edit'
+  | 'assign-temporary-traffic'
   | 'assign-order'
   | 'copy'
   | 'reset-secret'
@@ -55,6 +57,9 @@ export function useUsersManagement() {
   const drawerVisible = ref(false)
   const drawerMode = ref<DrawerMode>('create')
   const activeUser = ref<AdminUserListItem | null>(null)
+  const temporaryTrafficDialogVisible = ref(false)
+  const temporaryTrafficUser = ref<AdminUserListItem | null>(null)
+  const temporaryTrafficSubmitting = ref(false)
 
   const advancedFilterVisible = ref(false)
   const scopedActions = useUserScopedActions()
@@ -182,6 +187,11 @@ export function useUsersManagement() {
     drawerVisible.value = true
   }
 
+  function openTemporaryTrafficDialog(user: AdminUserListItem) {
+    temporaryTrafficUser.value = user
+    temporaryTrafficDialogVisible.value = true
+  }
+
   function handleUserSaved() {
     refreshUsers(false)
   }
@@ -228,6 +238,27 @@ export function useUsersManagement() {
     await loadUsers()
   }
 
+  async function submitTemporaryTraffic(payload: { trafficGb: number }) {
+    const user = temporaryTrafficUser.value
+    if (!user) {
+      return
+    }
+
+    temporaryTrafficSubmitting.value = true
+    try {
+      await assignUserTemporaryTraffic({
+        id: user.id,
+        traffic_gb: payload.trafficGb,
+      })
+      ElMessage.success('一次性流量已分配')
+      temporaryTrafficDialogVisible.value = false
+      temporaryTrafficUser.value = null
+      await loadUsers()
+    } finally {
+      temporaryTrafficSubmitting.value = false
+    }
+  }
+
   async function handleAction(action: UserAction, user: AdminUserListItem) {
     try {
       if (action === 'edit') {
@@ -237,6 +268,11 @@ export function useUsersManagement() {
 
       if (action === 'assign-order') {
         scopedActions.openAssignOrder(user)
+        return
+      }
+
+      if (action === 'assign-temporary-traffic') {
+        openTemporaryTrafficDialog(user)
         return
       }
 
@@ -345,6 +381,9 @@ export function useUsersManagement() {
     drawerVisible,
     drawerMode,
     activeUser,
+    temporaryTrafficDialogVisible,
+    temporaryTrafficUser,
+    temporaryTrafficSubmitting,
     selectedUsers: batchActions.selectedUsers,
     pageStats,
     appliedFilterSummaries,
@@ -358,6 +397,7 @@ export function useUsersManagement() {
     handleSelectionChange: batchActions.handleSelectionChange,
     openCreateDrawer,
     handleUserSaved,
+    submitTemporaryTraffic,
     handleAction,
     handleBatchCommand: batchActions.handleBatchCommand,
     submitBatchMail: batchActions.submitBatchMail,

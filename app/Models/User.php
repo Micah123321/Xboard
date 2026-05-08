@@ -27,6 +27,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $speed_limit 限速Mbps
  * @property int|null $u 上行流量
  * @property int|null $d 下行流量
+ * @property int|null $temporary_transfer_enable 管理员分配的一次性临时流量
  * @property int|null $banned 是否封禁
  * @property int|null $remind_expire 到期提醒
  * @property int|null $remind_traffic 流量提醒

@@ -34,23 +34,27 @@ class TrafficResetService
   public function performReset(User $user, string $triggerSource = TrafficResetLog::SOURCE_MANUAL): bool
   {
     try {
-      return DB::transaction(function () use ($user, $triggerSource) {
-        $oldUpload = $user->u ?? 0;
-        $oldDownload = $user->d ?? 0;
+      return $this->runResetTransaction(function () use ($user, $triggerSource) {
+        $lockedUser = $this->lockUserForReset($user);
+        $oldUpload = $lockedUser->u ?? 0;
+        $oldDownload = $lockedUser->d ?? 0;
         $oldTotal = $oldUpload + $oldDownload;
+        $transferEnableAfterReset = $this->resolveTransferEnableAfterReset($lockedUser);
 
-        $nextResetTime = $this->calculateNextResetTime($user);
+        $nextResetTime = $this->calculateNextResetTime($lockedUser);
 
-        $user->update([
+        $lockedUser->update([
           'u' => 0,
           'd' => 0,
+          'transfer_enable' => $transferEnableAfterReset,
+          'temporary_transfer_enable' => 0,
           'last_reset_at' => time(),
-          'reset_count' => $user->reset_count + 1,
+          'reset_count' => $lockedUser->reset_count + 1,
           'next_reset_at' => $nextResetTime ? $nextResetTime->timestamp : null,
         ]);
 
-        $this->recordResetLog($user, [
-          'reset_type' => $this->getResetTypeFromPlan($user->plan),
+        $this->recordResetLog($lockedUser, [
+          'reset_type' => $this->getResetTypeFromPlan($lockedUser->plan),
           'trigger_source' => $triggerSource,
           'old_upload' => $oldUpload,
           'old_download' => $oldDownload,
@@ -60,8 +64,8 @@ class TrafficResetService
           'new_total' => 0,
         ]);
 
-        $this->clearUserCache($user);
-        HookManager::call('traffic.reset.after', $user);
+        $this->clearUserCache($lockedUser);
+        $this->dispatchAfterResetHook($lockedUser);
         return true;
       });
     } catch (\Exception $e) {
@@ -74,6 +78,29 @@ class TrafficResetService
 
       return false;
     }
+  }
+
+  private function resolveTransferEnableAfterReset(User $user): int
+  {
+    $transferEnable = max(0, (int) ($user->transfer_enable ?? 0));
+    $temporaryTransfer = max(0, (int) ($user->temporary_transfer_enable ?? 0));
+
+    return max(0, $transferEnable - $temporaryTransfer);
+  }
+
+  protected function runResetTransaction(callable $callback): mixed
+  {
+    return DB::transaction($callback);
+  }
+
+  protected function lockUserForReset(User $user): User
+  {
+    return User::lockForUpdate()->findOrFail($user->id);
+  }
+
+  protected function dispatchAfterResetHook(User $user): void
+  {
+    HookManager::call('traffic.reset.after', $user);
   }
 
   /**
@@ -194,7 +221,7 @@ class TrafficResetService
   /**
    * Record the traffic reset log.
    */
-  private function recordResetLog(User $user, array $data): void
+  protected function recordResetLog(User $user, array $data): void
   {
     TrafficResetLog::create([
       'user_id' => $user->id,
@@ -239,7 +266,7 @@ class TrafficResetService
   /**
    * Clear user-related cache.
    */
-  private function clearUserCache(User $user): void
+  protected function clearUserCache(User $user): void
   {
     $cacheKeys = [
       "user_traffic_{$user->id}",

@@ -121,6 +121,7 @@ class AdminRoute
                 $router->post('/paid', [OrderController::class, 'paid']);
                 $router->post('/cancel', [OrderController::class, 'cancel']);
                 $router->post('/detail', [OrderController::class, 'detail']);
+                $router->post('/batchConfirmCommission', [OrderController::class, 'batchConfirmCommission']);
             });
 
             // User
@@ -129,6 +130,7 @@ class AdminRoute
             ], function ($router) {
                 $router->any('/fetch', [UserController::class, 'fetch']);
                 $router->post('/update', [UserController::class, 'update']);
+                $router->post('/assignTemporaryTraffic', [UserController::class, 'assignTemporaryTraffic']);
                 $router->get('/getUserInfoById', [UserController::class, 'getUserInfoById']);
                 $router->post('/generate', [UserController::class, 'generate']);
                 $router->post('/dumpCSV', [UserController::class, 'dumpCSV']);

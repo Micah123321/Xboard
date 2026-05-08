@@ -13,7 +13,9 @@ use App\Services\Plugin\HookManager;
 use App\Services\TrafficResetService;
 use App\Models\TrafficResetLog;
 use App\Utils\Helper;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use InvalidArgumentException;
 
 class UserService
 {
@@ -85,6 +87,36 @@ class UserService
     public function getAllUsers()
     {
         return User::all();
+    }
+
+    public function addTemporaryTraffic(User $user, int $bytes): User
+    {
+        if ($bytes <= 0) {
+            throw new InvalidArgumentException('Temporary traffic must be greater than zero.');
+        }
+
+        $user->transfer_enable = max(0, (int) ($user->transfer_enable ?? 0)) + $bytes;
+        $user->temporary_transfer_enable = max(0, (int) ($user->temporary_transfer_enable ?? 0)) + $bytes;
+
+        return $user;
+    }
+
+    public function assignTemporaryTraffic(User $user, int $bytes): User
+    {
+        return DB::transaction(function () use ($user, $bytes) {
+            $lockedUser = User::lockForUpdate()->findOrFail($user->id);
+            $this->addTemporaryTraffic($lockedUser, $bytes);
+            $lockedUser->save();
+
+            return $lockedUser->refresh();
+        });
+    }
+
+    public function clearTemporaryTraffic(User $user): User
+    {
+        $user->temporary_transfer_enable = 0;
+
+        return $user;
     }
 
     public function addBalance(int $userId, int $balance): bool
@@ -221,6 +253,7 @@ class UserService
         $user->plan_id = $plan->id;
         $user->group_id = $plan->group_id;
         $user->transfer_enable = $plan->transfer_enable * 1073741824;
+        $this->clearTemporaryTraffic($user);
         $user->speed_limit = $plan->speed_limit;
 
         if ($expiredAt) {
@@ -241,6 +274,7 @@ class UserService
         $user->plan_id = $plan->id;
         $user->group_id = $plan->group_id;
         $user->transfer_enable = $plan->transfer_enable * 1073741824;
+        $this->clearTemporaryTraffic($user);
         $user->speed_limit = $plan->speed_limit;
         $user->device_limit = $plan->device_limit;
 
@@ -280,6 +314,7 @@ class UserService
             return;
 
         $user->transfer_enable = $plan->transfer_enable * 1073741824;
+        $this->clearTemporaryTraffic($user);
         $user->plan_id = $plan->id;
         $user->group_id = $plan->group_id;
         $user->expired_at = time() + (admin_setting('try_out_hour', 1) * 3600);

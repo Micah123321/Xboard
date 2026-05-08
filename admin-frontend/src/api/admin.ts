@@ -30,6 +30,7 @@ import type {
   AdminNodeRouteItem,
   AdminNodeRouteSavePayload,
   AdminNodeUpdatePayload,
+  AdminOrderBatchCommissionResult,
   AdminPaymentConfigFields,
   AdminPaymentListItem,
   AdminPaymentSavePayload,
@@ -53,6 +54,8 @@ import type {
   AdminUserFetchParams,
   AdminUserGeneratePayload,
   AdminUserListItem,
+  AdminUserTemporaryTrafficPayload,
+  AdminUserTemporaryTrafficResult,
   AdminUserUpdatePayload,
   ApiResponse,
   DashboardStats,
@@ -174,6 +177,10 @@ export function updateOrderCommissionStatus(tradeNo: string, commissionStatus: n
     trade_no: tradeNo,
     commission_status: commissionStatus,
   })
+}
+
+export function batchConfirmOrderCommissions(ids: number[]): Promise<ApiResponse<AdminOrderBatchCommissionResult>> {
+  return unwrapPost<AdminOrderBatchCommissionResult>('/order/batchConfirmCommission', { ids })
 }
 
 export function getThemes(): Promise<ApiResponse<AdminThemeListResult>> {
@@ -561,6 +568,15 @@ export function createUser(payload: AdminUserGeneratePayload): Promise<ApiRespon
 
 export function updateUser(payload: AdminUserUpdatePayload): Promise<ApiResponse<boolean>> {
   return unwrapPost<boolean>('/user/update', payload as unknown as Record<string, unknown>)
+}
+
+export function assignUserTemporaryTraffic(
+  payload: AdminUserTemporaryTrafficPayload,
+): Promise<ApiResponse<AdminUserTemporaryTrafficResult>> {
+  return unwrapPost<AdminUserTemporaryTrafficResult>(
+    '/user/assignTemporaryTraffic',
+    payload as unknown as Record<string, unknown>,
+  )
 }
 
 export function resetUserSecret(id: number): Promise<ApiResponse<boolean>> {

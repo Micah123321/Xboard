@@ -196,6 +196,57 @@ class OrderController extends Controller
         return $this->success(true);
     }
 
+    public function batchConfirmCommission(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer'
+        ]);
+
+        $orderIds = collect($validated['ids'])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values();
+
+        if ($orderIds->isEmpty()) {
+            return $this->fail([422, '请选择需要确认佣金的订单']);
+        }
+
+        $confirmableIds = DB::transaction(function () use ($orderIds) {
+            $orders = Order::whereIn('id', $orderIds)
+                ->lockForUpdate()
+                ->get(['id', 'status', 'commission_status', 'invite_user_id', 'commission_balance']);
+
+            $ids = $orders
+                ->filter(fn (Order $order) => (int) $order->status === 3
+                    && (int) $order->commission_status === 0
+                    && $order->invite_user_id !== null
+                    && (int) $order->commission_balance > 0)
+                ->pluck('id')
+                ->values();
+
+            if ($ids->isNotEmpty()) {
+                Order::whereIn('id', $ids)->update([
+                    'commission_status' => 1
+                ]);
+            }
+
+            return $ids;
+        });
+
+        $skippedIds = $orderIds
+            ->diff($confirmableIds)
+            ->values();
+
+        return $this->success([
+            'confirmed' => $confirmableIds->count(),
+            'skipped' => $skippedIds->count(),
+            'total' => $orderIds->count(),
+            'skipped_ids' => $skippedIds->all()
+        ]);
+    }
+
     public function assign(OrderAssign $request)
     {
         $plan = Plan::find($request->input('plan_id'));

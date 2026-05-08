@@ -19,7 +19,7 @@
 - API 基础路径使用 `/api/v2/{secure_path}`，其中 `secure_path` 来自运行时配置
 - 工单工作台现允许对已关闭工单继续回复；管理员发送新消息后会提示“发送并重开”，并通过统一后端语义把工单状态重新开启
 - 工单工作台回复区支持点击选择、拖拽放下和剪贴板粘贴三种图片上传入口，统一复用 `/upload/rest/upload` 图片上传和 Markdown 图片链接插入逻辑；上传期间会禁用发送入口，避免图片链接尚未写入时提前回复
-- 工单工作台对话页可从当前工单用户直接跳转到用户管理或订单管理；跳用户页时携带 `user_id/user_email` 并按用户 ID 精准筛选，跳订单页时复用订单页已有用户订单作用域；工单外跳会同步携带 `ticket_return_id/ticket_return_subject`，目标页展示“返回工单聊天”按钮并通过 `Tickets?ticket_id={id}` 自动打开原工单会话
+- 工单工作台对话页可在当前会话内直接打开当前工单用户的编辑抽屉、用户订单弹窗和流量日志弹窗；用户编辑保存后会刷新工单详情，用户订单弹窗复用 `order/fetch`、`order/detail`、`order/paid`、`order/cancel` 与 `order/update` 维护订单详情动作。用户编辑抽屉和订单详情抽屉均挂载至 body 层，订单弹窗关闭时会重置详情状态，避免嵌套弹层层级异常和旧详情残留。用户页和订单页仍保留 `ticket_return_id/ticket_return_subject` 返回工单能力，供跨页入口继续使用
 - 仪表盘以真实后端接口返回值为准，不在前端伪造业务统计
 - 仪表盘“收入趋势”支持在同一张趋势图中切换“按金额 / 按数量”，数量模式同步切换摘要卡片、Y 轴标签与最近记录
 - 仪表盘“作业详情”支持打开失败作业报错弹窗，集中查看 Horizon 失败作业的报错摘要、失败时间与队列信息
@@ -37,6 +37,7 @@
 - 用户管理页现已补齐高级筛选弹窗，支持按邮箱、用户 ID、订阅、活跃状态、流量、已用流量、在线设备、到期时间、UUID、Token、账号状态和备注组合筛选；其中“活跃状态”按“有任意订阅 + 剩余流量大于 0 + 最后在线时间在半年内”为活跃规则
 - 用户管理页新增勾选 + 批量操作工作流，支持“发送邮件 / 导出 CSV / 批量封禁 / 恢复正常”，作用范围按“已勾选用户 > 当前筛选结果 > 全部用户”自动判定
 - 批量恢复正常沿用 `user/ban` 现有接口，通过 `banned=0|1` 兼容，不额外引入重复路由
+- 用户管理页支持行级“分配流量”操作，调用 `user/assignTemporaryTraffic` 给用户当前周期增加一次性临时流量；列表总流量列会显示临时额度标记，提示该额度在流量重置或更换套餐后不再保留
 - 用户管理页的“更多操作”菜单现已补齐 `分配订单 / TA的订单 / TA的邀请 / TA的流量记录 / 重置流量`；其中订单分配复用现有抽屉，用户订单跳转到订单页并自动按 `user_id` 过滤，邀请结果在当前用户页复用 `invite_user_id` 筛选视图
 - 用户流量重置优先复用 `traffic-reset/reset-user`，用户行级“重置流量”会走真实后端重置链路并在成功后刷新列表
 - 节点管理页通过真实后端 `server/manage/getNodes`、`server/group/fetch` 与 `server/route/fetch` 获取列表 / 关联数据，并通过 `server/manage/save`、`server/manage/sort`、`server/manage/update`、`server/manage/batchUpdate`、`server/manage/copy`、`server/manage/drop` 完成新增、编辑、排序、批量修改与行级操作
@@ -66,6 +67,7 @@
 - 订单金额、佣金金额与相关拆解字段以“分”为后端真相源，前端统一在 `src/utils/orders.ts` 中格式化为“元”展示，避免后台金额口径混乱
 - 订单管理页的佣金状态不再单看 `commission_status` 默认值；无真实佣金的订单统一显示“无佣金”，只有真实佣金订单才会参与“待确认 / 发放中 / 已发放 / 无效”状态流转
 - 订单页新增“确认佣金”工具栏菜单，佣金状态筛选会自动透传 `is_commission=true`，确保“真实待确认订单”不会混入无佣金记录；行级操作列可直接把真实待确认订单手动确认到“发放中”
+- 订单页现支持勾选订单后批量确认邀请佣金；前端会提交已选订单 ID，后端仅同意真实待确认佣金记录，其余已选记录跳过并返回确认 / 跳过数量
 - 优惠券管理页使用真实后端 `coupon/fetch`、`coupon/generate`、`coupon/update` 与 `coupon/drop`，支持本地搜索、类型筛选、启停、删除与弹窗式新增/编辑
 - 礼品卡管理页使用真实后端 `gift-card/templates`、`gift-card/create-template`、`gift-card/update-template`、`gift-card/delete-template`、`gift-card/generate-codes`、`gift-card/codes`、`gift-card/toggle-code`、`gift-card/export-codes`、`gift-card/update-code`、`gift-card/delete-code`、`gift-card/usages`、`gift-card/statistics` 与 `gift-card/types`
 - 礼品卡工作台采用单页四页签结构，覆盖模板管理、兑换码管理、使用记录和统计数据；模板编辑使用分组式大抽屉，兑换码生成使用独立对话框
@@ -108,6 +110,7 @@
 - 依赖 `src/utils/routes.ts` 负责路由动作映射、匹配规则序列化、节点引用摘要与搜索过滤
 - 依赖 `src/utils/nodes.ts` 负责节点在线状态、自动上线统计、父/子节点、墙状态 meta、节点限额展示、搜索文本和筛选逻辑
 - 依赖 `src/views/tickets/useTicketReplyImages.ts` 收敛工单回复区图片点击上传、拖拽上传、粘贴上传、文件校验和 Markdown 插入
+- 依赖 `src/views/tickets/useTicketOrdersDialog.ts` 收敛工单内用户订单弹窗的订单列表、详情加载和订单动作刷新逻辑
 - 依赖 Laravel 后端 `TicketService::reply()` 提供工单“再次回复自动重开”的统一业务语义
 - 依赖 Laravel 注入的 `window.settings`
 - 构建输出到 `public/assets/admin`

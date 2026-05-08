@@ -131,6 +131,7 @@ watch(
     title="订单详情"
     size="min(720px, 100vw)"
     class="order-detail-drawer"
+    append-to-body
     destroy-on-close
     @close="closeDrawer"
     @update:model-value="emit('update:visible', $event)"
