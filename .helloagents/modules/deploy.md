@@ -9,7 +9,10 @@
 ## 行为规范
 
 - `deploy/xboard-server/` 是面向服务器复制部署的自包含目录，不依赖仓库根目录的 compose 样例
-- `compose.yaml` 默认包含 `web / horizon / scheduler / admin / ws-server / redis` 六个服务
+- `compose.yaml` 默认包含 `user / web / horizon / scheduler / admin / ws-server / redis` 七个服务
+- `user` 容器负责用户前端，默认发布宿主机 `7003`；`admin` 容器负责独立管理端前端，默认发布宿主机 `7002`
+- `user` 和 `admin` 前端容器默认通过 `host.docker.internal:7001` 访问后端 API，避免长驻 nginx 持有 Docker 内部服务名解析出的旧容器 IP
+- 用户端后端上游使用 `XBOARD_USER_BACKEND_UPSTREAM`，管理端后端上游使用 `XBOARD_ADMIN_BACKEND_UPSTREAM`；`XBOARD_BACKEND_UPSTREAM` 仅作为旧模板兼容变量保留
 - `scheduler` 服务固定执行 `php artisan schedule:work`，用于持续触发 `sync:server-gfw-checks`、`sync:server-auto-online` 和其他 Laravel Scheduler 任务
 - 模板默认使用外部 MySQL，不在 compose 中创建数据库服务，避免改变现有生产拓扑
 - `.env.example` 同时覆盖 Docker Compose 变量和 Laravel 运行变量，但不得包含真实 `APP_KEY`、数据库密码、邮箱密码或真实业务域名
@@ -21,6 +24,7 @@
 ## 依赖关系
 
 - 依赖 `ghcr.io/micah123321/xboard:new` 作为后端默认镜像
+- 依赖 `ghcr.io/micah123321/vue-xboard-theme-micah:new` 作为用户前端默认镜像
 - 依赖 `ghcr.io/micah123321/xboard-admin-frontend:new` 作为管理端默认镜像
 - 依赖 `redis:8-alpine` 提供 `/data/redis.sock`
 - 依赖外部 MySQL，由 `.env` 中的 `DB_*` 配置提供

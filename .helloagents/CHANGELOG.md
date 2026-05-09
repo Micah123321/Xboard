@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.7.4] - 2026-05-09
+
+### 修复
+- **[deploy]**: 修复用户前端容器长驻 nginx 可能持有 Docker 内部旧上游 IP，导致 `/api/v1/*` 批量 502 的部署模板问题；用户端和管理端前端现在拆分后端上游变量并默认通过 `host.docker.internal:7001` 访问宿主机后端端口，同时新增 `USER_PORT` 区分用户端 `7003` 与管理端 `7002` — by yinjianm
+  - 方案: [202605091640_fix-user-frontend-api-upstream](archive/2026-05/202605091640_fix-user-frontend-api-upstream/)
+  - 决策: fix-user-frontend-api-upstream#D001(用户前端默认后端上游改为 host-gateway)
+
 ## [0.7.3] - 2026-05-09
 
 ### 修复

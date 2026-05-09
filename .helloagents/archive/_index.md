@@ -7,6 +7,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202605091640 | fix-user-frontend-api-upstream | - | - | - | ✅完成 |
 | 202605090034 | code-review-temporary-traffic-reset-lock | - | - | - | ✅完成 |
 | 202605082348 | admin-temporary-user-traffic | - | - | - | ✅完成 |
 | 202605090014 | code-review-ticket-inline-dialog-state | implementation | admin-frontend | - | ✅完成 |

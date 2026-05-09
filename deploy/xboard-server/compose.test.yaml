@@ -2,11 +2,15 @@ services:
   user:
     image: ${VUE_XBOARD_THEME_MICAH_IMAGE:-ghcr.io/micah123321/vue-xboard-theme-micah:new}
     restart: unless-stopped
+    depends_on:
+      - web
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      XBOARD_BACKEND_UPSTREAM: ${XBOARD_BACKEND_UPSTREAM:-http://web:7001}
+      XBOARD_BACKEND_UPSTREAM: ${XBOARD_USER_BACKEND_UPSTREAM:-http://host.docker.internal:7001}
       XBOARD_UPLOAD_UPSTREAM: ${XBOARD_UPLOAD_UPSTREAM:-https://pic.535888.xyz}
     ports:
-      - "${ADMIN_PORT:-7003}:80"
+      - "${USER_PORT:-7003}:80"
   web:
     image: ${XBOARD_IMAGE:-ghcr.io/micah123321/xboard:new}
     restart: on-failure
@@ -50,8 +54,10 @@ services:
     restart: unless-stopped
     depends_on:
       - web
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      XBOARD_BACKEND_UPSTREAM: ${XBOARD_BACKEND_UPSTREAM:-http://web:7001}
+      XBOARD_BACKEND_UPSTREAM: ${XBOARD_ADMIN_BACKEND_UPSTREAM:-http://host.docker.internal:7001}
       XBOARD_UPLOAD_UPSTREAM: ${XBOARD_UPLOAD_UPSTREAM:-https://pic.535888.xyz}
     ports:
       - "${ADMIN_PORT:-7002}:80"
