@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## [0.7.8] - 2026-05-15
+
+### 修复
+- **[admin-frontend]**: 审查修复优惠券有效期仍可能漂移到异常年份的问题；Element Plus 时间选择器仅对 `value-format="x"` 做时间戳特殊处理，现已把表单日期范围统一为毫秒级数字，提交 `coupon/generate` / `coupon/update` 前再转换为后端需要的秒级 Unix 时间戳 — by yinjianm
+  - 方案: [202605151647_code-review-coupon-date-format](archive/2026-05/202605151647_code-review-coupon-date-format/)
+  - 文件: admin-frontend/src/utils/coupons.ts:88-191, admin-frontend/src/views/subscriptions/CouponEditorDialog.vue:203-209, public/assets/admin (构建产物刷新)
+
+## [0.7.7] - 2026-05-15
+
+### 快速修改
+- **[ci-workflows]**: 修复管理端前端 Docker 发布可能因 build-push-action 构建记录、摘要上传或旧 BuildKit/GHA 缓存接口异常而失败的问题；前后端 Docker workflow 升级 Docker 官方 actions 主版本，Buildx 改用最新稳定版本，关闭构建记录和摘要上传，后端 workflow 额外忽略 `public/assets/admin/**` 并允许 GHA 缓存导出失败不影响镜像发布 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: .github/workflows/admin-frontend-docker-publish.yml:15-79, .github/workflows/docker-publish.yml:5-87, .helloagents/modules/ci-workflows.md:13-19
+
+## [0.7.6] - 2026-05-15
+
+### 快速修改
+- **[admin-frontend]**: 修复优惠券新增弹窗默认有效期显示成 1784/1782 等异常年份的问题，新增优惠券默认有效期改为当前时间起 30 天，并补充保存前秒级 Unix 时间戳校验 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/utils/coupons.ts:15-174, admin-frontend/src/views/subscriptions/CouponEditorDialog.vue:202-211, public/assets/admin (构建产物刷新)
+
 ## [0.7.5] - 2026-05-15
 
 ### 快速修改

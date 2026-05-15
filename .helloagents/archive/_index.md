@@ -7,6 +7,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202605151647 | code-review-coupon-date-format | implementation | admin-frontend | - | ✅完成 |
 | 202605091640 | fix-user-frontend-api-upstream | - | - | - | ✅完成 |
 | 202605090034 | code-review-temporary-traffic-reset-lock | - | - | - | ✅完成 |
 | 202605082348 | admin-temporary-user-traffic | - | - | - | ✅完成 |
@@ -59,6 +60,7 @@
 ## 按月归档
 
 ### 2026-05
+- [202605151647_code-review-coupon-date-format](./2026-05/202605151647_code-review-coupon-date-format/) - 审查修复优惠券有效期时间戳格式，避免 Element Plus 日期选择器把秒级字符串解析成异常年份
 - [202605090014_code-review-ticket-inline-dialog-state](./2026-05/202605090014_code-review-ticket-inline-dialog-state/) - 修复工单内联用户编辑和订单详情嵌套弹层的 body 挂载与关闭状态残留问题
 - [202605082344_ticket-inline-user-orders](./2026-05/202605082344_ticket-inline-user-orders/) - 工单工作台新增内联编辑用户和用户订单入口，管理员可在当前工单会话内处理用户资料与订单详情动作
 - [202605070140_admin-frontend-ticket-return-manual-subscribe-copy](./2026-05/202605070140_admin-frontend-ticket-return-manual-subscribe-copy/) - 修复订阅地址复制失败后无地址可手动复制的问题，并为工单外跳到用户页/订单页补齐“返回工单聊天”入口

@@ -3,7 +3,7 @@
 ```yaml
 kb_version: 2
 project: Xboard-new
-updated_at: 2026-05-09
+updated_at: 2026-05-15
 active_package: 无
 ```
 
@@ -11,7 +11,7 @@ active_package: 无
 
 - 类型: PHP Laravel 主仓 + `admin-frontend` Vue3 管理端前端
 - 当前重点模块: `admin-frontend`、`deploy`、`node-gfw-check`、`node-traffic-limit`、`order-payment`、`queue-mail`、`subscription-protocols`、`user-frontend-access`、`user-temporary-traffic`
-- 最新归档: `202605090034_code-review-temporary-traffic-reset-lock`
+- 最新归档: `202605151647_code-review-coupon-date-format`
 
 ## 活跃模块
 

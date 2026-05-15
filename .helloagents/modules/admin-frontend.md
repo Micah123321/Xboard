@@ -69,6 +69,7 @@
 - 订单页新增“确认佣金”工具栏菜单，佣金状态筛选会自动透传 `is_commission=true`，确保“真实待确认订单”不会混入无佣金记录；行级操作列可直接把真实待确认订单手动确认到“发放中”
 - 订单页现支持勾选订单后批量确认邀请佣金；前端会提交已选订单 ID，后端仅同意真实待确认佣金记录，其余已选记录跳过并返回确认 / 跳过数量
 - 优惠券管理页使用真实后端 `coupon/fetch`、`coupon/generate`、`coupon/update` 与 `coupon/drop`，支持本地搜索、类型筛选、启停、删除与弹窗式新增/编辑
+- 优惠券编辑弹窗的有效期控件内部使用 Element Plus 支持的 `value-format="x"` 毫秒级时间戳字符串，保存前再转换为后端 `started_at` / `ended_at` 需要的秒级 Unix 时间戳
 - 礼品卡管理页使用真实后端 `gift-card/templates`、`gift-card/create-template`、`gift-card/update-template`、`gift-card/delete-template`、`gift-card/generate-codes`、`gift-card/codes`、`gift-card/toggle-code`、`gift-card/export-codes`、`gift-card/update-code`、`gift-card/delete-code`、`gift-card/usages`、`gift-card/statistics` 与 `gift-card/types`
 - 礼品卡工作台采用单页四页签结构，覆盖模板管理、兑换码管理、使用记录和统计数据；模板编辑使用分组式大抽屉，兑换码生成使用独立对话框
 - 礼品卡模板的 `conditions / rewards / limits / special_config` 映射统一收敛到 `src/utils/giftCards.ts`，避免表单展示结构与提交 JSON 结构漂移

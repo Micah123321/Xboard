@@ -15,7 +15,7 @@ export interface CouponFormModel {
   code: string
   type: AdminCouponType
   value: number | null
-  dateRange: [Date, Date] | []
+  dateRange: [number, number] | []
   limitUse: number | null
   limitUseWithUser: number | null
   limitPlanIds: number[]
@@ -29,6 +29,9 @@ export interface CouponExpiryMeta {
 
 const SECONDS_PER_DAY = 24 * 60 * 60
 const MAX_COUPON_TIMESTAMP = 2147483647
+const DEFAULT_COUPON_VALIDITY_DAYS = 30
+
+type CouponDateValue = Date | string | number
 
 export const COUPON_TYPE_OPTIONS: Array<{
   label: string
@@ -82,12 +85,21 @@ function normalizeTimestampToDate(timestamp: number | null | undefined): Date | 
   return new Date(Math.floor(value) * 1000)
 }
 
-function normalizePickerTimestamp(value: Date | string | number | undefined): number {
+function normalizeTimestampToPickerValue(timestamp: number | null | undefined): number {
+  const value = Number(timestamp || 0)
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0
+  }
+  return Math.floor(value) * 1000
+}
+
+function normalizePickerTimestamp(value: CouponDateValue | undefined): number {
   const numeric = value instanceof Date ? value.getTime() / 1000 : Number(value)
   if (!Number.isFinite(numeric)) {
     return 0
   }
-  return Math.floor(numeric)
+  const timestamp = numeric > MAX_COUPON_TIMESTAMP ? numeric / 1000 : numeric
+  return Math.floor(timestamp)
 }
 
 export function getCouponDateRangeError(dateRange: CouponFormModel['dateRange']): string {
@@ -115,7 +127,7 @@ export function getCouponDateRangeError(dateRange: CouponFormModel['dateRange'])
 
 export function createEmptyCouponForm(): CouponFormModel {
   const now = Math.floor(Date.now() / 1000)
-  const nextWeek = now + 7 * SECONDS_PER_DAY
+  const endedAt = now + DEFAULT_COUPON_VALIDITY_DAYS * SECONDS_PER_DAY
 
   return {
     id: undefined,
@@ -124,7 +136,7 @@ export function createEmptyCouponForm(): CouponFormModel {
     code: '',
     type: 1,
     value: null,
-    dateRange: [new Date(now * 1000), new Date(nextWeek * 1000)],
+    dateRange: [now * 1000, endedAt * 1000],
     limitUse: null,
     limitUseWithUser: null,
     limitPlanIds: [],
@@ -158,7 +170,12 @@ export function toCouponFormModel(coupon?: AdminCouponListItem | null): CouponFo
     value: coupon.type === 1
       ? Number((coupon.value / 100).toFixed(2))
       : Number(coupon.value),
-    dateRange: startedAt && endedAt ? [startedAt, endedAt] : [],
+    dateRange: startedAt && endedAt
+      ? [
+          normalizeTimestampToPickerValue(coupon.started_at),
+          normalizeTimestampToPickerValue(coupon.ended_at),
+        ]
+      : [],
     limitUse: clampNumber(coupon.limit_use ?? null),
     limitUseWithUser: clampNumber(coupon.limit_use_with_user ?? null),
     limitPlanIds: (coupon.limit_plan_ids ?? [])
