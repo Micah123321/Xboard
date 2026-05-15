@@ -15,7 +15,7 @@ export interface CouponFormModel {
   code: string
   type: AdminCouponType
   value: number | null
-  dateRange: [string, string] | []
+  dateRange: [Date, Date] | []
   limitUse: number | null
   limitUseWithUser: number | null
   limitPlanIds: number[]
@@ -66,23 +66,24 @@ function roundCurrencyToCent(value: number | null): number {
 }
 
 function formatDatePart(date: Date): string {
+  const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   const hours = String(date.getHours()).padStart(2, '0')
   const minutes = String(date.getMinutes()).padStart(2, '0')
-  return `${month}/${day} ${hours}:${minutes}`
+  return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 
-function normalizeTimestampToSeconds(timestamp: number | null | undefined): string {
+function normalizeTimestampToDate(timestamp: number | null | undefined): Date | null {
   const value = Number(timestamp || 0)
   if (!Number.isFinite(value) || value <= 0) {
-    return ''
+    return null
   }
-  return String(Math.floor(value))
+  return new Date(Math.floor(value) * 1000)
 }
 
-function normalizePickerTimestamp(value: string | number | undefined): number {
-  const numeric = Number(value)
+function normalizePickerTimestamp(value: Date | string | number | undefined): number {
+  const numeric = value instanceof Date ? value.getTime() / 1000 : Number(value)
   if (!Number.isFinite(numeric)) {
     return 0
   }
@@ -117,12 +118,13 @@ export function createEmptyCouponForm(): CouponFormModel {
   const nextWeek = now + 7 * SECONDS_PER_DAY
 
   return {
+    id: undefined,
     name: '',
     generateCount: null,
     code: '',
     type: 1,
     value: null,
-    dateRange: [String(now), String(nextWeek)],
+    dateRange: [new Date(now * 1000), new Date(nextWeek * 1000)],
     limitUse: null,
     limitUseWithUser: null,
     limitPlanIds: [],
@@ -144,6 +146,8 @@ export function toCouponFormModel(coupon?: AdminCouponListItem | null): CouponFo
   if (!coupon) {
     return base
   }
+  const startedAt = normalizeTimestampToDate(coupon.started_at)
+  const endedAt = normalizeTimestampToDate(coupon.ended_at)
 
   return {
     id: coupon.id,
@@ -154,10 +158,7 @@ export function toCouponFormModel(coupon?: AdminCouponListItem | null): CouponFo
     value: coupon.type === 1
       ? Number((coupon.value / 100).toFixed(2))
       : Number(coupon.value),
-    dateRange: [
-      normalizeTimestampToSeconds(coupon.started_at),
-      normalizeTimestampToSeconds(coupon.ended_at),
-    ],
+    dateRange: startedAt && endedAt ? [startedAt, endedAt] : [],
     limitUse: clampNumber(coupon.limit_use ?? null),
     limitUseWithUser: clampNumber(coupon.limit_use_with_user ?? null),
     limitPlanIds: (coupon.limit_plan_ids ?? [])

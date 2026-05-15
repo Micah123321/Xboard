@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { TableColumnCtx } from 'element-plus'
 import {
@@ -81,15 +81,19 @@ async function loadData() {
   }
 }
 
-function openCreateDialog() {
+async function openCreateDialog() {
+  dialogVisible.value = false
   dialogMode.value = 'create'
   activeCoupon.value = null
+  await nextTick()
   dialogVisible.value = true
 }
 
-function openEditDialog(coupon: AdminCouponListItem) {
+async function openEditDialog(coupon: AdminCouponListItem) {
+  dialogVisible.value = false
   dialogMode.value = 'edit'
   activeCoupon.value = coupon
+  await nextTick()
   dialogVisible.value = true
 }
 

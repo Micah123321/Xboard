@@ -80,10 +80,11 @@ function closeDialog() {
 }
 
 function disableBeforeUnixEpoch(date: Date): boolean {
-  return date.getTime() < 0
+  return date.getTime() < 0 || Math.floor(date.getTime() / 1000) > 2147483647
 }
 
 function syncForm() {
+  delete form.id
   Object.assign(form, toCouponFormModel(props.coupon))
 }
 
@@ -204,7 +205,6 @@ watch(
               type="datetimerange"
               start-placeholder="开始时间"
               end-placeholder="结束时间"
-              value-format="X"
               format="YYYY-MM-DD HH:mm:ss"
               :disabled-date="disableBeforeUnixEpoch"
               class="full-width"
