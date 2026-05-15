@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.7.5] - 2026-05-15
+
+### 快速修改
+- **[admin-frontend]**: 修复优惠券编辑弹窗有效期按毫秒/秒混用导致默认时间和数据库时间错乱的问题；日期选择器现在统一使用秒级 Unix 时间戳，提交前拦截 1970 前、2038 后和结束早于开始的时间，同时保留空使用次数为“不限制”而不是显示为 0 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/utils/coupons.ts:30-183, admin-frontend/src/utils/coupons.ts:270-279, admin-frontend/src/views/subscriptions/CouponEditorDialog.vue:11-209, public/assets/admin (构建产物刷新)
+
 ## [0.7.4] - 2026-05-09
 
 ### 修复

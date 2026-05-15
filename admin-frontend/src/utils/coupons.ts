@@ -27,6 +27,9 @@ export interface CouponExpiryMeta {
   kind: 'danger' | 'success' | 'info'
 }
 
+const SECONDS_PER_DAY = 24 * 60 * 60
+const MAX_COUPON_TIMESTAMP = 2147483647
+
 export const COUPON_TYPE_OPTIONS: Array<{
   label: string
   shortLabel: string
@@ -48,6 +51,10 @@ export const COUPON_PERIOD_OPTIONS = [
 ] as const
 
 function clampNumber(value: number | null): number | null {
+  if (value === null) {
+    return null
+  }
+
   if (!Number.isFinite(Number(value))) {
     return null
   }
@@ -66,17 +73,48 @@ function formatDatePart(date: Date): string {
   return `${month}/${day} ${hours}:${minutes}`
 }
 
-function normalizeTimestampToMs(timestamp: number | null | undefined): string {
+function normalizeTimestampToSeconds(timestamp: number | null | undefined): string {
   const value = Number(timestamp || 0)
   if (!Number.isFinite(value) || value <= 0) {
     return ''
   }
-  return String(value * 1000)
+  return String(Math.floor(value))
+}
+
+function normalizePickerTimestamp(value: string | number | undefined): number {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return 0
+  }
+  return Math.floor(numeric)
+}
+
+export function getCouponDateRangeError(dateRange: CouponFormModel['dateRange']): string {
+  if (!Array.isArray(dateRange) || dateRange.length !== 2 || !dateRange[0] || !dateRange[1]) {
+    return '请选择优惠券有效期'
+  }
+
+  const startedAt = normalizePickerTimestamp(dateRange[0])
+  const endedAt = normalizePickerTimestamp(dateRange[1])
+
+  if (startedAt <= 0 || endedAt <= 0) {
+    return '优惠券有效期不能早于 1970-01-01'
+  }
+
+  if (startedAt > MAX_COUPON_TIMESTAMP || endedAt > MAX_COUPON_TIMESTAMP) {
+    return '优惠券有效期不能晚于 2038-01-19'
+  }
+
+  if (endedAt <= startedAt) {
+    return '结束时间必须晚于开始时间'
+  }
+
+  return ''
 }
 
 export function createEmptyCouponForm(): CouponFormModel {
-  const now = Date.now()
-  const nextWeek = now + 7 * 24 * 60 * 60 * 1000
+  const now = Math.floor(Date.now() / 1000)
+  const nextWeek = now + 7 * SECONDS_PER_DAY
 
   return {
     name: '',
@@ -117,8 +155,8 @@ export function toCouponFormModel(coupon?: AdminCouponListItem | null): CouponFo
       ? Number((coupon.value / 100).toFixed(2))
       : Number(coupon.value),
     dateRange: [
-      normalizeTimestampToMs(coupon.started_at),
-      normalizeTimestampToMs(coupon.ended_at),
+      normalizeTimestampToSeconds(coupon.started_at),
+      normalizeTimestampToSeconds(coupon.ended_at),
     ],
     limitUse: clampNumber(coupon.limit_use ?? null),
     limitUseWithUser: clampNumber(coupon.limit_use_with_user ?? null),
@@ -131,6 +169,8 @@ export function toCouponFormModel(coupon?: AdminCouponListItem | null): CouponFo
 
 export function toCouponSavePayload(form: CouponFormModel): AdminCouponGeneratePayload {
   const [startedAt, endedAt] = form.dateRange
+  const normalizedStartedAt = normalizePickerTimestamp(startedAt)
+  const normalizedEndedAt = normalizePickerTimestamp(endedAt)
   const normalizedCode = form.code.trim()
   const payload: AdminCouponGeneratePayload = {
     id: form.id,
@@ -139,8 +179,8 @@ export function toCouponSavePayload(form: CouponFormModel): AdminCouponGenerateP
     value: form.type === 1
       ? roundCurrencyToCent(form.value)
       : Math.round(Number(form.value || 0)),
-    started_at: Math.floor(Number(startedAt) / 1000),
-    ended_at: Math.floor(Number(endedAt) / 1000),
+    started_at: normalizedStartedAt,
+    ended_at: normalizedEndedAt,
   }
 
   if (form.generateCount && form.generateCount > 1) {
@@ -228,6 +268,10 @@ export function sortCoupons(
 }
 
 export function formatCouponLimit(value: number | null | undefined, fallback = '无限次'): string {
+  if (value === null || value === undefined) {
+    return fallback
+  }
+
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) {
     return fallback

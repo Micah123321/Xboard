@@ -8,6 +8,7 @@ import {
   COUPON_PERIOD_OPTIONS,
   COUPON_TYPE_OPTIONS,
   createEmptyCouponForm,
+  getCouponDateRangeError,
   getCouponTypeLabel,
   toCouponFormModel,
   toCouponSavePayload,
@@ -50,8 +51,9 @@ const rules = computed<FormRules<CouponFormModel>>(() => ({
   dateRange: [
     {
       validator: (_rule, value, callback) => {
-        if (!Array.isArray(value) || value.length !== 2 || !value[0] || !value[1]) {
-          callback(new Error('请选择优惠券有效期'))
+        const error = getCouponDateRangeError(value)
+        if (error) {
+          callback(new Error(error))
           return
         }
         callback()
@@ -75,6 +77,10 @@ const rules = computed<FormRules<CouponFormModel>>(() => ({
 
 function closeDialog() {
   emit('update:visible', false)
+}
+
+function disableBeforeUnixEpoch(date: Date): boolean {
+  return date.getTime() < 0
 }
 
 function syncForm() {
@@ -198,7 +204,9 @@ watch(
               type="datetimerange"
               start-placeholder="开始时间"
               end-placeholder="结束时间"
-              value-format="x"
+              value-format="X"
+              format="YYYY-MM-DD HH:mm:ss"
+              :disabled-date="disableBeforeUnixEpoch"
               class="full-width"
             />
             <p class="field-helper">列表中的有效期和过期提示将直接依据这里的时间范围计算。</p>
