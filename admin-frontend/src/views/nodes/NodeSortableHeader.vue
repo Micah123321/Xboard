@@ -19,6 +19,8 @@ const iconComponent = computed(() => {
   }
   return props.state === '置顶' ? ArrowUp : ArrowDown
 })
+
+const statusLabel = computed(() => (props.active ? props.state : ''))
 </script>
 
 <template>
@@ -31,7 +33,7 @@ const iconComponent = computed(() => {
   >
     <span>{{ label }}</span>
     <ElIcon><component :is="iconComponent" /></ElIcon>
-    <small>{{ state }}</small>
+    <small v-if="statusLabel">{{ statusLabel }}</small>
   </button>
 </template>
 
@@ -40,7 +42,7 @@ const iconComponent = computed(() => {
   display: inline-flex;
   align-items: center;
   max-width: 100%;
-  gap: 5px;
+  gap: 4px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -59,7 +61,7 @@ const iconComponent = computed(() => {
 
 .sortable-header .el-icon {
   flex: 0 0 auto;
-  font-size: 13px;
+  font-size: 12px;
   color: #8a8f98;
   transition: color 0.18s ease;
 }
