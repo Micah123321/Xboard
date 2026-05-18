@@ -32,6 +32,7 @@ import type {
 } from '@/types/api'
 import NodeBatchEditDialog from './NodeBatchEditDialog.vue'
 import NodeEditorDialog from './NodeEditorDialog.vue'
+import NodeSortableHeader from './NodeSortableHeader.vue'
 import NodeSortDialog from './NodeSortDialog.vue'
 import {
   buildNodeTypeOptions,
@@ -60,6 +61,70 @@ import { sortNodesByOrder } from '@/utils/nodeEditor'
 type NodeAction = 'edit' | 'copy' | 'pin-top' | 'delete' | 'check-gfw'
 type NodeDialogMode = 'create' | 'edit'
 type NodeBatchEditPayload = Omit<AdminNodeBatchUpdatePayload, 'ids'>
+type NodeSortField = 'id' | 'show' | 'gfw' | 'autoOnline' | 'name' | 'address' | 'online' | 'rate' | 'groups'
+type NodeSortDirection = 'top' | 'bottom'
+type NodeSortLabel = '默认' | '置顶' | '置底'
+
+interface NodeSortState {
+  field: NodeSortField
+  direction: NodeSortDirection
+}
+
+type NodeSortValue = string | number | boolean | null
+
+interface NodeSortableColumn {
+  field: NodeSortField
+  label: string
+  value: (node: AdminNodeItem) => NodeSortValue
+}
+
+const NODE_SORTABLE_COLUMNS: Record<NodeSortField, NodeSortableColumn> = {
+  id: {
+    field: 'id',
+    label: '节点ID',
+    value: (node) => node.id,
+  },
+  show: {
+    field: 'show',
+    label: '显隐',
+    value: (node) => Boolean(node.show),
+  },
+  gfw: {
+    field: 'gfw',
+    label: '墙检测',
+    value: (node) => node.gfw_check_enabled !== false,
+  },
+  autoOnline: {
+    field: 'autoOnline',
+    label: '自动上线',
+    value: (node) => Boolean(node.auto_online),
+  },
+  name: {
+    field: 'name',
+    label: '节点',
+    value: (node) => node.name,
+  },
+  address: {
+    field: 'address',
+    label: '地址',
+    value: (node) => `${node.host || ''}:${node.server_port ?? node.port ?? ''}`,
+  },
+  online: {
+    field: 'online',
+    label: '在线人数',
+    value: (node) => Number(node.online ?? 0),
+  },
+  rate: {
+    field: 'rate',
+    label: '倍率',
+    value: (node) => Number(node.rate ?? 1),
+  },
+  groups: {
+    field: 'groups',
+    label: '权限组',
+    value: (node) => getNodeGroupNames(node).join('、'),
+  },
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -78,6 +143,7 @@ const relationFilter = ref<NodeRelationFilter>('all')
 const gfwFilter = ref<NodeGfwFilter>('all')
 const currentPage = ref(1)
 const pageSize = ref(20)
+const nodeSortState = ref<NodeSortState | null>(null)
 const selectedNodeIds = ref<number[]>([])
 const syncingSelection = ref(false)
 const switchingIds = ref<number[]>([])
@@ -97,7 +163,7 @@ let autoCheckCountdownTimer: number | undefined
 
 const GFW_AUTO_CHECK_INTERVAL_MINUTES = 30
 
-const filteredNodes = computed(() => sortNodesByOrder(filterNodes(
+const filteredNodes = computed(() => applyNodeFieldSort(filterNodes(
   nodes.value,
   keyword.value,
   typeFilter.value,
@@ -226,6 +292,95 @@ function formatClockTime(timestamp: number): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function normalizeSortText(value: unknown): string {
+  return String(value ?? '').trim().toLocaleLowerCase('zh-CN')
+}
+
+function normalizeSortNumber(value: unknown): number | null {
+  if (typeof value === 'string' && value.trim() === '') {
+    return null
+  }
+
+  const normalized = Number(value)
+  return Number.isFinite(normalized) ? normalized : null
+}
+
+function compareSortValues(leftValue: NodeSortValue, rightValue: NodeSortValue): number {
+  const leftNumber = typeof leftValue === 'boolean' ? Number(leftValue) : normalizeSortNumber(leftValue)
+  const rightNumber = typeof rightValue === 'boolean' ? Number(rightValue) : normalizeSortNumber(rightValue)
+  if (leftNumber !== null || rightNumber !== null) {
+    if (leftNumber === null) return 1
+    if (rightNumber === null) return -1
+    return leftNumber - rightNumber
+  }
+
+  const leftText = normalizeSortText(leftValue)
+  const rightText = normalizeSortText(rightValue)
+  if (!leftText && rightText) return 1
+  if (leftText && !rightText) return -1
+  return leftText.localeCompare(rightText, 'zh-CN', {
+    numeric: true,
+    sensitivity: 'base',
+  })
+}
+
+function compareDefaultOrder(left: AdminNodeItem, right: AdminNodeItem): number {
+  const [leftDefault] = sortNodesByOrder([left, right])
+  return leftDefault.id === left.id ? -1 : 1
+}
+
+function applyNodeFieldSort(items: AdminNodeItem[]): AdminNodeItem[] {
+  const currentSort = nodeSortState.value
+  if (!currentSort) {
+    return sortNodesByOrder(items)
+  }
+
+  const column = NODE_SORTABLE_COLUMNS[currentSort.field]
+  const direction = currentSort.direction === 'top' ? -1 : 1
+  return [...items].sort((left, right) => {
+    const result = compareSortValues(column.value(left), column.value(right))
+    if (result !== 0) {
+      return result * direction
+    }
+    return compareDefaultOrder(left, right)
+  })
+}
+
+function getSortLabel(field: NodeSortField): NodeSortLabel {
+  if (nodeSortState.value?.field !== field) {
+    return '默认'
+  }
+  return nodeSortState.value.direction === 'top' ? '置顶' : '置底'
+}
+
+function getSortAriaLabel(field: NodeSortField): string {
+  const column = NODE_SORTABLE_COLUMNS[field]
+  const currentSort = nodeSortState.value
+  if (currentSort?.field !== field) {
+    return `按${column.label}置顶排序`
+  }
+  if (currentSort.direction === 'top') {
+    return `按${column.label}置底排序`
+  }
+  return `恢复${column.label}默认排序`
+}
+
+function toggleNodeSort(field: NodeSortField) {
+  const currentSort = nodeSortState.value
+  if (currentSort?.field !== field) {
+    nodeSortState.value = { field, direction: 'top' }
+    currentPage.value = 1
+    return
+  }
+
+  if (currentSort.direction === 'top') {
+    nodeSortState.value = { field, direction: 'bottom' }
+  } else {
+    nodeSortState.value = null
+  }
+  currentPage.value = 1
 }
 
 function openCreateEditor() {
@@ -831,6 +986,15 @@ watch(
       >
         <ElTableColumn type="selection" width="52" reserve-selection />
         <ElTableColumn label="节点ID" width="132">
+          <template #header>
+            <NodeSortableHeader
+              label="节点ID"
+              :active="nodeSortState?.field === 'id'"
+              :state="getSortLabel('id')"
+              :sort-aria-label="getSortAriaLabel('id')"
+              @click="toggleNodeSort('id')"
+            />
+          </template>
           <template #default="{ row }">
             <ElTag
               round
@@ -844,6 +1008,15 @@ watch(
         </ElTableColumn>
 
         <ElTableColumn label="显隐" width="96">
+          <template #header>
+            <NodeSortableHeader
+              label="显隐"
+              :active="nodeSortState?.field === 'show'"
+              :state="getSortLabel('show')"
+              :sort-aria-label="getSortAriaLabel('show')"
+              @click="toggleNodeSort('show')"
+            />
+          </template>
           <template #default="{ row }">
             <div
               class="switch-shell"
@@ -860,6 +1033,15 @@ watch(
         </ElTableColumn>
 
         <ElTableColumn label="墙检测" width="118">
+          <template #header>
+            <NodeSortableHeader
+              label="墙检测"
+              :active="nodeSortState?.field === 'gfw'"
+              :state="getSortLabel('gfw')"
+              :sort-aria-label="getSortAriaLabel('gfw')"
+              @click="toggleNodeSort('gfw')"
+            />
+          </template>
           <template #default="{ row }">
             <ElTooltip
               :content="row.parent_id ? '子节点不单独检测；此开关只控制是否随父节点自动隐藏或恢复。' : '关闭后不参与自动墙检测和墙状态自动显隐。'"
@@ -877,6 +1059,15 @@ watch(
         </ElTableColumn>
 
         <ElTableColumn label="自动上线" width="118">
+          <template #header>
+            <NodeSortableHeader
+              label="自动上线"
+              :active="nodeSortState?.field === 'autoOnline'"
+              :state="getSortLabel('autoOnline')"
+              :sort-aria-label="getSortAriaLabel('autoOnline')"
+              @click="toggleNodeSort('autoOnline')"
+            />
+          </template>
           <template #default="{ row }">
             <div class="switch-shell switch-shell--auto">
               <ElSwitch
@@ -889,6 +1080,15 @@ watch(
         </ElTableColumn>
 
         <ElTableColumn label="节点" min-width="280">
+          <template #header>
+            <NodeSortableHeader
+              label="节点"
+              :active="nodeSortState?.field === 'name'"
+              :state="getSortLabel('name')"
+              :sort-aria-label="getSortAriaLabel('name')"
+              @click="toggleNodeSort('name')"
+            />
+          </template>
           <template #default="{ row }">
             <div class="node-cell">
               <ElPopover
@@ -997,6 +1197,15 @@ watch(
         </ElTableColumn>
 
         <ElTableColumn label="地址" min-width="260">
+          <template #header>
+            <NodeSortableHeader
+              label="地址"
+              :active="nodeSortState?.field === 'address'"
+              :state="getSortLabel('address')"
+              :sort-aria-label="getSortAriaLabel('address')"
+              @click="toggleNodeSort('address')"
+            />
+          </template>
           <template #default="{ row }">
             <div class="stack-cell">
               <strong>{{ getNodeAddress(row).primary }}</strong>
@@ -1006,6 +1215,15 @@ watch(
         </ElTableColumn>
 
         <ElTableColumn label="在线人数" width="116">
+          <template #header>
+            <NodeSortableHeader
+              label="在线人数"
+              :active="nodeSortState?.field === 'online'"
+              :state="getSortLabel('online')"
+              :sort-aria-label="getSortAriaLabel('online')"
+              @click="toggleNodeSort('online')"
+            />
+          </template>
           <template #default="{ row }">
             <div class="online-cell">
               <span class="online-cell__primary">
@@ -1018,6 +1236,15 @@ watch(
         </ElTableColumn>
 
         <ElTableColumn label="倍率" width="96">
+          <template #header>
+            <NodeSortableHeader
+              label="倍率"
+              :active="nodeSortState?.field === 'rate'"
+              :state="getSortLabel('rate')"
+              :sort-aria-label="getSortAriaLabel('rate')"
+              @click="toggleNodeSort('rate')"
+            />
+          </template>
           <template #default="{ row }">
             <ElTag round effect="plain" class="rate-tag">
               {{ formatNodeRate(row.rate) }}
@@ -1026,6 +1253,15 @@ watch(
         </ElTableColumn>
 
         <ElTableColumn label="权限组" min-width="180">
+          <template #header>
+            <NodeSortableHeader
+              label="权限组"
+              :active="nodeSortState?.field === 'groups'"
+              :state="getSortLabel('groups')"
+              :sort-aria-label="getSortAriaLabel('groups')"
+              @click="toggleNodeSort('groups')"
+            />
+          </template>
           <template #default="{ row }">
             <div class="group-tags">
               <ElTag

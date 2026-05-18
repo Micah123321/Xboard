@@ -7,6 +7,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202605181800 | node-field-sort | implementation | admin-frontend | node-field-sort#D001 | ✅完成 |
 | 202605151647 | code-review-coupon-date-format | implementation | admin-frontend | - | ✅完成 |
 | 202605091640 | fix-user-frontend-api-upstream | - | - | - | ✅完成 |
 | 202605090034 | code-review-temporary-traffic-reset-lock | - | - | - | ✅完成 |
@@ -60,6 +61,7 @@
 ## 按月归档
 
 ### 2026-05
+- [202605181800_node-field-sort](./2026-05/202605181800_node-field-sort/) - 节点管理页业务列表头新增三态字段排序，支持置顶、置底和恢复默认后端排序
 - [202605151647_code-review-coupon-date-format](./2026-05/202605151647_code-review-coupon-date-format/) - 审查修复优惠券有效期时间戳格式，避免 Element Plus 日期选择器把秒级字符串解析成异常年份
 - [202605090014_code-review-ticket-inline-dialog-state](./2026-05/202605090014_code-review-ticket-inline-dialog-state/) - 修复工单内联用户编辑和订单详情嵌套弹层的 body 挂载与关闭状态残留问题
 - [202605082344_ticket-inline-user-orders](./2026-05/202605082344_ticket-inline-user-orders/) - 工单工作台新增内联编辑用户和用户订单入口，管理员可在当前工单会话内处理用户资料与订单详情动作
