@@ -19,7 +19,7 @@
 - `v2_server.gfw_check_enabled` 控制节点是否参与自动墙检测与墙状态自动显隐；该字段按“未明确关闭即开启”处理，管理端开启父节点墙检测托管时会立即发起一次检测，后续由定时命令持续检测；子节点不独立检测但可单独关闭随父节点自动隐藏 / 恢复
 - `blocked` 结果会自动隐藏仍开启墙检测托管且当前显示中的父节点及其子节点，并设置 `gfw_auto_hidden=1`
 - `normal` 结果只恢复 `gfw_auto_hidden=1` 的节点，避免误恢复管理员手动隐藏的节点；`partial/failed` 只记录状态，不触发自动上线或下线
-- `sync:server-auto-online` 会把最新墙状态 `blocked` 和未恢复的 `gfw_auto_hidden` 作为显示否决条件，防止自动上线重新发布疑似被墙节点
+- `sync:server-auto-online` 会把最新墙状态 `blocked`、未恢复的 `gfw_auto_hidden` 和节点重连冷却状态作为显示否决条件，防止自动上线重新发布疑似被墙或短期频繁连断的节点
 - 当前检测方向只做节点服务器主动 ping 国内三网目标；后续墙内探测 IP 可在同一任务模型中扩展
 - 参考脚本中的 Telegram 通知、chat_id、bot token 和自动安装依赖逻辑不得进入项目实现
 - mi-node 使用 Go 原生 runner 调用系统 `ping`，按三网目标并发检测并结构化上报 `summary / operator_summary / raw_result`；ping 命令成功即视为目标可达，平均延迟解析失败不再把正常可达误判为超时

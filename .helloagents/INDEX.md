@@ -3,21 +3,22 @@
 ```yaml
 kb_version: 2
 project: Xboard-new
-updated_at: 2026-05-15
+updated_at: 2026-05-21
 active_package: 无
 ```
 
 ## 项目概览
 
 - 类型: PHP Laravel 主仓 + `admin-frontend` Vue3 管理端前端
-- 当前重点模块: `admin-frontend`、`deploy`、`node-gfw-check`、`node-traffic-limit`、`order-payment`、`queue-mail`、`subscription-protocols`、`user-frontend-access`、`user-temporary-traffic`
-- 最新归档: `202605151647_code-review-coupon-date-format`
+- 当前重点模块: `admin-frontend`、`deploy`、`node-auto-online`、`node-gfw-check`、`node-traffic-limit`、`order-payment`、`queue-mail`、`subscription-protocols`、`user-frontend-access`、`user-temporary-traffic`
+- 最新归档: `202605211535_node-reconnect-cooldown`
 
 ## 活跃模块
 
 - [admin-frontend](modules/admin-frontend.md): 管理端登录、主布局、仪表盘、用户/节点/订阅/系统管理与管理 API 前端封装
 - [ci-workflows](modules/ci-workflows.md): GitHub Actions 后端与管理端前端镜像发布工作流、路径触发边界和 GHCR 发布规则
 - [deploy](modules/deploy.md): 可复制到服务器的 Xboard Compose 部署模板、环境变量模板和运维脚本
+- [node-auto-online](modules/node-auto-online.md): 节点自动上线、重连冷却、父子显隐联动和管理端配置入口
 - [node-gfw-check](modules/node-gfw-check.md): 节点墙状态检测任务、父/子节点继承规则、mi-node 检测上报链路
 - [node-traffic-limit](modules/node-traffic-limit.md): 节点月流量限额配置、共享账期用量、重置调度、metrics 状态回写与 mi-node 强制下线协作
 - [order-payment](modules/order-payment.md): 订单支付成功快照、第三方回调元信息透传与后台支付成功信息展示

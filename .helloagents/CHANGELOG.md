@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.8.0] - 2026-05-21
+
+### 新增
+- **[node-auto-online]**: 自动上线新增节点级“重连冷却”选项；开启后节点 1 小时内在线 / 离线切换超过 10 次会自动隐藏 6 小时，冷却期内自动上线不会重新发布该节点，关闭自动上线或重连冷却时会清理已有冷却缓存 — by yinjianm
+  - 方案: [202605211535_node-reconnect-cooldown](archive/2026-05/202605211535_node-reconnect-cooldown/)
+  - 决策: node-reconnect-cooldown#D001(冷却状态使用 Redis 短期缓存)
+
 ## [0.7.9] - 2026-05-18
 
 ### 新增

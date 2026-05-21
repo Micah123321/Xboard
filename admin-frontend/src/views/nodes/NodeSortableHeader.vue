@@ -19,8 +19,6 @@ const iconComponent = computed(() => {
   }
   return props.state === '置顶' ? ArrowUp : ArrowDown
 })
-
-const statusLabel = computed(() => (props.active ? props.state : ''))
 </script>
 
 <template>
@@ -33,7 +31,6 @@ const statusLabel = computed(() => (props.active ? props.state : ''))
   >
     <span>{{ label }}</span>
     <ElIcon><component :is="iconComponent" /></ElIcon>
-    <small v-if="statusLabel">{{ statusLabel }}</small>
   </button>
 </template>
 
@@ -66,17 +63,6 @@ const statusLabel = computed(() => (props.active ? props.state : ''))
   transition: color 0.18s ease;
 }
 
-.sortable-header small {
-  flex: 0 0 auto;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: #6b7280;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
 .sortable-header:hover,
 .sortable-header:focus-visible,
 .sortable-header--active {
@@ -86,11 +72,6 @@ const statusLabel = computed(() => (props.active ? props.state : ''))
 .sortable-header:hover .el-icon,
 .sortable-header:focus-visible .el-icon,
 .sortable-header--active .el-icon {
-  color: #0071e3;
-}
-
-.sortable-header--active small {
-  background: rgba(0, 113, 227, 0.12);
   color: #0071e3;
 }
 

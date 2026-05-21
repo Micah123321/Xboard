@@ -37,6 +37,7 @@ export interface NodeFormModel {
   parentId: number | null
   show: boolean
   autoOnline: boolean
+  autoOnlineCooldownEnabled: boolean
   gfwCheckEnabled: boolean
   enabled: boolean
   tlsMode: number
@@ -254,6 +255,7 @@ export function createEmptyNodeForm(): NodeFormModel {
     parentId: null,
     show: true,
     autoOnline: false,
+    autoOnlineCooldownEnabled: false,
     gfwCheckEnabled: true,
     enabled: true,
     tlsMode: 0,

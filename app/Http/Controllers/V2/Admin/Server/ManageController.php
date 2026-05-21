@@ -11,6 +11,7 @@ use App\Models\StatServer;
 use App\Services\ServerAutoOnlineService;
 use App\Services\ServerGfwCheckService;
 use App\Services\ServerParentVisibilityService;
+use App\Services\ServerReconnectCooldownService;
 use App\Services\ServerService;
 use App\Services\ServerTrafficLimitService;
 use Illuminate\Http\Request;
@@ -138,6 +139,24 @@ class ManageController extends Controller
         }
     }
 
+    private function normalizeAutoOnlineCooldown(array &$params, bool $fallbackAutoOnline = false): void
+    {
+        $autoOnline = array_key_exists('auto_online', $params)
+            ? (bool) $params['auto_online']
+            : $fallbackAutoOnline;
+
+        if (!$autoOnline) {
+            $params['auto_online_cooldown_enabled'] = false;
+        }
+    }
+
+    private function resetReconnectCooldownIfDisabled(Server $server): void
+    {
+        if (!(bool) $server->auto_online || !(bool) $server->auto_online_cooldown_enabled) {
+            app(ServerReconnectCooldownService::class)->reset($server);
+        }
+    }
+
     public function sort(Request $request)
     {
         ini_set('post_max_size', '1m');
@@ -172,6 +191,7 @@ class ManageController extends Controller
                 return $this->fail([400202, '服务器不存在']);
             }
             try {
+                $this->normalizeAutoOnlineCooldown($params, (bool) $server->auto_online);
                 if (array_key_exists('show', $params)) {
                     $params['gfw_auto_hidden'] = false;
                     $params['gfw_auto_action_at'] = null;
@@ -179,6 +199,7 @@ class ManageController extends Controller
                     $params['parent_auto_action_at'] = null;
                 }
                 $server->update($params);
+                $this->resetReconnectCooldownIfDisabled($server);
                 app(ServerTrafficLimitService::class)->refreshSchedule($server->refresh());
                 $this->syncAutoOnlineIfEnabled($server);
                 return $this->success(true);
@@ -189,6 +210,7 @@ class ManageController extends Controller
         }
 
         try {
+            $this->normalizeAutoOnlineCooldown($params);
             $server = Server::create($params);
             app(ServerTrafficLimitService::class)->refreshSchedule($server->refresh());
             $this->syncAutoOnlineIfEnabled($server);
@@ -205,6 +227,7 @@ class ManageController extends Controller
             'id' => 'required|integer',
             'show' => 'nullable|integer',
             'auto_online' => 'nullable|boolean',
+            'auto_online_cooldown_enabled' => 'nullable|boolean',
             'gfw_check_enabled' => 'nullable|boolean',
             'machine_id' => 'nullable|integer',
             'enabled' => 'nullable|boolean',
@@ -224,6 +247,12 @@ class ManageController extends Controller
         if (array_key_exists('auto_online', $params)) {
             $server->auto_online = (bool) $params['auto_online'];
         }
+        if (array_key_exists('auto_online_cooldown_enabled', $params)) {
+            $server->auto_online_cooldown_enabled = (bool) $params['auto_online_cooldown_enabled'];
+        }
+        if (!(bool) $server->auto_online) {
+            $server->auto_online_cooldown_enabled = false;
+        }
         if (array_key_exists('gfw_check_enabled', $params)) {
             $server->gfw_check_enabled = (bool) $params['gfw_check_enabled'];
         }
@@ -238,6 +267,7 @@ class ManageController extends Controller
             return $this->fail([500, '保存失败']);
         }
 
+        $this->resetReconnectCooldownIfDisabled($server);
         $this->syncAutoOnlineIfEnabled($server);
 
         return $this->success(true);
@@ -361,6 +391,7 @@ class ManageController extends Controller
             'ids.*' => 'integer',
             'show' => 'nullable|integer|in:0,1',
             'auto_online' => 'nullable|boolean',
+            'auto_online_cooldown_enabled' => 'nullable|boolean',
             'gfw_check_enabled' => 'nullable|boolean',
             'enabled' => 'nullable|boolean',
             'machine_id' => 'nullable|integer',
@@ -385,6 +416,9 @@ class ManageController extends Controller
         }
         if (array_key_exists('auto_online', $params) && $params['auto_online'] !== null) {
             $update['auto_online'] = (bool) $params['auto_online'];
+        }
+        if (array_key_exists('auto_online_cooldown_enabled', $params) && $params['auto_online_cooldown_enabled'] !== null) {
+            $update['auto_online_cooldown_enabled'] = (bool) $params['auto_online_cooldown_enabled'];
         }
         if (array_key_exists('gfw_check_enabled', $params) && $params['gfw_check_enabled'] !== null) {
             $update['gfw_check_enabled'] = (bool) $params['gfw_check_enabled'];
@@ -414,12 +448,15 @@ class ManageController extends Controller
             DB::transaction(function () use ($servers, $update) {
                 /** @var Server $server */
                 foreach ($servers as $server) {
-                    $server->update($update);
+                    $serverUpdate = $update;
+                    $this->normalizeAutoOnlineCooldown($serverUpdate, (bool) $server->auto_online);
+                    $server->update($serverUpdate);
                 }
             });
             $servers->each(function (Server $server) {
                 $freshServer = $server->fresh();
                 if ($freshServer) {
+                    $this->resetReconnectCooldownIfDisabled($freshServer);
                     $this->syncAutoOnlineIfEnabled($freshServer);
                 }
             });

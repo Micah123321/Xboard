@@ -46,7 +46,8 @@
 - TUIC 表单默认以 V5 / V4 版本选择、`h3 / h2 / http/1.1` ALPN 选项和 `native / quic` UDP Relay Mode 对齐后端协议模板；AnyTLS Padding Scheme 默认值与 `Server` 模型完整模板保持一致
 - 节点排序采用本地草稿 + 上移 / 下移模式，保存时向 `server/manage/sort` 提交 `{ id, order }[]` 顺序 payload
 - 节点列表现支持本地分页、在线 / 离线筛选、显隐筛选、父/子节点筛选，以及跨分页稳定勾选；业务列表头支持三态字段排序（置顶 / 置底 / 默认），默认态继续使用后端 `sort` 顺序；批量修改 / 批量删除仅作用于已勾选节点，其中批量修改可统一更新 `host / group_ids / rate / auto_online`
-- 节点管理页新增“自动上线”托管开关；开启后后台会按节点在线状态自动同步 `show`，在线 / 待同步时显示、离线时隐藏，未开启的节点仍保持手动显隐控制；管理端保存 / 开启自动上线、REST 心跳和 WebSocket 状态上报会触发当前节点即时同步，`sync:server-auto-online` 继续作为定时兜底；疑似被墙或仍处于墙检测自动隐藏状态的节点不会被自动上线重新发布
+- 节点管理页新增“自动上线”托管开关；开启后后台会按节点在线状态自动同步 `show`，在线 / 待同步时显示、离线时隐藏，未开启的节点仍保持手动显隐控制；管理端保存 / 开启自动上线、REST 心跳和 WebSocket 状态上报会触发当前节点即时同步，`sync:server-auto-online` 继续作为定时兜底；疑似被墙、仍处于墙检测自动隐藏状态或处于重连冷却期的节点不会被自动上线重新发布
+- 节点新增 / 编辑弹窗在自动上线同组区域提供“重连冷却”节点级开关；关闭自动上线时该开关会被禁用并提交为关闭，避免保存无效配置
 - 节点管理页现支持墙状态展示、墙状态筛选与关键词搜索；父节点可通过行级或批量操作发起检测，子节点不单独检测并显示“随父节点”的继承状态
 - 节点管理页现支持“墙检测托管”开关、批量设置和刷新数据按钮；父节点开启后参与 `sync:server-gfw-checks` 自动检测，自动墙检统计只计算父节点；子节点不独立检测但可控制是否随父节点自动隐藏 / 恢复
 - 节点行级菜单现已补齐“置顶节点”，会复用当前排序结果生成新的顺序 payload 并提交到 `server/manage/sort`
@@ -110,6 +111,7 @@
 - 依赖 `src/utils/systemConfig.ts` 负责系统配置字段元信息、默认值、回填与保存序列化
 - 依赖 `src/utils/routes.ts` 负责路由动作映射、匹配规则序列化、节点引用摘要与搜索过滤
 - 依赖 `src/utils/nodes.ts` 负责节点在线状态、自动上线统计、父/子节点、墙状态 meta、节点限额展示、搜索文本和筛选逻辑
+- 依赖后端 `ServerAutoOnlineService` 和 `ServerReconnectCooldownService` 提供自动上线与重连冷却语义
 - 依赖 `src/views/tickets/useTicketReplyImages.ts` 收敛工单回复区图片点击上传、拖拽上传、粘贴上传、文件校验和 Markdown 插入
 - 依赖 `src/views/tickets/useTicketOrdersDialog.ts` 收敛工单内用户订单弹窗的订单列表、详情加载和订单动作刷新逻辑
 - 依赖 Laravel 后端 `TicketService::reply()` 提供工单“再次回复自动重开”的统一业务语义

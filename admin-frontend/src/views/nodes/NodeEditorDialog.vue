@@ -182,6 +182,15 @@ watch(
     }
   },
 )
+
+watch(
+  () => form.autoOnline,
+  (value) => {
+    if (!value) {
+      form.autoOnlineCooldownEnabled = false
+    }
+  },
+)
 </script>
 
 <template>
@@ -337,6 +346,13 @@ watch(
                     <span>开启后后台会自动同步显示状态：在线显示，离线隐藏。</span>
                   </div>
                   <ElSwitch v-model="form.autoOnline" />
+                </label>
+                <label class="switch-card">
+                  <div>
+                    <strong>重连冷却</strong>
+                    <span>一小时内连断超过十次后隐藏六小时。</span>
+                  </div>
+                  <ElSwitch v-model="form.autoOnlineCooldownEnabled" :disabled="!form.autoOnline" />
                 </label>
                 <label class="switch-card">
                   <div>
