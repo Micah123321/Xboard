@@ -19,7 +19,8 @@
 - API 基础路径使用 `/api/v2/{secure_path}`，其中 `secure_path` 来自运行时配置
 - 工单工作台现允许对已关闭工单继续回复；管理员发送新消息后会提示“发送并重开”，并通过统一后端语义把工单状态重新开启
 - 工单工作台回复区支持点击选择、拖拽放下和剪贴板粘贴三种图片上传入口，统一复用 `/upload/rest/upload` 图片上传和 Markdown 图片链接插入逻辑；上传期间会禁用发送入口，避免图片链接尚未写入时提前回复
-- 工单工作台对话页可在当前会话内直接打开当前工单用户的编辑抽屉、用户订单弹窗、流量日志弹窗和一次性临时流量分配弹窗；用户编辑或分配流量成功后会刷新工单详情，用户订单弹窗复用 `order/fetch`、`order/detail`、`order/paid`、`order/cancel` 与 `order/update` 维护订单详情动作。用户编辑抽屉、订单详情抽屉和临时流量弹窗均挂载至 body 层，订单弹窗关闭时会重置详情状态，避免嵌套弹层层级异常和旧详情残留。用户页和订单页仍保留 `ticket_return_id/ticket_return_subject` 返回工单能力，供跨页入口继续使用
+- 工单工作台对话页可在当前会话内直接打开当前工单用户的编辑抽屉、用户订单弹窗、流量日志弹窗和一次性临时流量分配弹窗；用户编辑或分配流量成功后会刷新工单详情，用户订单弹窗复用 `order/fetch`、`order/detail`、`order/paid`、`order/cancel` 与 `order/update` 维护订单详情动作。用户编辑抽屉、订单详情抽屉、订单分配抽屉和临时流量弹窗均挂载至 body 层，订单弹窗关闭时会重置详情状态，避免嵌套弹层层级异常和旧详情残留。用户页和订单页仍保留 `ticket_return_id/ticket_return_subject` 返回工单能力，供跨页入口继续使用
+- 工单工作台现在复用 `useUserRowActions` 提供当前工单用户的完整“用户操作”菜单，支持编辑、分配订单、分配流量、复制订阅 URL、重置 UUID 及订阅 URL、查看 TA 的订单 / 邀请 / 流量记录、重置流量、封禁或恢复用户，并可带 `ticket_return_id/ticket_return_subject` 跳转到用户管理页后返回原工单聊天页；分配订单会等待套餐列表加载完成，并复用进行中的加载请求，避免套餐为空时提前打开抽屉
 - 仪表盘以真实后端接口返回值为准，不在前端伪造业务统计
 - 仪表盘“收入趋势”支持在同一张趋势图中切换“按金额 / 按数量”，数量模式同步切换摘要卡片、Y 轴标签与最近记录
 - 仪表盘“作业详情”支持打开失败作业报错弹窗，集中查看 Horizon 失败作业的报错摘要、失败时间与队列信息
@@ -39,6 +40,7 @@
 - 批量恢复正常沿用 `user/ban` 现有接口，通过 `banned=0|1` 兼容，不额外引入重复路由
 - 用户管理页支持行级“分配流量”操作，调用 `user/assignTemporaryTraffic` 给用户当前周期增加一次性临时流量；列表总流量列会显示临时额度标记，提示该额度在流量重置或更换套餐后不再保留
 - 用户管理页的“更多操作”菜单现已补齐 `分配订单 / TA的订单 / TA的邀请 / TA的流量记录 / 重置流量`；其中订单分配复用现有抽屉，用户订单跳转到订单页并自动按 `user_id` 过滤，邀请结果在当前用户页复用 `invite_user_id` 筛选视图
+- 用户管理页和工单工作台共用 `src/views/users/useUserRowActions.ts` 维护复制订阅 URL、重置 UUID 及订阅 URL、封禁/恢复、重置流量、分配订单、查看订单/邀请/流量记录和用户管理跳转等行级动作，确保两处确认弹窗、错误提示和刷新回调一致
 - 用户流量重置优先复用 `traffic-reset/reset-user`，用户行级“重置流量”会走真实后端重置链路并在成功后刷新列表
 - 节点管理页通过真实后端 `server/manage/getNodes`、`server/group/fetch` 与 `server/route/fetch` 获取列表 / 关联数据，并通过 `server/manage/save`、`server/manage/sort`、`server/manage/update`、`server/manage/batchUpdate`、`server/manage/copy`、`server/manage/drop` 完成新增、编辑、排序、批量修改与行级操作
 - 节点新增 / 编辑采用统一中央大弹窗，支持 `Shadowsocks / VMess / Trojan / Hysteria / VLess / TUIC / SOCKS / Naive / HTTP / Mieru / AnyTLS` 11 种协议的首版动态配置表单
@@ -114,6 +116,7 @@
 - 依赖后端 `ServerAutoOnlineService` 和 `ServerReconnectCooldownService` 提供自动上线与重连冷却语义
 - 依赖 `src/views/tickets/useTicketReplyImages.ts` 收敛工单回复区图片点击上传、拖拽上传、粘贴上传、文件校验和 Markdown 插入
 - 依赖 `src/views/tickets/useTicketOrdersDialog.ts` 收敛工单内用户订单弹窗的订单列表、详情加载和订单动作刷新逻辑
+- 依赖 `src/views/users/useUserRowActions.ts` 收敛用户管理页与工单工作台共用的用户行级操作
 - 依赖 Laravel 后端 `TicketService::reply()` 提供工单“再次回复自动重开”的统一业务语义
 - 依赖 Laravel 注入的 `window.settings`
 - 构建输出到 `public/assets/admin`

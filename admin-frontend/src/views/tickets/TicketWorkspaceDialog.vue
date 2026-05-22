@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ChatLineRound, DataAnalysis, Picture, Plus, Search, Tickets, User } from '@element-plus/icons-vue'
+import {
+  ChatLineRound,
+  DataAnalysis,
+  Link,
+  MoreFilled,
+  Picture,
+  Plus,
+  Search,
+  Tickets,
+  User,
+} from '@element-plus/icons-vue'
+import type { LocationQueryRaw } from 'vue-router'
 import {
   assignUserTemporaryTraffic,
   closeTicket,
@@ -18,11 +29,14 @@ import {
   getTicketStatusMeta,
   renderTicketMarkdown,
 } from '@/utils/tickets'
+import OrderAssignDrawer from '@/views/subscriptions/OrderAssignDrawer.vue'
 import UserFormDrawer from '@/views/users/UserFormDrawer.vue'
 import UserTemporaryTrafficDialog from '@/views/users/UserTemporaryTrafficDialog.vue'
+import { isUserActionCancel, useUserRowActions, type UserRowAction } from '@/views/users/useUserRowActions'
 import TicketOrdersDialog from './TicketOrdersDialog.vue'
 import TrafficLogDialog from './TrafficLogDialog.vue'
 import { useTicketReplyImages } from './useTicketReplyImages'
+import { buildTicketReturnQuery } from './useTicketReturnLink'
 
 const props = defineProps<{
   visible: boolean
@@ -38,6 +52,7 @@ const emit = defineEmits<{
 const loadingSidebar = ref(false)
 const loadingDetail = ref(false)
 const plansLoading = ref(false)
+const plansLoadRequest = ref<Promise<void> | null>(null)
 const replying = ref(false)
 const sidebarTickets = ref<AdminTicketListItem[]>([])
 const plans = ref<AdminPlanListItem[]>([])
@@ -45,7 +60,6 @@ const activeTicketId = ref<number | null>(null)
 const detail = ref<AdminTicketDetail | null>(null)
 const keyword = ref('')
 const replyMessage = ref('')
-const trafficVisible = ref(false)
 const userEditorVisible = ref(false)
 const ordersVisible = ref(false)
 const temporaryTrafficVisible = ref(false)
@@ -68,6 +82,21 @@ const {
 const statusMeta = computed(() => detail.value ? getTicketStatusMeta(detail.value) : null)
 const levelMeta = computed(() => detail.value ? getTicketLevelMeta(detail.value.level) : null)
 const willReopenClosedTicket = computed(() => detail.value?.status === 1)
+const userActionLabel = computed(() => {
+  const user = detail.value?.user
+  if (!user?.id) {
+    return '用户操作'
+  }
+
+  return user.banned ? '用户操作 · 已封禁' : '用户操作'
+})
+
+const userActions = useUserRowActions({
+  onUserChanged: async () => {
+    await refreshWorkspace()
+    emit('updated')
+  },
+})
 
 async function loadSidebarTickets() {
   if (!props.visible) {
@@ -117,19 +146,27 @@ async function refreshWorkspace() {
 }
 
 async function ensurePlansLoaded() {
-  if (plans.value.length || plansLoading.value) {
+  if (plans.value.length) {
+    return
+  }
+
+  if (plansLoadRequest.value) {
+    await plansLoadRequest.value
     return
   }
 
   plansLoading.value = true
-  try {
-    const response = await getPlans()
+  const request = getPlans().then((response) => {
     plans.value = response.data ?? []
-  } catch (error) {
+  }).catch((error) => {
     ElMessage.warning(error instanceof Error ? error.message : '订阅计划加载失败')
-  } finally {
+  }).finally(() => {
     plansLoading.value = false
-  }
+    plansLoadRequest.value = null
+  })
+
+  plansLoadRequest.value = request
+  await request
 }
 
 async function handleReply() {
@@ -195,6 +232,93 @@ function openTicketTemporaryTraffic() {
   temporaryTrafficVisible.value = true
 }
 
+function buildCurrentTicketReturnQuery(): LocationQueryRaw {
+  if (!detail.value) {
+    return {}
+  }
+
+  return { ...buildTicketReturnQuery(detail.value) }
+}
+
+async function openTicketUserManagement() {
+  const user = detail.value?.user
+  if (!user?.id) {
+    return
+  }
+
+  await userActions.viewUserManagement(user, buildCurrentTicketReturnQuery())
+  closeDialog()
+}
+
+async function handleTicketUserAction(command: UserRowAction | 'manage-user') {
+  const user = detail.value?.user
+  if (!user?.id) {
+    return
+  }
+
+  try {
+    if (command === 'edit') {
+      await openTicketUserEditor()
+      return
+    }
+
+    if (command === 'assign-order') {
+      await ensurePlansLoaded()
+      userActions.openAssignOrder(user)
+      return
+    }
+
+    if (command === 'assign-temporary-traffic') {
+      openTicketTemporaryTraffic()
+      return
+    }
+
+    if (command === 'copy') {
+      await userActions.copySubscribeUrl(user)
+      return
+    }
+
+    if (command === 'reset-secret') {
+      await userActions.resetSecret(user)
+      return
+    }
+
+    if (command === 'view-orders') {
+      openTicketUserOrders()
+      return
+    }
+
+    if (command === 'view-invites') {
+      await userActions.viewUserInvites(user, buildCurrentTicketReturnQuery())
+      closeDialog()
+      return
+    }
+
+    if (command === 'view-traffic') {
+      userActions.openTrafficLogs(user)
+      return
+    }
+
+    if (command === 'reset-traffic') {
+      await userActions.performResetTraffic(user)
+      return
+    }
+
+    if (command === 'toggle-ban') {
+      await userActions.toggleBan(user)
+      return
+    }
+
+    if (command === 'manage-user') {
+      await openTicketUserManagement()
+    }
+  } catch (error) {
+    if (!isUserActionCancel(error)) {
+      ElMessage.error(error instanceof Error ? error.message : '用户操作失败')
+    }
+  }
+}
+
 async function handleUserSaved() {
   await refreshWorkspace()
   emit('updated')
@@ -227,7 +351,8 @@ function closeDialog() {
   resetReplyDragState()
   userEditorVisible.value = false
   ordersVisible.value = false
-  trafficVisible.value = false
+  userActions.assignOrderVisible.value = false
+  userActions.trafficLogVisible.value = false
   temporaryTrafficVisible.value = false
   emit('update:visible', false)
 }
@@ -283,7 +408,7 @@ watch(
             text
             class="ghost-action"
             :loading="plansLoading"
-            @click="openTicketUserEditor"
+            @click="handleTicketUserAction('edit')"
           >
             <ElIcon><User /></ElIcon>
             编辑用户
@@ -292,7 +417,7 @@ watch(
             v-if="detail?.user?.id"
             text
             class="ghost-action"
-            @click="openTicketUserOrders"
+            @click="handleTicketUserAction('view-orders')"
           >
             <ElIcon><Tickets /></ElIcon>
             用户订单
@@ -301,7 +426,7 @@ watch(
             v-if="detail?.user?.id"
             text
             class="ghost-action"
-            @click="trafficVisible = true"
+            @click="handleTicketUserAction('view-traffic')"
           >
             <ElIcon><DataAnalysis /></ElIcon>
             流量日志
@@ -311,11 +436,47 @@ watch(
             text
             class="ghost-action"
             :loading="temporaryTrafficSubmitting"
-            @click="openTicketTemporaryTraffic"
+            @click="handleTicketUserAction('assign-temporary-traffic')"
           >
             <ElIcon><Plus /></ElIcon>
             分配流量
           </ElButton>
+          <ElButton
+            v-if="detail?.user?.id"
+            text
+            class="ghost-action"
+            @click="handleTicketUserAction('manage-user')"
+          >
+            <ElIcon><Link /></ElIcon>
+            用户管理
+          </ElButton>
+          <ElDropdown
+            v-if="detail?.user?.id"
+            trigger="click"
+            @command="(command) => handleTicketUserAction(command as UserRowAction | 'manage-user')"
+          >
+            <ElButton text class="ghost-action action-menu-trigger">
+              <ElIcon><MoreFilled /></ElIcon>
+              <span>{{ userActionLabel }}</span>
+            </ElButton>
+            <template #dropdown>
+              <ElDropdownMenu>
+                <ElDropdownItem command="edit">编辑</ElDropdownItem>
+                <ElDropdownItem command="assign-order">分配订单</ElDropdownItem>
+                <ElDropdownItem command="assign-temporary-traffic">分配流量</ElDropdownItem>
+                <ElDropdownItem command="copy" divided>复制订阅URL</ElDropdownItem>
+                <ElDropdownItem command="reset-secret">重置UUID及订阅URL</ElDropdownItem>
+                <ElDropdownItem command="view-orders" divided>TA的订单</ElDropdownItem>
+                <ElDropdownItem command="view-invites">TA的邀请</ElDropdownItem>
+                <ElDropdownItem command="view-traffic">TA的流量记录</ElDropdownItem>
+                <ElDropdownItem command="reset-traffic">重置流量</ElDropdownItem>
+                <ElDropdownItem command="toggle-ban">
+                  {{ detail.user.banned ? '恢复正常' : '封禁用户' }}
+                </ElDropdownItem>
+                <ElDropdownItem command="manage-user" divided>进入用户管理</ElDropdownItem>
+              </ElDropdownMenu>
+            </template>
+          </ElDropdown>
           <ElButton
             v-if="detail && detail.status !== 1"
             text
@@ -465,9 +626,9 @@ watch(
     </div>
 
     <TrafficLogDialog
-      v-model:visible="trafficVisible"
-      :user-id="detail?.user?.id ?? null"
-      :user-email="detail?.user?.email"
+      v-model:visible="userActions.trafficLogVisible.value"
+      :user-id="userActions.trafficLogUserId.value"
+      :user-email="userActions.trafficLogUserEmail.value"
     />
 
     <TicketOrdersDialog
@@ -489,6 +650,13 @@ watch(
       :user="detail?.user ?? null"
       :loading="temporaryTrafficSubmitting"
       @submit="submitTicketTemporaryTraffic"
+    />
+
+    <OrderAssignDrawer
+      v-model:visible="userActions.assignOrderVisible.value"
+      :plans="plans"
+      :initial-email="userActions.assignOrderEmail.value"
+      @success="userActions.handleAssignOrderSuccess"
     />
   </ElDialog>
 </template>

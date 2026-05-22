@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## [0.8.2] - 2026-05-22
+
+### 修复
+- **[admin-frontend]**: 审查修复工单工作台“分配订单”在工单弹窗内打开时的层级和套餐加载时序问题；订单分配抽屉现在挂载至 body，套餐列表加载中的重复触发会等待同一个请求完成，避免打开空套餐抽屉 — by yinjianm
+  - 方案: [202605221930_code-review-admin-ticket-user-actions](archive/2026-05/202605221930_code-review-admin-ticket-user-actions/)
+  - 决策: code-review-admin-ticket-user-actions#D001(分配订单抽屉使用 body 挂载并等待套餐加载)
+
+## [0.8.1] - 2026-05-22
+
+### 新增
+- **[admin-frontend]**: 工单工作台新增当前用户“用户操作”菜单，复用用户管理行级动作，支持复制订阅 URL、重置 UUID 及订阅 URL、分配订单、分配流量、查看 TA 的订单 / 邀请 / 流量记录、重置流量、封禁或恢复用户，并可带返回上下文跳到用户管理后回到原工单聊天页 — by yinjianm
+  - 方案: [202605221908_admin-ticket-user-actions](archive/2026-05/202605221908_admin-ticket-user-actions/)
+  - 决策: admin-ticket-user-actions#D001(用户行级动作抽为共享 composable)
+
 ## [0.8.0] - 2026-05-21
 
 ### 新增

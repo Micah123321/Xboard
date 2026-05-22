@@ -21,11 +21,18 @@
 .workspace-header__actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .ghost-action {
   color: var(--xboard-link);
+}
+
+.action-menu-trigger {
+  min-width: 118px;
+  justify-content: center;
 }
 
 .danger-action {
@@ -259,6 +266,10 @@
   .conversation-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .workspace-header__actions {
+    justify-content: flex-start;
   }
 }
 

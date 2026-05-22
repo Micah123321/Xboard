@@ -7,6 +7,8 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202605221930 | code-review-admin-ticket-user-actions | - | - | - | ✅完成 |
+| 202605221908 | admin-ticket-user-actions | - | - | - | ✅完成 |
 | 202605211535 | node-reconnect-cooldown | implementation | node-auto-online,admin-frontend | node-reconnect-cooldown#D001 | ✅完成 |
 | 202605181800 | node-field-sort | implementation | admin-frontend | node-field-sort#D001 | ✅完成 |
 | 202605151647 | code-review-coupon-date-format | implementation | admin-frontend | - | ✅完成 |

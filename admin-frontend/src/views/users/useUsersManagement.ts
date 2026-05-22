@@ -1,12 +1,10 @@
-import { computed, h, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   assignUserTemporaryTraffic,
   deleteUser,
   fetchUsers,
   getPlans,
-  resetUserSecret,
-  updateUser,
 } from '@/api/admin'
 import type {
   AdminPlanListItem,
@@ -21,6 +19,7 @@ import {
 } from '@/utils/users'
 import { useUsersBatchActions } from './useUsersBatchActions'
 import { useUserScopedActions } from './useUserScopedActions'
+import { isUserActionCancel } from './useUserRowActions'
 
 type DrawerMode = 'create' | 'edit'
 type UserAction =
@@ -35,9 +34,6 @@ type UserAction =
   | 'reset-traffic'
   | 'toggle-ban'
   | 'delete'
-function isCancelError(error: unknown): boolean {
-  return error === 'cancel' || error === 'close'
-}
 
 export function useUsersManagement() {
   const loading = ref(false)
@@ -62,7 +58,9 @@ export function useUsersManagement() {
   const temporaryTrafficSubmitting = ref(false)
 
   const advancedFilterVisible = ref(false)
-  const scopedActions = useUserScopedActions()
+  const scopedActions = useUserScopedActions({
+    onUserChanged: loadUsers,
+  })
 
   const appliedFilters = computed<AdminUserFilter[]>(() => [
     ...buildUserFilters(
@@ -196,48 +194,6 @@ export function useUsersManagement() {
     refreshUsers(false)
   }
 
-  async function showManualSubscribeUrl(url: string) {
-    await ElMessageBox.alert(
-      h('textarea', {
-        class: 'manual-subscribe-url',
-        readonly: true,
-        value: url,
-      }),
-      '手动复制订阅地址',
-      {
-        confirmButtonText: '我已复制',
-        customClass: 'manual-subscribe-url-dialog',
-      },
-    )
-  }
-
-  async function copySubscribeUrl(user: AdminUserListItem) {
-    if (!navigator.clipboard?.writeText) {
-      await showManualSubscribeUrl(user.subscribe_url)
-      return
-    }
-
-    try {
-      await navigator.clipboard.writeText(user.subscribe_url)
-      ElMessage.success('订阅地址已复制')
-    } catch {
-      await showManualSubscribeUrl(user.subscribe_url)
-    }
-  }
-
-  async function toggleBan(user: AdminUserListItem) {
-    const nextValue = !user.banned
-    const actionText = nextValue ? '封禁' : '恢复'
-
-    await ElMessageBox.confirm(`确认${actionText}用户 ${user.email} 吗？`, `${actionText}用户`, {
-      type: 'warning',
-    })
-
-    await updateUser({ id: user.id, banned: nextValue })
-    ElMessage.success(`用户已${actionText}`)
-    await loadUsers()
-  }
-
   async function submitTemporaryTraffic(payload: { trafficGb: number }) {
     const user = temporaryTrafficUser.value
     if (!user) {
@@ -277,22 +233,17 @@ export function useUsersManagement() {
       }
 
       if (action === 'copy') {
-        await copySubscribeUrl(user)
+        await scopedActions.copySubscribeUrl(user)
         return
       }
 
       if (action === 'reset-secret') {
-        await ElMessageBox.confirm(`确认重置 ${user.email} 的 UUID 与订阅地址吗？`, '重置密钥', {
-          type: 'warning',
-        })
-        await resetUserSecret(user.id)
-        ElMessage.success('UUID 与订阅地址已重置')
-        await loadUsers()
+        await scopedActions.resetSecret(user)
         return
       }
 
       if (action === 'toggle-ban') {
-        await toggleBan(user)
+        await scopedActions.toggleBan(user)
         return
       }
 
@@ -318,7 +269,6 @@ export function useUsersManagement() {
 
       if (action === 'reset-traffic') {
         await scopedActions.performResetTraffic(user)
-        await loadUsers()
         return
       }
 
@@ -329,7 +279,7 @@ export function useUsersManagement() {
       ElMessage.success('用户已删除')
       await loadUsers()
     } catch (error) {
-      if (!isCancelError(error)) {
+      if (!isUserActionCancel(error)) {
         ElMessage.error(error instanceof Error ? error.message : '用户操作失败')
       }
     }
