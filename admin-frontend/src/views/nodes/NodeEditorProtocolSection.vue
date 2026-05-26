@@ -34,6 +34,13 @@ const showMultiplexSection = computed(() => supportsNodeMultiplex(props.form.typ
 const showTlsSection = computed(() => shouldShowTlsSettings(props.form.type, props.form.tlsMode))
 const showRealitySection = computed(() => shouldShowRealitySettings(props.form.type, props.form.tlsMode))
 const currentProtocolHint = computed(() => getNodeProtocolHint(props.form.type))
+
+function generateMieruTrafficPattern() {
+  const bytes = new Uint8Array(7)
+  crypto.getRandomValues(bytes)
+  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')
+  props.form.mieruTrafficPattern = btoa(binary)
+}
 </script>
 
 <template>
@@ -417,7 +424,11 @@ const currentProtocolHint = computed(() => getNodeProtocolHint(props.form.type))
           </ElSelect>
         </ElFormItem>
         <ElFormItem label="Traffic Pattern">
-          <ElInput v-model="props.form.mieruTrafficPattern" placeholder="例如：steady" />
+          <ElInput v-model="props.form.mieruTrafficPattern" clearable placeholder="点击随机生成或输入 Base64">
+            <template #append>
+              <ElButton @click="generateMieruTrafficPattern">随机生成</ElButton>
+            </template>
+          </ElInput>
         </ElFormItem>
       </template>
 

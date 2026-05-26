@@ -46,6 +46,7 @@
 - 节点新增 / 编辑采用统一中央大弹窗，支持 `Shadowsocks / VMess / Trojan / Hysteria / VLess / TUIC / SOCKS / Naive / HTTP / Mieru / AnyTLS` 11 种协议的首版动态配置表单
 - 节点新增 / 编辑 / 批量修改保存 `group_ids / route_ids` 时统一向后端提交字符串 ID，后端 `Server::whereGroupId()` 同时兼容历史字符串与数字 JSON 值，避免权限组保存后订阅侧无法命中节点
 - TUIC 表单默认以 V5 / V4 版本选择、`h3 / h2 / http/1.1` ALPN 选项和 `native / quic` UDP Relay Mode 对齐后端协议模板；AnyTLS Padding Scheme 默认值与 `Server` 模型完整模板保持一致
+- Mieru 表单的 `Traffic Pattern` 字段支持一键随机生成 7 字节 Base64 字符串，同时保留自定义输入能力
 - 节点排序采用本地草稿 + 上移 / 下移模式，保存时向 `server/manage/sort` 提交 `{ id, order }[]` 顺序 payload
 - 节点列表现支持本地分页、在线 / 离线筛选、显隐筛选、父/子节点筛选，以及跨分页稳定勾选；业务列表头支持三态字段排序（置顶 / 置底 / 默认），默认态继续使用后端 `sort` 顺序；批量修改 / 批量删除仅作用于已勾选节点，其中批量修改可统一更新 `host / group_ids / rate / auto_online`
 - 节点管理页新增“自动上线”托管开关；开启后后台会按节点在线状态自动同步 `show`，在线 / 待同步时显示、离线时隐藏，未开启的节点仍保持手动显隐控制；管理端保存 / 开启自动上线、REST 心跳和 WebSocket 状态上报会触发当前节点即时同步，`sync:server-auto-online` 继续作为定时兜底；疑似被墙、仍处于墙检测自动隐藏状态或处于重连冷却期的节点不会被自动上线重新发布

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.8.3] - 2026-05-26
+
+### 快速修改
+- **[admin-frontend]**: 节点编辑的 Mieru `Traffic Pattern` 字段新增一键随机生成 Base64 能力，点击后生成 7 字节随机值并写入原字段，同时保留自定义输入能力 — by yinjianm
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/views/nodes/NodeEditorProtocolSection.vue:39-430, .helloagents/modules/admin-frontend.md:49
+
 ## [0.8.2] - 2026-05-22
 
 ### 修复
