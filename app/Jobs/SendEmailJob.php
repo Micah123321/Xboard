@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Services\MailService;
+use App\Services\MailSuppressionService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -52,6 +53,10 @@ class SendEmailJob implements ShouldQueue
 
         $mailLog = $this->sendEmail($params);
         if ($mailLog['error']) {
+            if (MailSuppressionService::shouldSkipRetryForError($mailLog['error'])) {
+                return;
+            }
+
             throw new RuntimeException('Failed to send email: ' . $mailLog['error']);
         }
     }

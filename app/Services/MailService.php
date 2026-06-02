@@ -21,7 +21,7 @@ class MailService
         }
 
         return (string) preg_replace_callback('/\{\{\s*([a-zA-Z0-9_.-]+)(?:\|([^}]*))?\s*\}\}/', function ($m) use ($vars) {
-            $key = $m[1] ?? '';
+            $key = $m[1];
             $default = array_key_exists(2, $m) ? trim((string) $m[2]) : null;
 
             if (!array_key_exists($key, $vars) || $vars[$key] === null || $vars[$key] === '') {
@@ -255,12 +255,13 @@ class MailService
             $params['template_value']['content'] = (string) $params['template_value']['content'];
         }
 
-        $email = (string) $params['email'];
+        $email = MailSuppressionService::normalizeEmail((string) $params['email']);
         $originTemplateName = (string) $params['template_name'];
         $subject = (string) $params['subject'];
+        $suppressionService = app(MailSuppressionService::class);
 
-        $vars = is_array($params['template_value']) ? ($params['template_value']['vars'] ?? []) : [];
-        $contentMode = is_array($params['template_value']) ? ($params['template_value']['content_mode'] ?? null) : null;
+        $vars = $params['template_value']['vars'] ?? [];
+        $contentMode = $params['template_value']['content_mode'] ?? null;
 
         if (is_array($vars) && !empty($vars)) {
             $subject = self::renderPlaceholders($subject, $vars);
@@ -290,6 +291,15 @@ class MailService
 
         $params['template_name'] = 'mail.' . admin_setting('email_template', 'default') . '.' . $originTemplateName;
         $logTemplateName = $params['template_name'];
+        $error = null;
+
+        if ($suppressionService->isSuppressed($email)) {
+            $error = MailSuppressionService::suppressedError($email);
+            $log = self::createMailLog($email, $subject, $logTemplateName, $error);
+
+            return $log;
+        }
+
         try {
             if ($originTemplateName === 'notify') {
                 $html = MailHtmlContent::buildModernNotifyHtml($params['template_value'], $subject, $appName);
@@ -304,16 +314,30 @@ class MailService
                     }
                 );
             }
-            $error = null;
         } catch (\Throwable $e) {
             Log::error($e);
             $error = $e->getMessage();
+            try {
+                $suppressionService->suppressFromPermanentFailure($email, $error);
+            } catch (\Throwable $suppressionError) {
+                Log::warning('Failed to record mail suppression', [
+                    'email' => $email,
+                    'error' => $suppressionError->getMessage(),
+                ]);
+            }
         }
 
+        $log = self::createMailLog($email, $subject, $logTemplateName, $error);
+
+        return $log;
+    }
+
+    private static function createMailLog(string $email, string $subject, string $templateName, ?string $error): array
+    {
         $log = [
-            'email' => $email,
+            'email' => MailSuppressionService::normalizeEmail($email),
             'subject' => $subject,
-            'template_name' => $logTemplateName,
+            'template_name' => $templateName,
             'error' => $error,
             'config' => MailRuntimeConfig::configForLog((array) config('mail', [])),
         ];

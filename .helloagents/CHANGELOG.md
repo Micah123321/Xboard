@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.9.0] - 2026-06-02
+
+### 新增
+- **[queue-mail]**: 新增全局邮箱禁发机制；邮件发送前会检查 `v2_mail_suppressions`，命中后不再真实发送并写入跳过日志，同步 SMTP 永久失败和 `MAILER-DAEMON` 退信正文中的 `550 Mailbox not found` / `550 Mail is rejected by recipients` 等原因会自动归一化邮箱并写入禁发表，避免后续通知继续发送给无效或拒收邮箱 — by yinjianm
+  - 方案: [202606021547_mail-bounce-suppression](archive/2026-06/202606021547_mail-bounce-suppression/)
+  - 决策: mail-bounce-suppression#D001(使用全局邮箱禁发表作为投递禁发事实源)
+
 ## [0.8.3] - 2026-05-26
 
 ### 快速修改

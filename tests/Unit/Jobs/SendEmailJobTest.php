@@ -3,6 +3,7 @@
 namespace Tests\Unit\Jobs;
 
 use App\Jobs\SendEmailJob;
+use App\Services\MailSuppressionService;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -37,6 +38,43 @@ class SendEmailJobTest extends TestCase
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Failed to send email: SMTP connection failed');
+
+        $job->handle();
+    }
+
+    public function test_handle_does_not_retry_suppressed_recipients(): void
+    {
+        $job = new class([
+            'email' => 'user@example.com',
+            'subject' => 'Subject',
+            'template_name' => 'notify',
+        ]) extends SendEmailJob {
+            protected function sendEmail(array $params): array
+            {
+                return ['error' => MailSuppressionService::suppressedError($params['email'])];
+            }
+        };
+
+        $job->handle();
+
+        $this->addToAssertionCount(1);
+    }
+
+    public function test_handle_still_throws_for_first_permanent_transport_failure(): void
+    {
+        $job = new class([
+            'email' => 'missing@example.com',
+            'subject' => 'Subject',
+            'template_name' => 'notify',
+        ]) extends SendEmailJob {
+            protected function sendEmail(array $params): array
+            {
+                return ['error' => '550 Mailbox not found'];
+            }
+        };
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Failed to send email: 550 Mailbox not found');
 
         $job->handle();
     }
