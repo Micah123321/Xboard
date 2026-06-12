@@ -8,6 +8,7 @@
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
 | 202606121616 | forward-child-node-independent-visibility | - | - | - | ✅完成 |
+| 202606121621 | php-environment-install | implementation | local-php-runtime | php-environment-install#D001 | ✅完成 |
 | 202606021547 | mail-bounce-suppression | - | - | - | ✅完成 |
 | 202605221930 | code-review-admin-ticket-user-actions | - | - | - | ✅完成 |
 | 202605221908 | admin-ticket-user-actions | - | - | - | ✅完成 |
@@ -67,6 +68,7 @@
 
 ### 2026-06
 - [202606121616_forward-child-node-independent-visibility](./2026-06/202606121616_forward-child-node-independent-visibility/) - 父节点自动在线、运行状态缓存、墙检测和流量限额不再影响转发入口子节点，子节点按自身运行缓存、`show` 和 `enabled` 独立控制
+- [202606121621_php-environment-install](./2026-06/202606121621_php-environment-install/) - 安装 Windows 本机 PHP 8.2.31 NTS x64 到 `E:\php`，启用 Laravel/Composer 基础扩展并安装 Composer 2.10.1 与 Redis 扩展；记录 Windows 原生缺少 `ext-pcntl` / `ext-posix` 的验证边界
 
 ### 2026-05
 - [202605211535_node-reconnect-cooldown](./2026-05/202605211535_node-reconnect-cooldown/) - 自动上线新增节点级重连冷却，1 小时内连断超过 10 次后隐藏 6 小时，冷却期内不会自动重新发布

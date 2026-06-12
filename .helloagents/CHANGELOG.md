@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.9.2] - 2026-06-12
+
+### 新增
+- **[local-php-runtime]**: 安装 Windows 本机 PHP 8.2.31 NTS x64 到 `E:\php`，启用 Laravel/Composer 基础验证所需扩展并安装 Composer 2.10.1 与 Redis 扩展；用户级 PATH 已包含 `E:\php`，同时记录 Windows 原生缺少 `ext-pcntl` / `ext-posix` 的 Horizon/Octane 验证边界 — by hlm123
+  - 方案: [202606121621_php-environment-install](archive/2026-06/202606121621_php-environment-install/)
+  - 决策: php-environment-install#D001(采用 PHP 8.2 NTS x64 匹配项目 Docker 运行时)
+
 ## [0.9.1] - 2026-06-12
 
 ### 修复

@@ -10,7 +10,7 @@ active_package: 无
 ## 项目概览
 
 - 类型: PHP Laravel 主仓 + `admin-frontend` Vue3 管理端前端
-- 当前重点模块: `admin-frontend`、`deploy`、`node-auto-online`、`node-gfw-check`、`node-traffic-limit`、`order-payment`、`queue-mail`、`subscription-protocols`、`user-frontend-access`、`user-temporary-traffic`
+- 当前重点模块: `admin-frontend`、`deploy`、`local-php-runtime`、`node-auto-online`、`node-gfw-check`、`node-traffic-limit`、`order-payment`、`queue-mail`、`subscription-protocols`、`user-frontend-access`、`user-temporary-traffic`
 - 最新归档: `202606121616_forward-child-node-independent-visibility`
 
 ## 活跃模块
@@ -18,6 +18,7 @@ active_package: 无
 - [admin-frontend](modules/admin-frontend.md): 管理端登录、主布局、仪表盘、用户/节点/订阅/系统管理与管理 API 前端封装
 - [ci-workflows](modules/ci-workflows.md): GitHub Actions 后端与管理端前端镜像发布工作流、路径触发边界和 GHCR 发布规则
 - [deploy](modules/deploy.md): 可复制到服务器的 Xboard Compose 部署模板、环境变量模板和运维脚本
+- [local-php-runtime](modules/local-php-runtime.md): Windows 本机 PHP/Composer 环境、扩展启用状态与 Docker/WSL 验证边界
 - [node-auto-online](modules/node-auto-online.md): 节点自动上线、重连冷却、父子显隐独立和管理端配置入口
 - [node-gfw-check](modules/node-gfw-check.md): 节点墙状态检测任务、父/子节点状态展示继承、mi-node 检测上报链路
 - [node-traffic-limit](modules/node-traffic-limit.md): 节点月流量限额配置、共享账期用量、重置调度、metrics 状态回写与 mi-node 强制下线协作

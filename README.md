@@ -85,6 +85,14 @@ docker compose up -d
 
 但新功能开发可能会相对有限。
 
+### 维护日志
+
+- 2026-06-02：常规升级维护命令：
+
+```bash
+docker compose pull && docker compose run -it --rm web php artisan xboard:update && docker compose up -d
+```
+
 ## 重要提示
 
 1. 修改后台路径后需要重启：

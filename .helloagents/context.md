@@ -8,6 +8,7 @@
 
 ## 技术上下文
 
+- Windows 本机 PHP 环境已安装到 `E:\php`：PHP 8.2.31 NTS x64、Composer 2.10.1、Redis PHP 扩展 6.3.0；用于 Composer、Artisan 基础检查和非 Swoole/Horizon 的后端验证。Windows 原生 PHP 缺少 `ext-pcntl` 与 `ext-posix`，完整 Horizon/Octane 运行仍以 Docker/WSL 为准。
 - 管理端前端位于 `admin-frontend/`
 - `admin-frontend` 现支持通过 `ADMIN_BUILD_OUT_DIR` 覆写构建输出目录：仓内默认仍写到 `../public/assets/admin`，容器构建可切到独立 `dist`
 - 前端容器化运行采用 `admin-frontend/Dockerfile`（`Node 20 + Caddy` 多阶段构建），静态站点入口重定向到 `/assets/admin/`
