@@ -185,7 +185,7 @@ class ServerAutoOnlineServiceTest extends TestCase
             'gfw_check_enabled' => true,
         ]);
 
-        $this->markNodeOnline($child);
+        $this->markNodeOnline($parent);
         ServerGfwCheck::create([
             'server_id' => $parent->id,
             'status' => ServerGfwCheck::STATUS_BLOCKED,
@@ -199,7 +199,7 @@ class ServerAutoOnlineServiceTest extends TestCase
         $this->assertFalse($child->fresh()->gfw_auto_hidden);
     }
 
-    public function test_child_auto_online_does_not_inherit_parent_online_status(): void
+    public function test_child_auto_online_can_use_parent_runtime_cache(): void
     {
         $parent = $this->makeServer([
             'name' => 'online-parent',
@@ -217,8 +217,88 @@ class ServerAutoOnlineServiceTest extends TestCase
 
         $result = app(ServerAutoOnlineService::class)->syncServer($child);
 
-        $this->assertSame(1, $result['hidden']);
-        $this->assertFalse($child->fresh()->show);
+        $this->assertSame(1, $result['unchanged']);
+        $this->assertTrue($child->fresh()->show);
+        $this->assertSame(Server::STATUS_ONLINE_NO_PUSH, $child->fresh()->available_status);
+    }
+
+    public function test_child_runtime_accessors_fall_back_to_parent_runtime_cache(): void
+    {
+        $parent = $this->makeServer([
+            'name' => 'trojan-runtime-parent',
+            'type' => Server::TYPE_TROJAN,
+        ]);
+        $child = $this->makeServer([
+            'name' => 'vmess-runtime-child',
+            'type' => Server::TYPE_VMESS,
+            'parent_id' => $parent->id,
+        ]);
+        $metrics = ['active_connections' => 8, 'total_users' => 4];
+        $loadStatus = [
+            'cpu' => 12.5,
+            'mem' => ['total' => 1024, 'used' => 512],
+        ];
+
+        $this->putRuntimeCache($parent, 'LAST_CHECK_AT', time());
+        $this->putRuntimeCache($parent, 'LAST_PUSH_AT', time());
+        $this->putRuntimeCache($parent, 'ONLINE_USER', 3);
+        $this->putRuntimeCache($parent, 'METRICS', $metrics);
+        $this->putRuntimeCache($parent, 'LOAD_STATUS', $loadStatus);
+
+        $freshChild = $child->fresh();
+
+        $this->assertSame(Server::STATUS_ONLINE, $freshChild->available_status);
+        $this->assertSame(3, $freshChild->online);
+        $this->assertSame($metrics, $freshChild->metrics);
+        $this->assertSame(8, $freshChild->online_conn);
+        $this->assertSame($loadStatus, $freshChild->load_status);
+    }
+
+    public function test_child_runtime_accessors_fall_back_when_child_runtime_cache_is_stale(): void
+    {
+        $parent = $this->makeServer([
+            'name' => 'fresh-parent-runtime',
+        ]);
+        $child = $this->makeServer([
+            'name' => 'stale-child-runtime',
+            'parent_id' => $parent->id,
+        ]);
+
+        $this->putRuntimeCache($parent, 'LAST_CHECK_AT', time());
+        $this->putRuntimeCache($parent, 'ONLINE_USER', 5);
+        $this->putRuntimeCache($child, 'LAST_CHECK_AT', time() - Server::CHECK_INTERVAL - 30);
+        $this->putRuntimeCache($child, 'ONLINE_USER', 1);
+
+        $freshChild = $child->fresh();
+
+        $this->assertSame(Server::STATUS_ONLINE_NO_PUSH, $freshChild->available_status);
+        $this->assertSame(5, $freshChild->online);
+    }
+
+    public function test_child_runtime_accessors_prefer_fresh_child_runtime_cache(): void
+    {
+        $parent = $this->makeServer([
+            'name' => 'parent-runtime-source',
+        ]);
+        $child = $this->makeServer([
+            'name' => 'child-runtime-source',
+            'parent_id' => $parent->id,
+        ]);
+        $parentMetrics = ['active_connections' => 8];
+        $childMetrics = ['active_connections' => 2];
+
+        $this->putRuntimeCache($parent, 'LAST_CHECK_AT', time());
+        $this->putRuntimeCache($parent, 'ONLINE_USER', 8);
+        $this->putRuntimeCache($parent, 'METRICS', $parentMetrics);
+        $this->putRuntimeCache($child, 'LAST_CHECK_AT', time());
+        $this->putRuntimeCache($child, 'ONLINE_USER', 2);
+        $this->putRuntimeCache($child, 'METRICS', $childMetrics);
+
+        $freshChild = $child->fresh();
+
+        $this->assertSame(2, $freshChild->online);
+        $this->assertSame($childMetrics, $freshChild->metrics);
+        $this->assertSame(2, $freshChild->online_conn);
     }
 
     public function test_touch_node_syncs_auto_online_node_immediately(): void
@@ -271,9 +351,14 @@ class ServerAutoOnlineServiceTest extends TestCase
 
     private function markNodeOnline(Server $server): void
     {
+        $this->putRuntimeCache($server, 'LAST_CHECK_AT', time());
+    }
+
+    private function putRuntimeCache(Server $server, string $name, mixed $value): void
+    {
         Cache::put(
-            CacheKey::get('SERVER_' . strtoupper($server->type) . '_LAST_CHECK_AT', $server->id),
-            time(),
+            CacheKey::get('SERVER_' . strtoupper($server->type) . '_' . $name, $server->id),
+            $value,
             3600
         );
     }

@@ -94,6 +94,10 @@ class Server extends Model
 
     public const CHECK_INTERVAL = 300; // 5 minutes in seconds
 
+    private bool $runtimeParentTypeResolved = false;
+
+    private ?string $runtimeParentTypeCache = null;
+
     private const CIPHER_CONFIGURATIONS = [
         '2022-blake3-aes-128-gcm' => [
             'serverKeySize' => 16,
@@ -470,6 +474,98 @@ class Server extends Model
         return $type ? in_array(self::normalizeType($type), self::VALID_TYPES, true) : true;
     }
 
+    private function getRuntimeCacheValue(string $name, mixed $default = null): mixed
+    {
+        foreach ($this->runtimeCacheKeys($name) as $cacheKey) {
+            $value = Cache::get($cacheKey);
+
+            if ($value !== null) {
+                return $value;
+            }
+        }
+
+        return $default;
+    }
+
+    private function runtimeCacheKeys(string $name): array
+    {
+        $ownKeys = $this->ownRuntimeCacheKeys($name);
+
+        if (!$this->shouldUseParentRuntimeCache()) {
+            return $ownKeys;
+        }
+
+        return array_values(array_unique([
+            ...$this->parentRuntimeCacheKeys($name),
+            ...$ownKeys,
+        ]));
+    }
+
+    private function ownRuntimeCacheKeys(string $name): array
+    {
+        $type = strtoupper((string) $this->type);
+        return [
+            CacheKey::get("SERVER_{$type}_{$name}", (int) $this->id),
+        ];
+    }
+
+    private function parentRuntimeCacheKeys(string $name): array
+    {
+        $parentId = (int) ($this->parent_id ?? 0);
+
+        if ($parentId <= 0) {
+            return [];
+        }
+
+        $type = strtoupper((string) $this->type);
+        $keys = [];
+        $parentType = $this->runtimeParentType();
+        if ($parentType !== null) {
+            $keys[] = CacheKey::get("SERVER_{$parentType}_{$name}", $parentId);
+        }
+        $keys[] = CacheKey::get("SERVER_{$type}_{$name}", $parentId);
+
+        return array_values(array_unique($keys));
+    }
+
+    private function shouldUseParentRuntimeCache(): bool
+    {
+        if ((int) ($this->parent_id ?? 0) <= 0) {
+            return false;
+        }
+
+        $lastCheckAt = Cache::get($this->ownRuntimeCacheKeys('LAST_CHECK_AT')[0]);
+
+        return !$lastCheckAt || (time() - self::CHECK_INTERVAL) >= (int) $lastCheckAt;
+    }
+
+    private function runtimeParentType(): ?string
+    {
+        $parentId = (int) ($this->parent_id ?? 0);
+        if ($parentId <= 0) {
+            return null;
+        }
+
+        if ($this->runtimeParentTypeResolved) {
+            return $this->runtimeParentTypeCache;
+        }
+
+        $this->runtimeParentTypeResolved = true;
+
+        if ($this->relationLoaded('parent') && $this->parent instanceof self) {
+            $this->runtimeParentTypeCache = strtoupper((string) $this->parent->type);
+            return $this->runtimeParentTypeCache;
+        }
+
+        $type = self::query()
+            ->whereKey($parentId)
+            ->value('type');
+
+        $this->runtimeParentTypeCache = $type ? strtoupper((string) $type) : null;
+
+        return $this->runtimeParentTypeCache;
+    }
+
     public function getAvailableStatusAttribute(): int
     {
         $now = time();
@@ -519,9 +615,7 @@ class Server extends Model
     {
         return Attribute::make(
             get: function () {
-                $type = strtoupper($this->type);
-                $serverId = $this->id;
-                return Cache::get(CacheKey::get("SERVER_{$type}_LAST_CHECK_AT", $serverId));
+                return $this->getRuntimeCacheValue('LAST_CHECK_AT');
             }
         );
     }
@@ -533,9 +627,7 @@ class Server extends Model
     {
         return Attribute::make(
             get: function () {
-                $type = strtoupper($this->type);
-                $serverId = $this->id;
-                return Cache::get(CacheKey::get("SERVER_{$type}_LAST_PUSH_AT", $serverId));
+                return $this->getRuntimeCacheValue('LAST_PUSH_AT');
             }
         );
     }
@@ -547,9 +639,7 @@ class Server extends Model
     {
         return Attribute::make(
             get: function () {
-                $type = strtoupper($this->type);
-                $serverId = $this->id;
-                return Cache::get(CacheKey::get("SERVER_{$type}_ONLINE_USER", $serverId)) ?? 0;
+                return $this->getRuntimeCacheValue('ONLINE_USER', 0);
             }
         );
     }
@@ -600,9 +690,7 @@ class Server extends Model
     {
         return Attribute::make(
             get: function () {
-                $type = strtoupper($this->type);
-                $serverId = $this->id;
-                return Cache::get(CacheKey::get("SERVER_{$type}_METRICS", $serverId));
+                return $this->getRuntimeCacheValue('METRICS');
             }
         );
     }
@@ -626,9 +714,7 @@ class Server extends Model
     {
         return Attribute::make(
             get: function () {
-                $type = strtoupper($this->type);
-                $serverId = $this->id;
-                return Cache::get(CacheKey::get("SERVER_{$type}_LOAD_STATUS", $serverId));
+                return $this->getRuntimeCacheValue('LOAD_STATUS');
             }
         );
     }

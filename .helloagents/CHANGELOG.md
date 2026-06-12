@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.9.3] - 2026-06-13
+
+### 修复
+- **[node-auto-online]**: 修复上次独立转发子节点状态改动导致所有只依赖父入口运行缓存的子节点显示离线的问题；子节点运行状态现在优先读取自身缓存，缺失或过期时回退父节点运行缓存，同时父节点 `show`、墙检测 blocked 和流量限额状态仍不批量改写子节点 — by hlm123
+  - 方案: [202606130205_child-runtime-cache-fallback](archive/2026-06/202606130205_child-runtime-cache-fallback/)
+  - 决策: child-runtime-cache-fallback#D001(运行时缓存子节点优先、父节点兜底)
+
 ## [0.9.2] - 2026-06-12
 
 ### 新增

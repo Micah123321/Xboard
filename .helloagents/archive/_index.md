@@ -7,6 +7,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202606130205 | child-runtime-cache-fallback | implementation | node-auto-online | child-runtime-cache-fallback#D001 | ✅完成 |
 | 202606121616 | forward-child-node-independent-visibility | - | - | - | ✅完成 |
 | 202606121621 | php-environment-install | implementation | local-php-runtime | php-environment-install#D001 | ✅完成 |
 | 202606021547 | mail-bounce-suppression | - | - | - | ✅完成 |
@@ -67,6 +68,7 @@
 ## 按月归档
 
 ### 2026-06
+- [202606130205_child-runtime-cache-fallback](./2026-06/202606130205_child-runtime-cache-fallback/) - 修复转发子节点只依赖父入口运行缓存时全部显示离线的问题，子节点运行缓存自身新鲜优先、缺失或过期时回退父入口，同时父节点显隐和 blocked 状态不批量改写子节点
 - [202606121616_forward-child-node-independent-visibility](./2026-06/202606121616_forward-child-node-independent-visibility/) - 父节点自动在线、运行状态缓存、墙检测和流量限额不再影响转发入口子节点，子节点按自身运行缓存、`show` 和 `enabled` 独立控制
 - [202606121621_php-environment-install](./2026-06/202606121621_php-environment-install/) - 安装 Windows 本机 PHP 8.2.31 NTS x64 到 `E:\php`，启用 Laravel/Composer 基础扩展并安装 Composer 2.10.1 与 Redis 扩展；记录 Windows 原生缺少 `ext-pcntl` / `ext-posix` 的验证边界
 
