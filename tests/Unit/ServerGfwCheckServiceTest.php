@@ -65,7 +65,7 @@ class ServerGfwCheckServiceTest extends TestCase
         ]);
     }
 
-    public function test_report_result_hides_blocked_nodes_and_restores_only_auto_hidden_nodes(): void
+    public function test_report_result_updates_only_source_node_visibility(): void
     {
         $parent = $this->makeServer([
             'name' => 'parent',
@@ -81,6 +81,20 @@ class ServerGfwCheckServiceTest extends TestCase
             'parent_id' => $parent->id,
             'show' => false,
         ]);
+        $legacyGfwHiddenChild = $this->makeServer([
+            'name' => 'legacy-gfw-hidden-child',
+            'parent_id' => $parent->id,
+            'show' => false,
+            'gfw_auto_hidden' => true,
+            'gfw_auto_action_at' => 123456,
+        ]);
+        $legacyParentHiddenChild = $this->makeServer([
+            'name' => 'legacy-parent-hidden-child',
+            'parent_id' => $parent->id,
+            'show' => false,
+            'parent_auto_hidden' => true,
+            'parent_auto_action_at' => 123456,
+        ]);
 
         $service = app(ServerGfwCheckService::class);
         $blockedCheck = ServerGfwCheck::create([
@@ -95,10 +109,14 @@ class ServerGfwCheckServiceTest extends TestCase
 
         $this->assertFalse($parent->fresh()->show);
         $this->assertTrue($parent->fresh()->gfw_auto_hidden);
-        $this->assertFalse($visibleChild->fresh()->show);
-        $this->assertTrue($visibleChild->fresh()->gfw_auto_hidden);
+        $this->assertTrue($visibleChild->fresh()->show);
+        $this->assertFalse($visibleChild->fresh()->gfw_auto_hidden);
         $this->assertFalse($manualHiddenChild->fresh()->show);
         $this->assertFalse($manualHiddenChild->fresh()->gfw_auto_hidden);
+        $this->assertTrue($legacyGfwHiddenChild->fresh()->show);
+        $this->assertFalse($legacyGfwHiddenChild->fresh()->gfw_auto_hidden);
+        $this->assertTrue($legacyParentHiddenChild->fresh()->show);
+        $this->assertFalse($legacyParentHiddenChild->fresh()->parent_auto_hidden);
 
         $normalCheck = ServerGfwCheck::create([
             'server_id' => $parent->id,
@@ -116,6 +134,10 @@ class ServerGfwCheckServiceTest extends TestCase
         $this->assertFalse($visibleChild->fresh()->gfw_auto_hidden);
         $this->assertFalse($manualHiddenChild->fresh()->show);
         $this->assertFalse($manualHiddenChild->fresh()->gfw_auto_hidden);
+        $this->assertTrue($legacyGfwHiddenChild->fresh()->show);
+        $this->assertFalse($legacyGfwHiddenChild->fresh()->gfw_auto_hidden);
+        $this->assertTrue($legacyParentHiddenChild->fresh()->show);
+        $this->assertFalse($legacyParentHiddenChild->fresh()->parent_auto_hidden);
     }
 
     private function makeServer(array $attributes = []): Server
@@ -132,6 +154,7 @@ class ServerGfwCheckServiceTest extends TestCase
             'auto_online' => false,
             'gfw_check_enabled' => true,
             'gfw_auto_hidden' => false,
+            'parent_auto_hidden' => false,
             'enabled' => true,
         ], $attributes));
     }

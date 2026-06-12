@@ -123,7 +123,7 @@ class ServerAutoOnlineServiceTest extends TestCase
         $this->assertTrue($managedOnline->fresh()->show);
     }
 
-    public function test_parent_auto_online_sync_hides_and_restores_only_auto_hidden_children(): void
+    public function test_parent_auto_online_sync_does_not_change_children(): void
     {
         $parent = $this->makeServer([
             'name' => 'parent-auto-managed',
@@ -140,14 +140,23 @@ class ServerAutoOnlineServiceTest extends TestCase
             'parent_id' => $parent->id,
             'show' => false,
         ]);
+        $legacyHiddenChild = $this->makeServer([
+            'name' => 'legacy-hidden-child',
+            'parent_id' => $parent->id,
+            'show' => false,
+            'parent_auto_hidden' => true,
+            'parent_auto_action_at' => 123456,
+        ]);
 
         app(ServerAutoOnlineService::class)->sync();
 
         $this->assertFalse($parent->fresh()->show);
-        $this->assertFalse($visibleChild->fresh()->show);
-        $this->assertTrue($visibleChild->fresh()->parent_auto_hidden);
+        $this->assertTrue($visibleChild->fresh()->show);
+        $this->assertFalse($visibleChild->fresh()->parent_auto_hidden);
         $this->assertFalse($manualHiddenChild->fresh()->show);
         $this->assertFalse($manualHiddenChild->fresh()->parent_auto_hidden);
+        $this->assertTrue($legacyHiddenChild->fresh()->show);
+        $this->assertFalse($legacyHiddenChild->fresh()->parent_auto_hidden);
 
         $this->markNodeOnline($parent);
         app(ServerAutoOnlineService::class)->sync();
@@ -157,6 +166,59 @@ class ServerAutoOnlineServiceTest extends TestCase
         $this->assertFalse($visibleChild->fresh()->parent_auto_hidden);
         $this->assertFalse($manualHiddenChild->fresh()->show);
         $this->assertFalse($manualHiddenChild->fresh()->parent_auto_hidden);
+        $this->assertTrue($legacyHiddenChild->fresh()->show);
+        $this->assertFalse($legacyHiddenChild->fresh()->parent_auto_hidden);
+    }
+
+    public function test_child_auto_online_does_not_inherit_parent_gfw_blocked_status(): void
+    {
+        $parent = $this->makeServer([
+            'name' => 'blocked-parent',
+            'show' => false,
+            'gfw_check_enabled' => true,
+        ]);
+        $child = $this->makeServer([
+            'name' => 'forward-child',
+            'parent_id' => $parent->id,
+            'show' => false,
+            'auto_online' => true,
+            'gfw_check_enabled' => true,
+        ]);
+
+        $this->markNodeOnline($child);
+        ServerGfwCheck::create([
+            'server_id' => $parent->id,
+            'status' => ServerGfwCheck::STATUS_BLOCKED,
+            'checked_at' => time(),
+        ]);
+
+        $result = app(ServerAutoOnlineService::class)->syncServer($child);
+
+        $this->assertSame(1, $result['shown']);
+        $this->assertTrue($child->fresh()->show);
+        $this->assertFalse($child->fresh()->gfw_auto_hidden);
+    }
+
+    public function test_child_auto_online_does_not_inherit_parent_online_status(): void
+    {
+        $parent = $this->makeServer([
+            'name' => 'online-parent',
+            'show' => true,
+            'auto_online' => true,
+        ]);
+        $child = $this->makeServer([
+            'name' => 'offline-forward-child',
+            'parent_id' => $parent->id,
+            'show' => true,
+            'auto_online' => true,
+        ]);
+
+        $this->markNodeOnline($parent);
+
+        $result = app(ServerAutoOnlineService::class)->syncServer($child);
+
+        $this->assertSame(1, $result['hidden']);
+        $this->assertFalse($child->fresh()->show);
     }
 
     public function test_touch_node_syncs_auto_online_node_immediately(): void

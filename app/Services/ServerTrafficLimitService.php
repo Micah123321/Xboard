@@ -118,7 +118,7 @@ class ServerTrafficLimitService
         $server->forceFill($values)->saveQuietly();
         $freshServer = $server->refresh();
         $this->syncCachedRuntimeMetrics($freshServer);
-        $this->syncParentChildrenFromTrafficLimit($freshServer);
+        $this->releaseLegacyParentHiddenChildren($freshServer);
 
         if ($notifyNode) {
             NodeSyncService::notifyConfigUpdated((int) $server->id);
@@ -143,7 +143,7 @@ class ServerTrafficLimitService
         ])->saveQuietly();
         $freshServer = $server->refresh();
         $this->syncCachedRuntimeMetrics($freshServer);
-        $this->syncParentChildrenFromTrafficLimit($freshServer);
+        $this->releaseLegacyParentHiddenChildren($freshServer);
 
         if ($notifyNode) {
             NodeSyncService::notifyFullSync((int) $server->id);
@@ -290,7 +290,7 @@ class ServerTrafficLimitService
             $server->saveQuietly();
         }
 
-        $this->syncParentChildrenFromTrafficLimit($server->refresh());
+        $this->releaseLegacyParentHiddenChildren($server->refresh());
 
         return $snapshot;
     }
@@ -335,19 +335,9 @@ class ServerTrafficLimitService
             && ($used ?? $this->currentUsed($server)) >= (int) $server->transfer_enable;
     }
 
-    private function syncParentChildrenFromTrafficLimit(Server $server): void
+    private function releaseLegacyParentHiddenChildren(Server $server): void
     {
-        if ((int) ($server->parent_id ?? 0) > 0 || (int) ($server->id ?? 0) <= 0) {
-            return;
-        }
-
-        $suspended = $server->traffic_limit_status === Server::TRAFFIC_LIMIT_STATUS_SUSPENDED
-            || $this->isSuspendedByUsage($server);
-
-        app(ServerParentVisibilityService::class)->syncChildrenForParent(
-            $server,
-            !$suspended && (bool) $server->show
-        );
+        app(ServerParentVisibilityService::class)->releaseLegacyParentAutoHiddenChildren($server);
     }
 
     private function currentUsed(

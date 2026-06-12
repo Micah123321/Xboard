@@ -349,7 +349,7 @@ class ServerTrafficLimitServiceTest extends TestCase
         $this->assertNull($server->fresh()->traffic_limit_suspended_at);
     }
 
-    public function test_traffic_limit_suspension_hides_and_reset_restores_only_auto_hidden_children(): void
+    public function test_traffic_limit_suspension_does_not_change_children(): void
     {
         $parent = $this->makeServer([
             'name' => 'limited-parent',
@@ -370,6 +370,13 @@ class ServerTrafficLimitServiceTest extends TestCase
             'parent_id' => $parent->id,
             'show' => false,
         ]);
+        $legacyHiddenChild = $this->makeServer([
+            'name' => 'legacy-hidden-child',
+            'parent_id' => $parent->id,
+            'show' => false,
+            'parent_auto_hidden' => true,
+            'parent_auto_action_at' => 123456,
+        ]);
 
         $service = app(ServerTrafficLimitService::class);
         $service->applyRuntimeMetrics($parent, [
@@ -384,10 +391,12 @@ class ServerTrafficLimitServiceTest extends TestCase
         ]);
 
         $this->assertSame(Server::TRAFFIC_LIMIT_STATUS_SUSPENDED, $parent->fresh()->traffic_limit_status);
-        $this->assertFalse($visibleChild->fresh()->show);
-        $this->assertTrue($visibleChild->fresh()->parent_auto_hidden);
+        $this->assertTrue($visibleChild->fresh()->show);
+        $this->assertFalse($visibleChild->fresh()->parent_auto_hidden);
         $this->assertFalse($manualHiddenChild->fresh()->show);
         $this->assertFalse($manualHiddenChild->fresh()->parent_auto_hidden);
+        $this->assertTrue($legacyHiddenChild->fresh()->show);
+        $this->assertFalse($legacyHiddenChild->fresh()->parent_auto_hidden);
 
         $service->resetServer($parent->fresh(), false);
 
@@ -396,6 +405,8 @@ class ServerTrafficLimitServiceTest extends TestCase
         $this->assertFalse($visibleChild->fresh()->parent_auto_hidden);
         $this->assertFalse($manualHiddenChild->fresh()->show);
         $this->assertFalse($manualHiddenChild->fresh()->parent_auto_hidden);
+        $this->assertTrue($legacyHiddenChild->fresh()->show);
+        $this->assertFalse($legacyHiddenChild->fresh()->parent_auto_hidden);
     }
 
     private function makeServer(array $attributes = []): Server

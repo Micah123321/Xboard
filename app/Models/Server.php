@@ -520,7 +520,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->parent_id ?: $this->id;
+                $serverId = $this->id;
                 return Cache::get(CacheKey::get("SERVER_{$type}_LAST_CHECK_AT", $serverId));
             }
         );
@@ -534,7 +534,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->parent_id ?: $this->id;
+                $serverId = $this->id;
                 return Cache::get(CacheKey::get("SERVER_{$type}_LAST_PUSH_AT", $serverId));
             }
         );
@@ -548,7 +548,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->parent_id ?: $this->id;
+                $serverId = $this->id;
                 return Cache::get(CacheKey::get("SERVER_{$type}_ONLINE_USER", $serverId)) ?? 0;
             }
         );
@@ -601,7 +601,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->parent_id ?: $this->id;
+                $serverId = $this->id;
                 return Cache::get(CacheKey::get("SERVER_{$type}_METRICS", $serverId));
             }
         );
@@ -627,7 +627,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->parent_id ?: $this->id;
+                $serverId = $this->id;
                 return Cache::get(CacheKey::get("SERVER_{$type}_LOAD_STATUS", $serverId));
             }
         );

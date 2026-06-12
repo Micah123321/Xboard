@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.9.1] - 2026-06-12
+
+### 修复
+- **[node-auto-online]**: 修复父节点直连不可用时会通过自动在线、运行状态缓存、墙检测或流量限额链路误影响转发入口子节点的问题；父节点状态现在只改写父节点自身，子节点按自己的运行缓存、`show` 和 `enabled` 独立控制，mi-node 机器模式继续按 `enabled=true` 发现节点 — by hlm123
+  - 方案: [202606121616_forward-child-node-independent-visibility](archive/2026-06/202606121616_forward-child-node-independent-visibility/)
+  - 决策: forward-child-node-independent-visibility#D001(取消父节点对子节点的自动显隐联动)
+
 ## [0.9.0] - 2026-06-02
 
 ### 新增

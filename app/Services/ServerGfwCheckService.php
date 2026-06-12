@@ -350,49 +350,67 @@ class ServerGfwCheckService
             return ['shown' => 0, 'hidden' => 0, 'unchanged' => 1];
         }
 
-        $nodes = Server::query()
-            ->where('id', $sourceNode->id)
-            ->orWhere('parent_id', $sourceNode->id)
-            ->get();
-
         $result = ['shown' => 0, 'hidden' => 0, 'unchanged' => 0];
         $now = time();
+        $node = $sourceNode->refresh();
+        $this->releaseLegacyChildAutoHides($node, $now, $result);
 
-        foreach ($nodes as $node) {
-            if (!$this->isGfwCheckEnabled($node)) {
+        if ($status === ServerGfwCheck::STATUS_BLOCKED) {
+            if (!(bool) $node->show) {
                 $result['unchanged']++;
-                continue;
-            }
-
-            if ($status === ServerGfwCheck::STATUS_BLOCKED) {
-                if (!(bool) $node->show) {
-                    $result['unchanged']++;
-                    continue;
-                }
-
-                $node->update([
-                    'show' => false,
-                    'gfw_auto_hidden' => true,
-                    'gfw_auto_action_at' => $now,
-                ]);
-                $result['hidden']++;
-                continue;
-            }
-
-            if (!(bool) $node->gfw_auto_hidden) {
-                $result['unchanged']++;
-                continue;
+                return $result;
             }
 
             $node->update([
+                'show' => false,
+                'gfw_auto_hidden' => true,
+                'gfw_auto_action_at' => $now,
+            ]);
+            $result['hidden']++;
+            return $result;
+        }
+
+        if (!(bool) $node->gfw_auto_hidden) {
+            $result['unchanged']++;
+            return $result;
+        }
+
+        $node->update([
+            'show' => true,
+            'gfw_auto_hidden' => false,
+            'gfw_auto_action_at' => $now,
+        ]);
+        $result['shown']++;
+
+        return $result;
+    }
+
+    private function releaseLegacyChildAutoHides(Server $sourceNode, int $now, array &$result): void
+    {
+        app(ServerParentVisibilityService::class)
+            ->releaseLegacyParentAutoHiddenChildren($sourceNode);
+
+        if ((int) ($sourceNode->parent_id ?? 0) > 0 || (int) ($sourceNode->id ?? 0) <= 0) {
+            return;
+        }
+
+        $children = Server::query()
+            ->where('parent_id', (int) $sourceNode->id)
+            ->where('gfw_auto_hidden', true)
+            ->get();
+
+        foreach ($children as $child) {
+            if (!$child instanceof Server) {
+                continue;
+            }
+
+            $child->forceFill([
                 'show' => true,
                 'gfw_auto_hidden' => false,
                 'gfw_auto_action_at' => $now,
-            ]);
+            ])->save();
             $result['shown']++;
         }
-
-        return $result;
     }
 
     private function isGfwCheckEnabled(Server $server): bool

@@ -21,13 +21,13 @@
 - 手动重置和定时重置统一走 `ServerTrafficLimitService::resetServer()`：清空当前节点 `u/d`，恢复 `traffic_limit_status=normal`，记录 `traffic_limit_last_reset_at`，计算下一次重置时间，并触发 `notifyFullSync()`；该接口不批量重置同共享范围的其他节点
 - `sync:server-traffic-limits` 每分钟扫描到期且启用限额的节点，只处理 `traffic_limit_next_reset_at <= now()` 的记录，不影响未启用限额的节点
 - `ServerService::updateMetrics()` 会缓存 `metrics.traffic_limit` 并把节点端 `suspended / last_reset_at / next_reset_at / suspended_at` 写回 `v2_server`
-- 限额下线不修改父节点自身的 `show`、`auto_online` 或墙检测字段；真实下线由 `mi-node` 调用内核 `Stop()` 完成
-- 父节点限额状态变为 `suspended` 时会通过 `ServerParentVisibilityService` 自动隐藏当时仍显示的直接子节点，并写入 `parent_auto_hidden=1`；限额重置或恢复 `normal` 后只恢复这些由父节点联动自动隐藏的子节点，原本手动隐藏的子节点保持隐藏
+- 限额下线不修改节点自身或其子节点的 `show`、`auto_online`、`gfw_auto_hidden` 等显隐字段；真实下线由 `mi-node` 调用内核 `Stop()` 完成
+- 父节点限额状态变为 `suspended` 或恢复 `normal` 时，不再自动隐藏或恢复直接子节点；转发入口子节点由自身 `show` 和 `enabled` 独立控制
 
 ## 依赖关系
 
 - 依赖 `app/Services/ServerTrafficLimitService.php` 统一处理配置下发、时间计算、状态回写和重置
-- 依赖 `app/Services/ServerParentVisibilityService.php` 在父节点限额下线 / 恢复时同步直接子节点显隐
+- 依赖 `app/Services/ServerParentVisibilityService.php` 清理历史 `parent_auto_hidden` 标记，限额流程不再通过它同步直接子节点显隐
 - 依赖 `app/Services/ServerService.php` 在节点配置中追加 `traffic_limit` 并消费节点 metrics
 - 依赖 `app/Http/Controllers/V2/Admin/Server/ManageController.php` 在 `server/manage/getNodes` 响应中返回 `traffic_limit_snapshot`
 - 依赖 `v2_stat_server` 的日统计记录作为当前账期共享已用流量的主要来源

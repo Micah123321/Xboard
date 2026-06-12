@@ -7,6 +7,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202606121616 | forward-child-node-independent-visibility | - | - | - | ✅完成 |
 | 202606021547 | mail-bounce-suppression | - | - | - | ✅完成 |
 | 202605221930 | code-review-admin-ticket-user-actions | - | - | - | ✅完成 |
 | 202605221908 | admin-ticket-user-actions | - | - | - | ✅完成 |
@@ -63,6 +64,9 @@
 | 202604161655 | merge-upstream-preserve-local | - | - | - | ✅完成 |
 
 ## 按月归档
+
+### 2026-06
+- [202606121616_forward-child-node-independent-visibility](./2026-06/202606121616_forward-child-node-independent-visibility/) - 父节点自动在线、运行状态缓存、墙检测和流量限额不再影响转发入口子节点，子节点按自身运行缓存、`show` 和 `enabled` 独立控制
 
 ### 2026-05
 - [202605211535_node-reconnect-cooldown](./2026-05/202605211535_node-reconnect-cooldown/) - 自动上线新增节点级重连冷却，1 小时内连断超过 10 次后隐藏 6 小时，冷却期内不会自动重新发布

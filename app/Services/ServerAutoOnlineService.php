@@ -40,7 +40,7 @@ class ServerAutoOnlineService
 
     private function syncServerWithStatuses(Server $server, array $gfwStatuses, array &$result): void
     {
-        $sourceNodeId = (int) ($server->parent_id ?: $server->id);
+        $sourceNodeId = (int) $server->id;
         $gfwStatus = $gfwStatuses[$sourceNodeId] ?? null;
         $isGfwManaged = (bool) ($server->gfw_check_enabled ?? true) && $gfwStatus !== null;
         $isGfwBlocked = $isGfwManaged && $gfwStatus === ServerGfwCheck::STATUS_BLOCKED;
@@ -57,7 +57,7 @@ class ServerAutoOnlineService
         $wasShown = (bool) $server->show;
 
         if ($wasShown === $shouldShow && !$shouldClearGfwAutoHidden) {
-            $this->syncChildrenForFinalState($server, $shouldShow, $result);
+            $this->releaseLegacyParentHiddenChildren($server, $result);
             $result['unchanged']++;
             return;
         }
@@ -76,23 +76,20 @@ class ServerAutoOnlineService
         if ($wasShown !== $shouldShow) {
             $shouldShow ? $result['shown']++ : $result['hidden']++;
         }
-        $this->syncChildrenForFinalState($server, $shouldShow, $result);
+        $this->releaseLegacyParentHiddenChildren($server, $result);
     }
 
-    private function syncChildrenForFinalState(Server $server, bool $shouldShow, array &$result): void
+    private function releaseLegacyParentHiddenChildren(Server $server, array &$result): void
     {
-        $childResult = app(ServerParentVisibilityService::class)
-            ->syncChildrenForParent($server, $shouldShow);
-        $hidden = (int) ($childResult['hidden'] ?? 0);
-        $restored = (int) ($childResult['restored'] ?? 0);
-        $childUpdates = $hidden + $restored;
+        $legacyResult = app(ServerParentVisibilityService::class)
+            ->releaseLegacyParentAutoHiddenChildren($server);
+        $restored = (int) ($legacyResult['restored'] ?? 0);
 
-        if ($childUpdates <= 0) {
+        if ($restored <= 0) {
             return;
         }
 
-        $result['updated'] += $childUpdates;
-        $result['hidden'] += $hidden;
+        $result['updated'] += $restored;
         $result['shown'] += $restored;
     }
 
