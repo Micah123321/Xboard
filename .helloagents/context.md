@@ -59,7 +59,7 @@
   - `server/manage/resetTraffic`
   - `server/manage/batchResetTraffic`
 - 节点月流量限额由 Xboard 保存和编排：`v2_server.transfer_enable` 作为月额度，`traffic_limit_*` 字段记录启用、重置日/时间/时区和节点端运行状态；`ServerTrafficLimitService` 负责下发 `traffic_limit`、手动/定时重置、metrics 状态回写和通知 mi-node；父节点限额状态不再改写子节点显隐
-- 节点自动上线由 `ServerAutoOnlineService` 统一编排；节点可开启 `auto_online_cooldown_enabled` 重连冷却，在 1 小时内在线 / 离线切换超过 10 次后隐藏 6 小时，冷却期内自动上线不会重新显示该节点；子节点运行状态缓存优先按自身读取，缺失或过期时回退父节点运行缓存，兼容父入口上报的转发节点
+- 节点自动上线由 `ServerAutoOnlineService` 统一编排；节点可开启 `auto_online_cooldown_enabled` 重连冷却，在 1 小时内在线 / 离线切换超过 10 次后隐藏 6 小时，冷却期内自动上线不会重新显示该节点；子节点展示态运行缓存优先按自身读取，缺失或过期时回退父节点运行缓存，兼容父入口上报的转发节点；自动上线写入 `show` 时只看当前节点自身心跳，子节点自身心跳缺失或过期时会被隐藏，不因父节点运行缓存新鲜而保持显示
 - 管理端套餐管理现已接入:
   - `plan/fetch`
   - `plan/save`
@@ -123,7 +123,7 @@
 - 管理端路由使用 Hash 模式
 - 管理端当前业务路由包含 `/dashboard`、`/users`、`/tickets`、`/nodes`、`/node-groups`、`/node-routes`、`/subscriptions/plans`、`/subscriptions/orders`、`/subscriptions/coupons`、`/subscriptions/gift-cards`、`/system/config`、`/system/notices`、`/system/payments`、`/system/plugins`、`/system/themes` 与 `/system/knowledge`
 - `#/nodes` 当前已升级为真实节点工作台：支持搜索、在线 / 离线筛选、显隐筛选、父/子节点筛选、墙状态筛选、分页浏览、显隐切换、自动上线托管开关、墙检测托管开关、刷新数据、复制、单节点置顶、仅对已勾选节点生效的批量修改 / 批量删除，以及 11 种协议的新增 / 编辑弹窗和排序对话框
-- 节点自动上线由后端 `ServerAutoOnlineService` 统一执行，只处理 `auto_online=1` 的节点：在线 / 待同步时自动 `show=1`，离线时自动 `show=0`；自动上线只改写当前节点自身，不再通过父节点状态隐藏或恢复子节点；子节点的 `available_status`、在线用户、metrics 和负载状态优先按自身缓存读取，缺失或过期时回退父节点运行缓存，避免只由父入口上报的转发子节点全部显示离线；管理端保存 / 开启自动上线、REST 心跳和 WebSocket 状态上报会触发当前节点即时同步，`sync:server-auto-online` 每 5 分钟继续兜底；未开启自动上线的节点继续保持手动显隐控制；墙状态为 `blocked`、仍处于 `gfw_auto_hidden` 且未恢复正常，或节点处于重连冷却期时都会否决当前节点自动显示，父节点 blocked/normal 不作为子节点自动上线的否决条件
+- 节点自动上线由后端 `ServerAutoOnlineService` 统一执行，只处理 `auto_online=1` 的节点：当前节点自身心跳在线或待同步时自动 `show=1`，当前节点自身心跳离线时自动 `show=0`；自动上线只改写当前节点自身，不再通过父节点状态隐藏或恢复子节点；子节点的 `available_status`、在线用户、metrics 和负载状态优先按自身缓存读取，缺失或过期时回退父节点运行缓存，避免管理端展示把只由父入口上报的转发子节点全部显示离线；管理端保存 / 开启自动上线、REST 心跳和 WebSocket 状态上报会触发当前节点即时同步，`sync:server-auto-online` 每 5 分钟继续兜底；未开启自动上线的节点继续保持手动显隐控制；墙状态为 `blocked`、仍处于 `gfw_auto_hidden` 且未恢复正常，或节点处于重连冷却期时都会否决当前节点自动显示，父节点 blocked/normal 不作为子节点自动上线的否决条件
 - 节点自动墙检测由后端 `sync:server-gfw-checks` 定时命令执行，只为开启 `gfw_check_enabled` 的父节点创建检测任务；父节点兼容 `parent_id IS NULL` 与历史 `parent_id=0` 两种表示，`gfw_check_enabled` 仅明确为 `false` 时关闭；子节点列表仍可展示继承父节点的检测状态，但父节点 blocked/normal 不再自动改写子节点 `show`
 - 节点新增 / 编辑弹窗支持配置月流量限额、重置日期、重置时间和时区；节点列表流量详情卡会展示月额度、当前已用、限额状态和下次重置。限额超额后的节点真实下线由 mi-node 本地执行，Xboard 不通过父节点自身 `show` 或 `auto_online` 伪装下线；父节点限额状态不再自动隐藏或恢复直接子节点，转发入口子节点由自身 `show` 和 `enabled` 独立控制
 - Compose 部署必须确保 Laravel Scheduler 持续运行；`deploy/xboard-server/compose.yaml` 通过独立 `scheduler` 服务执行 `php artisan schedule:work`，否则自动墙检测只会在手动触发时创建任务

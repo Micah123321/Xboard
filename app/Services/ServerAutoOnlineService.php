@@ -51,7 +51,7 @@ class ServerAutoOnlineService
         $shouldShow = !$isGfwBlocked
             && !$isGfwHeld
             && !$isReconnectSuspended
-            && (int) $server->available_status !== Server::STATUS_OFFLINE;
+            && $server->ownAvailableStatus() !== Server::STATUS_OFFLINE;
         $shouldClearGfwAutoHidden = $gfwStatus === ServerGfwCheck::STATUS_NORMAL
             && (bool) $server->gfw_auto_hidden;
         $wasShown = (bool) $server->show;

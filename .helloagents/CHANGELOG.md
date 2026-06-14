@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.9.4] - 2026-06-14
+
+### 修复
+- **[node-auto-online]**: 修复子节点运行缓存回退父节点后，自动上线会把自身已离线的转发子节点继续保持显示的问题；管理端展示态 `available_status`、在线用户和 metrics 仍可回退父缓存，但 `ServerAutoOnlineService` 写入 `show` 时只使用当前节点自身心跳判定 — by hlm123
+  - 方案: [202606141635_fix-auto-online-child-offline](archive/2026-06/202606141635_fix-auto-online-child-offline/)
+  - 决策: fix-auto-online-child-offline#D001(分离展示态缓存回退与自动上线自身心跳判定)
+
 ## [0.9.3] - 2026-06-13
 
 ### 修复

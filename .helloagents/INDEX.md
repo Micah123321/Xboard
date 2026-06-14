@@ -3,7 +3,7 @@
 ```yaml
 kb_version: 2
 project: Xboard-new
-updated_at: 2026-06-13
+updated_at: 2026-06-14
 active_package: 无
 ```
 
@@ -11,7 +11,7 @@ active_package: 无
 
 - 类型: PHP Laravel 主仓 + `admin-frontend` Vue3 管理端前端
 - 当前重点模块: `admin-frontend`、`deploy`、`local-php-runtime`、`node-auto-online`、`node-gfw-check`、`node-traffic-limit`、`order-payment`、`queue-mail`、`subscription-protocols`、`user-frontend-access`、`user-temporary-traffic`
-- 最新归档: `202606130205_child-runtime-cache-fallback`
+- 最新归档: `202606141635_fix-auto-online-child-offline`
 
 ## 活跃模块
 

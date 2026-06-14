@@ -487,6 +487,19 @@ class Server extends Model
         return $default;
     }
 
+    private function getOwnRuntimeCacheValue(string $name, mixed $default = null): mixed
+    {
+        foreach ($this->ownRuntimeCacheKeys($name) as $cacheKey) {
+            $value = Cache::get($cacheKey);
+
+            if ($value !== null) {
+                return $value;
+            }
+        }
+
+        return $default;
+    }
+
     private function runtimeCacheKeys(string $name): array
     {
         $ownKeys = $this->ownRuntimeCacheKeys($name);
@@ -568,11 +581,24 @@ class Server extends Model
 
     public function getAvailableStatusAttribute(): int
     {
+        return self::resolveAvailableStatus($this->last_check_at, $this->last_push_at);
+    }
+
+    public function ownAvailableStatus(): int
+    {
+        return self::resolveAvailableStatus(
+            $this->getOwnRuntimeCacheValue('LAST_CHECK_AT'),
+            $this->getOwnRuntimeCacheValue('LAST_PUSH_AT')
+        );
+    }
+
+    private static function resolveAvailableStatus(mixed $lastCheckAt, mixed $lastPushAt): int
+    {
         $now = time();
-        if (!$this->last_check_at || ($now - self::CHECK_INTERVAL) >= $this->last_check_at) {
+        if (!$lastCheckAt || ($now - self::CHECK_INTERVAL) >= (int) $lastCheckAt) {
             return self::STATUS_OFFLINE;
         }
-        if (!$this->last_push_at || ($now - self::CHECK_INTERVAL) >= $this->last_push_at) {
+        if (!$lastPushAt || ($now - self::CHECK_INTERVAL) >= (int) $lastPushAt) {
             return self::STATUS_ONLINE_NO_PUSH;
         }
         return self::STATUS_ONLINE;

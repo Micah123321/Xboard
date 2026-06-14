@@ -11,13 +11,13 @@
 
 - `v2_server.auto_online` 控制节点是否由后台托管前台显示状态；未开启时节点继续保持手动显隐控制。
 - `ServerAutoOnlineService` 是自动上线唯一同步入口，只处理 `auto_online=true` 的节点；`sync:server-auto-online` 每 5 分钟兜底同步，管理端保存 / 快捷更新、REST 心跳和 WebSocket 状态上报会触发单节点即时同步。
-- 自动上线正常情况下按 `available_status` 判断：在线或待同步时可显示，离线时隐藏。
+- 自动上线写入 `show` 时按当前节点自身运行心跳判断：自身 `LAST_CHECK_AT` 新鲜且自身 `LAST_PUSH_AT` 新鲜或待同步时可显示，自身心跳缺失或过期时隐藏。
 - `Server` 模型的 `last_check_at`、`last_push_at`、在线用户、metrics 和负载状态访问器优先按当前节点 ID 读取缓存；子节点自身心跳缓存缺失或过期时回退读取父节点运行缓存，父子协议类型不一致时优先使用父节点真实 type，再兼容旧的子节点 type + parent_id 缓存键。
 - 墙检测状态参与当前节点的显示否决：最新墙状态为 `blocked`，或节点仍处于 `gfw_auto_hidden=true` 且最新墙状态未恢复 `normal` 时，自动上线不得重新显示当前节点。
 - `v2_server.auto_online_cooldown_enabled` 是自动上线的节点级重连冷却开关；只有同时开启 `auto_online` 和该开关时才生效。
 - `ServerReconnectCooldownService` 使用 Cache/Redis 记录运行时状态：首次状态只记录不计数；后续在线 / 离线状态切换会写入 1 小时窗口内的切换时间戳。
 - 同一节点 1 小时内在线 / 离线切换次数超过 10 次时，`ServerReconnectCooldownService` 写入 6 小时冷却键；冷却期间 `ServerAutoOnlineService` 仅强制当前节点 `show=false`，不改写其子节点。
-- 子节点 `available_status` 可使用父入口运行缓存兜底，避免转发入口因缺少自身心跳被判定为离线；但墙检测否决、重连冷却和 `show` 写入仍按当前子节点执行，父节点离线、blocked 或不可直连不会通过自动上线流程隐藏转发入口子节点。
+- 子节点 `available_status`、在线用户、metrics 和负载状态可使用父入口运行缓存兜底，避免管理端展示把仅由父入口上报的转发入口判定为离线；但墙检测否决、重连冷却和 `show` 写入仍按当前子节点执行，自动上线不会因父节点运行缓存新鲜而保持一个自身心跳已缺失或过期的子节点显示。
 - 关闭自动上线或关闭重连冷却时，管理端后端接口会把 `auto_online_cooldown_enabled` 归零并清理该节点已有冷却缓存，避免后续重新开启时被旧缓存影响。
 - 重连冷却状态是短期保护策略，不做数据库审计；Redis 重启后冷却状态可能消失。
 

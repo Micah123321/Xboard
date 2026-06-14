@@ -185,7 +185,7 @@ class ServerAutoOnlineServiceTest extends TestCase
             'gfw_check_enabled' => true,
         ]);
 
-        $this->markNodeOnline($parent);
+        $this->markNodeOnline($child);
         ServerGfwCheck::create([
             'server_id' => $parent->id,
             'status' => ServerGfwCheck::STATUS_BLOCKED,
@@ -199,7 +199,7 @@ class ServerAutoOnlineServiceTest extends TestCase
         $this->assertFalse($child->fresh()->gfw_auto_hidden);
     }
 
-    public function test_child_auto_online_can_use_parent_runtime_cache(): void
+    public function test_child_auto_online_hides_offline_child_even_when_parent_runtime_cache_is_online(): void
     {
         $parent = $this->makeServer([
             'name' => 'online-parent',
@@ -217,8 +217,8 @@ class ServerAutoOnlineServiceTest extends TestCase
 
         $result = app(ServerAutoOnlineService::class)->syncServer($child);
 
-        $this->assertSame(1, $result['unchanged']);
-        $this->assertTrue($child->fresh()->show);
+        $this->assertSame(1, $result['hidden']);
+        $this->assertFalse($child->fresh()->show);
         $this->assertSame(Server::STATUS_ONLINE_NO_PUSH, $child->fresh()->available_status);
     }
 
