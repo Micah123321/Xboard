@@ -300,7 +300,14 @@ watch(
               </ElSelect>
             </ElFormItem>
             <ElFormItem label="父级节点">
-              <ElSelect v-model="form.parentId" clearable placeholder="无">
+              <ElSelect
+                v-model="form.parentId"
+                clearable
+                filterable
+                default-first-option
+                no-match-text="未找到匹配节点"
+                placeholder="搜索 ID 或名称"
+              >
                 <ElOption
                   v-for="node in parentNodeOptions"
                   :key="node.id"

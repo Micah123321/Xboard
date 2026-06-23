@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.9.5] - 2026-06-24
+
+### 快速修改
+- **[admin-frontend]**: 节点编辑弹窗的父级节点选择改为可搜索下拉，支持按节点名称或 `#ID` 模糊筛选候选父节点 — by hlm123
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/views/nodes/NodeEditorDialog.vue:302-314
+
 ## [0.9.4] - 2026-06-14
 
 ### 修复
