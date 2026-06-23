@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.9.6] - 2026-06-24
+
+### 修复
+- **[node-auto-online]**: 修复 `02bf268` 将自动上线写入 `show` 改为仅看自身心跳后，只由父入口上报运行缓存的转发子节点会被定时同步误隐藏的问题；`ServerAutoOnlineService` 重新使用 `available_status` 作为有效运行状态来源，保留当前节点优先、父运行缓存兜底，同时不恢复父节点对子节点的批量显隐联动 — by hlm123
+  - 方案: [202606240054_fix-auto-online-forward-child-runtime](archive/2026-06/202606240054_fix-auto-online-forward-child-runtime/)
+  - 决策: fix-auto-online-forward-child-runtime#D001(自动上线使用有效运行状态而非仅自身心跳)
+
 ## [0.9.5] - 2026-06-24
 
 ### 快速修改

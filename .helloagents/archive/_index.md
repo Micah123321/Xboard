@@ -7,6 +7,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202606240054 | fix-auto-online-forward-child-runtime | implementation | node-auto-online | fix-auto-online-forward-child-runtime#D001 | ✅完成 |
 | 202606141635 | fix-auto-online-child-offline | - | - | - | ✅完成 |
 | 202606130205 | child-runtime-cache-fallback | implementation | node-auto-online | child-runtime-cache-fallback#D001 | ✅完成 |
 | 202606121616 | forward-child-node-independent-visibility | - | - | - | ✅完成 |
@@ -69,6 +70,7 @@
 ## 按月归档
 
 ### 2026-06
+- [202606240054_fix-auto-online-forward-child-runtime](./2026-06/202606240054_fix-auto-online-forward-child-runtime/) - 修复自动上线仅看自身心跳导致只由父入口上报运行缓存的转发子节点被定时同步误隐藏的问题，`ServerAutoOnlineService` 使用 `available_status` 作为有效运行状态来源，同时保留父子显隐隔离
 - [202606130205_child-runtime-cache-fallback](./2026-06/202606130205_child-runtime-cache-fallback/) - 修复转发子节点只依赖父入口运行缓存时全部显示离线的问题，子节点运行缓存自身新鲜优先、缺失或过期时回退父入口，同时父节点显隐和 blocked 状态不批量改写子节点
 - [202606121616_forward-child-node-independent-visibility](./2026-06/202606121616_forward-child-node-independent-visibility/) - 父节点自动在线、运行状态缓存、墙检测和流量限额不再影响转发入口子节点，子节点按自身运行缓存、`show` 和 `enabled` 独立控制
 - [202606121621_php-environment-install](./2026-06/202606121621_php-environment-install/) - 安装 Windows 本机 PHP 8.2.31 NTS x64 到 `E:\php`，启用 Laravel/Composer 基础扩展并安装 Composer 2.10.1 与 Redis 扩展；记录 Windows 原生缺少 `ext-pcntl` / `ext-posix` 的验证边界

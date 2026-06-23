@@ -199,10 +199,43 @@ class ServerAutoOnlineServiceTest extends TestCase
         $this->assertFalse($child->fresh()->gfw_auto_hidden);
     }
 
-    public function test_child_auto_online_hides_offline_child_even_when_parent_runtime_cache_is_online(): void
+    public function test_child_auto_online_uses_parent_runtime_cache_when_child_has_no_own_heartbeat(): void
     {
         $parent = $this->makeServer([
             'name' => 'online-parent',
+            'show' => true,
+            'auto_online' => true,
+        ]);
+        $visibleChild = $this->makeServer([
+            'name' => 'offline-forward-child',
+            'parent_id' => $parent->id,
+            'show' => true,
+            'auto_online' => true,
+        ]);
+        $hiddenChild = $this->makeServer([
+            'name' => 'hidden-forward-child',
+            'parent_id' => $parent->id,
+            'show' => false,
+            'auto_online' => true,
+        ]);
+
+        $this->markNodeOnline($parent);
+
+        $visibleResult = app(ServerAutoOnlineService::class)->syncServer($visibleChild);
+        $hiddenResult = app(ServerAutoOnlineService::class)->syncServer($hiddenChild);
+
+        $this->assertSame(1, $visibleResult['unchanged']);
+        $this->assertSame(1, $hiddenResult['shown']);
+        $this->assertTrue($visibleChild->fresh()->show);
+        $this->assertTrue($hiddenChild->fresh()->show);
+        $this->assertSame(Server::STATUS_ONLINE_NO_PUSH, $visibleChild->fresh()->available_status);
+        $this->assertSame(Server::STATUS_ONLINE_NO_PUSH, $hiddenChild->fresh()->available_status);
+    }
+
+    public function test_child_auto_online_hides_child_when_no_runtime_cache_source_is_online(): void
+    {
+        $parent = $this->makeServer([
+            'name' => 'offline-parent',
             'show' => true,
             'auto_online' => true,
         ]);
@@ -213,13 +246,11 @@ class ServerAutoOnlineServiceTest extends TestCase
             'auto_online' => true,
         ]);
 
-        $this->markNodeOnline($parent);
-
         $result = app(ServerAutoOnlineService::class)->syncServer($child);
 
         $this->assertSame(1, $result['hidden']);
         $this->assertFalse($child->fresh()->show);
-        $this->assertSame(Server::STATUS_ONLINE_NO_PUSH, $child->fresh()->available_status);
+        $this->assertSame(Server::STATUS_OFFLINE, $child->fresh()->available_status);
     }
 
     public function test_child_runtime_accessors_fall_back_to_parent_runtime_cache(): void
