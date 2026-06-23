@@ -26,6 +26,7 @@ import {
 } from '@/api/admin'
 import type {
   AdminNodeBatchUpdatePayload,
+  AdminNodeGfwCheck,
   AdminNodeItem,
   AdminNodeRouteItem,
   AdminServerGroupItem,
@@ -265,6 +266,34 @@ function isGfwSwitching(id: number): boolean {
 
 function isWorking(id: number): boolean {
   return workingIds.value.includes(id)
+}
+
+function buildGfwCheckState(node: AdminNodeItem, status: AdminNodeGfwCheck['status']): AdminNodeGfwCheck {
+  return {
+    id: node.gfw_check?.id,
+    status,
+    inherited: Boolean(node.parent_id),
+    source_node_id: node.parent_id ? Number(node.parent_id) : node.id,
+    updated_at: Math.floor(Date.now() / 1000),
+  }
+}
+
+function setNodeGfwCheckState(node: AdminNodeItem, status: AdminNodeGfwCheck['status']) {
+  node.gfw_check = buildGfwCheckState(node, status)
+}
+
+function markStartedGfwChecks(nodesToUpdate: AdminNodeItem[], startedIds: number[]) {
+  if (startedIds.length === 0) {
+    return
+  }
+
+  const startedLookup = new Set(startedIds)
+  nodesToUpdate.forEach((node) => {
+    const sourceNodeId = Number(node.parent_id || node.id)
+    if (startedLookup.has(sourceNodeId)) {
+      setNodeGfwCheckState(node, 'pending')
+    }
+  })
 }
 
 function getNextAutoGfwCheckTimestamp(timestamp: number): number {
@@ -684,6 +713,7 @@ async function handleToggleAutoOnline(node: AdminNodeItem, nextValue: boolean) {
 
 async function handleToggleGfwCheck(node: AdminNodeItem, nextValue: boolean) {
   const previous = node.gfw_check_enabled !== false
+  const previousGfwCheck = node.gfw_check
   if (previous === nextValue) {
     return
   }
@@ -696,21 +726,35 @@ async function handleToggleGfwCheck(node: AdminNodeItem, nextValue: boolean) {
       id: node.id,
       gfw_check_enabled: nextValue,
     })
+
     if (nextValue && !node.parent_id) {
-      const response = await checkNodeGfw([node.id])
-      const started = response.data?.started?.length ?? 0
-      if (started > 0) {
-        ElMessage.success('已开启墙检测托管，并发起墙状态检测')
-      } else {
-        const reason = response.data?.skipped?.[0]?.reason
-        ElMessage.info(reason || '已开启墙检测托管，已有检测任务等待节点领取或上报')
+      try {
+        const response = await checkNodeGfw([node.id])
+        const startedIds = response.data?.started?.map((item) => item.id) ?? []
+        const hasPendingCheck = response.data?.skipped?.some((item) => item.id === node.id) ?? false
+        const started = startedIds.length
+
+        if (started > 0) {
+          markStartedGfwChecks(nodes.value, startedIds)
+          ElMessage.success('已开启墙检测托管，并发起墙状态检测')
+        } else if (hasPendingCheck) {
+          markStartedGfwChecks(nodes.value, [node.id])
+          ElMessage.info('已开启墙检测托管，已有检测任务等待节点领取或上报')
+        } else {
+          const reason = response.data?.skipped?.[0]?.reason
+          ElMessage.info(reason || '已开启墙检测托管，所选节点暂未发起新的墙状态检测')
+        }
+      } catch (error) {
+        ElMessage.warning(error instanceof Error
+          ? `已开启墙检测托管，但墙状态检测发起失败：${error.message}`
+          : '已开启墙检测托管，但墙状态检测发起失败')
       }
     } else {
       ElMessage.success(nextValue ? '已开启墙检测托管' : '已关闭墙检测托管')
     }
-    await loadNodeBoard()
   } catch (error) {
     node.gfw_check_enabled = previous
+    node.gfw_check = previousGfwCheck
     ElMessage.error(error instanceof Error ? error.message : '墙检测托管状态更新失败')
   } finally {
     markPending(gfwSwitchingIds, node.id, false)
