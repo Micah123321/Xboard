@@ -23,7 +23,8 @@ const props = defineProps<{
   node?: AdminNodeItem | null
   groups: AdminServerGroupItem[]
   routes: AdminNodeRouteItem[]
-  nodes: AdminNodeItem[]
+  nodes?: AdminNodeItem[] | null
+  allNodes: AdminNodeItem[]
 }>()
 
 const emit = defineEmits<{
@@ -41,7 +42,7 @@ const dialogDescription = computed(() => props.mode === 'create'
   ? '管理所有节点，包括添加、删除、编辑等操作。'
   : '调整节点基础配置、协议细节与排序前置参数。')
 const currentProtocolLabel = computed(() => getNodeProtocolLabel(form.type))
-const parentNodeOptions = computed(() => props.nodes.filter((item) => item.id !== props.node?.id))
+const parentNodeOptions = computed(() => props.allNodes.filter((item) => item.id !== props.node?.id))
 
 const rules = computed<FormRules<NodeFormModel>>(() => ({
   type: [{ required: true, message: '请选择协议类型', trigger: 'change' }],

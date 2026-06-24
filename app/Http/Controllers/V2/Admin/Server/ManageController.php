@@ -52,6 +52,115 @@ class ManageController extends Controller
         return $this->success($servers);
     }
 
+    /**
+     * Paginated node list with server-side filtering and full decoration.
+     *
+     * Only the current page is fully decorated (traffic stats, limit snapshots,
+     * gfw checks, groups, parent) — the main performance difference vs getNodes().
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getNodesPaginated(Request $request)
+    {
+        $params = $request->validate([
+            'current' => 'nullable|integer|min:1',
+            'page_size' => 'nullable|integer|min:1|max:200',
+            'keyword' => 'nullable|string|max:100',
+            'type' => 'nullable|string|max:20',
+            'group_id' => 'nullable|integer',
+            'visibility' => 'nullable|in:visible,hidden',
+            'relation' => 'nullable|in:parent,child',
+        ]);
+
+        $current = (int) ($params['current'] ?? 1);
+        $pageSize = (int) ($params['page_size'] ?? 20);
+
+        $query = Server::orderBy('sort', 'ASC');
+
+        // Apply DB-level filters
+        if (!empty($params['keyword'])) {
+            $keyword = $params['keyword'];
+            $query->where(function ($q) use ($keyword) {
+                $q->where('name', 'like', "%{$keyword}%")
+                  ->orWhere('host', 'like', "%{$keyword}%");
+            });
+        }
+        if (!empty($params['type'])) {
+            $query->where('type', $params['type']);
+        }
+        if (!empty($params['group_id'])) {
+            $query->whereJsonContains('group_ids', (int) $params['group_id']);
+        }
+        if (!empty($params['visibility'])) {
+            $query->where('show', $params['visibility'] === 'visible' ? 1 : 0);
+        }
+        if (!empty($params['relation'])) {
+            if ($params['relation'] === 'parent') {
+                $query->whereNull('parent_id');
+            } else {
+                $query->whereNotNull('parent_id');
+            }
+        }
+
+        $total = (clone $query)->count();
+        $servers = $query
+            ->skip(($current - 1) * $pageSize)
+            ->take($pageSize)
+            ->get()
+            ->append([
+                'last_check_at', 'last_push_at', 'online', 'is_online',
+                'available_status', 'cache_key', 'load_status', 'metrics', 'online_conn',
+            ]);
+
+        // Decorate only the current page nodes
+        $trafficStats = $this->buildNodeTrafficStats($servers);
+        $trafficLimitSnapshots = app(ServerTrafficLimitService::class)->buildSnapshotsForServers($servers);
+
+        $allGroupIds = $servers->pluck('group_ids')->flatten()->filter()->unique()->values();
+        $groupMap = $allGroupIds->isNotEmpty()
+            ? ServerGroup::whereIn('id', $allGroupIds)->get()->keyBy('id')
+            : collect();
+
+        $parentIds = $servers->pluck('parent_id')->filter()->unique()->values();
+        $parentMap = $parentIds->isNotEmpty()
+            ? Server::whereIn('id', $parentIds)->get()->keyBy('id')
+            : collect();
+
+        $servers = app(ServerGfwCheckService::class)->decorateServers($servers)->map(function ($item) use ($trafficStats, $trafficLimitSnapshots, $groupMap, $parentMap) {
+            $item['groups'] = collect($item['group_ids'] ?? [])
+                ->map(fn ($id) => $groupMap->get($id))
+                ->filter()
+                ->values();
+            $item['parent'] = $parentMap->get($item['parent_id']);
+            $item['traffic_stats'] = $trafficStats[(int) $item['id']] ?? $this->emptyNodeTrafficStats();
+            $item['traffic_limit_snapshot'] = $trafficLimitSnapshots[(int) $item['id']] ?? null;
+            return $item;
+        });
+
+        return response()->json([
+            'total' => $total,
+            'current_page' => $current,
+            'per_page' => $pageSize,
+            'last_page' => max(1, (int) ceil($total / $pageSize)),
+            'data' => $servers,
+        ]);
+    }
+
+    /**
+     * Lightweight node list without expensive decorations.
+     *
+     * Returns only basic fields for dialogs (parent-selection, route reference, etc.)
+     * that need all nodes but don't need traffic stats, limit snapshots or gfw checks.
+     */
+    public function getAllNodes(Request $request)
+    {
+        return $this->success(
+            Server::orderBy('sort', 'ASC')
+                ->get(['id', 'name', 'type', 'host', 'port', 'server_port', 'parent_id', 'group_ids', 'route_ids', 'show', 'sort', 'auto_online', 'gfw_check_enabled', 'enabled', 'rate', 'machine_id'])
+                ->toArray()
+        );
+    }
+
     private function buildNodeTrafficStats($servers): array
     {
         $stats = [];

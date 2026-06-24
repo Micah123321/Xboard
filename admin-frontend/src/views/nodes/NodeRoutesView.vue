@@ -11,8 +11,8 @@ import {
 } from '@element-plus/icons-vue'
 import {
   deleteNodeRoute,
+  fetchAllNodes,
   fetchNodeRoutes,
-  fetchNodes,
 } from '@/api/admin'
 import type { AdminNodeItem, AdminNodeRouteItem } from '@/types/api'
 import NodeRouteEditorDialog from './NodeRouteEditorDialog.vue'
@@ -67,7 +67,7 @@ async function loadData() {
   try {
     const [routeResult, nodeResult] = await Promise.all([
       fetchNodeRoutes(),
-      fetchNodes(),
+      fetchAllNodes(),
     ])
 
     routes.value = (routeResult.data ?? [])

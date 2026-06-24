@@ -225,6 +225,118 @@ class ManageControllerGetNodesTest extends TestCase
         $this->assertIsArray($response->json('data'));
     }
 
+    public function test_get_nodes_paginated_returns_paginated_structure(): void
+    {
+        // Create 5 servers to test pagination slicing.
+        for ($i = 0; $i < 5; $i++) {
+            $this->makeServer([
+                'name' => "p-node-{$i}",
+                'host' => "10.0.0.{$i}",
+            ]);
+        }
+
+        // Page 1, page_size = 2 → expect 2 items, total = 5, last_page = 3.
+        $response = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?current=1&page_size=2');
+        $response->assertOk();
+
+        $body = $response->json();
+        $this->assertCount(2, $body['data']);
+        $this->assertSame(5, $body['total']);
+        $this->assertSame(1, $body['current_page']);
+        $this->assertSame(2, $body['per_page']);
+        $this->assertSame(3, $body['last_page']);
+
+        // Page 3 → last page, should have 1 item.
+        $response3 = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?current=3&page_size=2');
+        $response3->assertOk();
+        $this->assertCount(1, $response3->json('data'));
+    }
+
+    public function test_get_nodes_paginated_filters_by_keyword(): void
+    {
+        $this->makeServer(['name' => 'alpha-node', 'host' => '192.168.1.1']);
+        $this->makeServer(['name' => 'beta-node', 'host' => '192.168.1.2']);
+        $this->makeServer(['name' => 'alpha-v2', 'host' => '10.0.0.1']);
+
+        $response = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?keyword=alpha');
+        $response->assertOk();
+
+        $this->assertSame(2, $response->json('total'));
+        $names = collect($response->json('data'))->pluck('name')->all();
+        $this->assertContains('alpha-node', $names);
+        $this->assertContains('alpha-v2', $names);
+        $this->assertNotContains('beta-node', $names);
+    }
+
+    public function test_get_nodes_paginated_filters_by_type(): void
+    {
+        $this->makeServer(['name' => 'vless-node', 'type' => Server::TYPE_VLESS]);
+        $this->makeServer(['name' => 'vmess-node', 'type' => Server::TYPE_VMESS]);
+
+        $response = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?type=' . Server::TYPE_VLESS);
+        $response->assertOk();
+
+        $this->assertSame(1, $response->json('total'));
+        $this->assertSame('vless-node', $response->json('data.0.name'));
+    }
+
+    public function test_get_nodes_paginated_filters_by_visibility(): void
+    {
+        $this->makeServer(['name' => 'visible-node', 'show' => true]);
+        $this->makeServer(['name' => 'hidden-node', 'show' => false]);
+
+        $response = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?visibility=hidden');
+        $response->assertOk();
+
+        $this->assertSame(1, $response->json('total'));
+        $this->assertSame('hidden-node', $response->json('data.0.name'));
+    }
+
+    public function test_get_nodes_paginated_returns_full_decoration(): void
+    {
+        $group = ServerGroup::create(['name' => 'Paginated Group']);
+        $parent = $this->makeServer(['name' => 'parent-for-pagination', 'host' => '10.0.0.1']);
+        $child = $this->makeServer([
+            'name' => 'child-for-pagination',
+            'host' => '10.0.0.2',
+            'group_ids' => [$group->id],
+            'parent_id' => $parent->id,
+        ]);
+
+        $response = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?page_size=50');
+        $response->assertOk();
+
+        $childData = collect($response->json('data'))->firstWhere('id', $child->id);
+        $this->assertNotNull($childData);
+        $this->assertArrayHasKey('groups', $childData);
+        $this->assertCount(1, $childData['groups']);
+        $this->assertSame('Paginated Group', $childData['groups'][0]['name']);
+        $this->assertArrayHasKey('parent', $childData);
+        $this->assertSame($parent->id, $childData['parent']['id']);
+        $this->assertArrayHasKey('traffic_stats', $childData);
+        $this->assertArrayHasKey('traffic_limit_snapshot', $childData);
+        $this->assertArrayHasKey('gfw_check', $childData);
+    }
+
+    public function test_get_all_nodes_returns_lightweight_list(): void
+    {
+        $this->makeServer(['name' => 'lightweight-a', 'host' => '10.0.0.1']);
+        $this->makeServer(['name' => 'lightweight-b', 'host' => '10.0.0.2']);
+
+        $response = $this->getJson($this->url('/server/manage/getAllNodes'));
+        $response->assertOk();
+
+        $data = $response->json('data');
+        $this->assertCount(2, $data);
+
+        // Lightweight endpoint should NOT include expensive computed fields.
+        $this->assertArrayNotHasKey('traffic_stats', $data[0]);
+        $this->assertArrayNotHasKey('traffic_limit_snapshot', $data[0]);
+        $this->assertArrayNotHasKey('gfw_check', $data[0]);
+        $this->assertArrayHasKey('name', $data[0]);
+        $this->assertArrayHasKey('host', $data[0]);
+    }
+
     private function makeServer(array $attributes = []): Server
     {
         return Server::create(array_merge([

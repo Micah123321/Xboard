@@ -141,6 +141,12 @@ export interface AdminPaginationResult<T> {
   last_page?: number
 }
 
+export interface AdminNodePaginationResult extends AdminPaginationResult<AdminNodeItem> {
+  summary?: {
+    total: number
+  }
+}
+
 export interface AdminTableSort {
   id: string
   desc: boolean

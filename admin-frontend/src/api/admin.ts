@@ -26,6 +26,7 @@ import type {
   AdminNodeItem,
   AdminNodeBatchUpdatePayload,
   AdminNodeGfwCheckResult,
+  AdminNodePaginationResult,
   AdminNodeSavePayload,
   AdminNodeRouteItem,
   AdminNodeRouteSavePayload,
@@ -500,6 +501,24 @@ export function deleteServerGroup(id: number): Promise<ApiResponse<boolean>> {
 
 export function fetchNodes(): Promise<ApiResponse<AdminNodeItem[]>> {
   return unwrap<AdminNodeItem[]>('/server/manage/getNodes')
+}
+
+export function fetchNodesPaginated(params: {
+  current?: number
+  page_size?: number
+  keyword?: string
+  type?: string
+  group_id?: string
+  visibility?: string
+  relation?: string
+} = {}): Promise<AdminNodePaginationResult> {
+  return adminClient
+    .get<AdminNodePaginationResult>('/server/manage/getNodesPaginated', { params })
+    .then((res) => res.data)
+}
+
+export function fetchAllNodes(): Promise<ApiResponse<AdminNodeItem[]>> {
+  return unwrap<AdminNodeItem[]>('/server/manage/getAllNodes')
 }
 
 export function fetchNodeRoutes(): Promise<ApiResponse<AdminNodeRouteItem[]>> {

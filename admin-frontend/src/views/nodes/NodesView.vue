@@ -18,7 +18,8 @@ import {
   checkNodeGfw,
   copyNode,
   deleteNode,
-  fetchNodes,
+  fetchAllNodes,
+  fetchNodesPaginated,
   fetchNodeRoutes,
   getServerGroups,
   sortNodes,
@@ -28,6 +29,7 @@ import type {
   AdminNodeBatchUpdatePayload,
   AdminNodeGfwCheck,
   AdminNodeItem,
+  AdminNodePaginationResult,
   AdminNodeRouteItem,
   AdminServerGroupItem,
 } from '@/types/api'
@@ -39,7 +41,6 @@ import {
   buildNodeTypeOptions,
   countAutoGfwCheckNodes,
   countAutoOnlineNodes,
-  countOnlineNodes,
   countVisibleNodes,
   filterNodes,
   formatNodeRate,
@@ -133,6 +134,8 @@ const tableRef = ref<TableInstance>()
 const loading = ref(false)
 const errorMessage = ref('')
 const nodes = ref<AdminNodeItem[]>([])
+const allNodes = ref<AdminNodeItem[]>([])
+const totalCount = ref(0)
 const groups = ref<AdminServerGroupItem[]>([])
 const routes = ref<AdminNodeRouteItem[]>([])
 const keyword = ref('')
@@ -164,7 +167,7 @@ let autoCheckCountdownTimer: number | undefined
 
 const GFW_AUTO_CHECK_INTERVAL_MINUTES = 30
 
-const filteredNodes = computed(() => applyNodeFieldSort(filterNodes(
+const displayNodes = computed(() => applyNodeFieldSort(filterNodes(
   nodes.value,
   keyword.value,
   typeFilter.value,
@@ -175,13 +178,8 @@ const filteredNodes = computed(() => applyNodeFieldSort(filterNodes(
   gfwFilter.value,
 )))
 
-const paginatedNodes = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredNodes.value.slice(start, start + pageSize.value)
-})
-
 const selectedNodes = computed(() => nodes.value.filter((node) => selectedNodeIds.value.includes(node.id)))
-const typeOptions = computed(() => buildNodeTypeOptions(nodes.value))
+const typeOptions = computed(() => buildNodeTypeOptions(allNodes.value))
 const hasSelectedNodes = computed(() => selectedNodes.value.length > 0)
 const hasActiveFilters = computed(() => (
   keyword.value !== ''
@@ -194,16 +192,15 @@ const hasActiveFilters = computed(() => (
 ))
 
 const summaryCards = computed(() => [
-  { label: '节点总数', value: String(nodes.value.length) },
-  { label: '在线节点', value: String(countOnlineNodes(nodes.value)) },
-  { label: '显示中', value: String(countVisibleNodes(nodes.value)) },
-  { label: '自动上线', value: String(countAutoOnlineNodes(nodes.value)) },
-  { label: '自动墙检', value: String(countAutoGfwCheckNodes(nodes.value)) },
+  { label: '节点总数', value: String(totalCount.value) },
+  { label: '显示中', value: String(countVisibleNodes(allNodes.value)) },
+  { label: '自动上线', value: String(countAutoOnlineNodes(allNodes.value)) },
+  { label: '自动墙检', value: String(countAutoGfwCheckNodes(allNodes.value)) },
   { label: '已勾选', value: String(selectedNodes.value.length) },
 ])
 
 const batchTargetLabel = computed(() => (hasSelectedNodes.value ? `当前已选 ${selectedNodes.value.length} 个节点` : ''))
-const autoGfwParentNodes = computed(() => nodes.value.filter((node) => !node.parent_id && node.gfw_check_enabled !== false))
+const autoGfwParentNodes = computed(() => allNodes.value.filter((node) => !node.parent_id && node.gfw_check_enabled !== false))
 const hasRunningAutoGfwTask = computed(() => autoGfwParentNodes.value.some((node) => {
   const status = String(node.gfw_check?.status ?? '').toLowerCase()
   return status === 'pending' || status === 'checking'
@@ -429,14 +426,14 @@ function openSortEditor() {
 }
 
 function setCurrentPageInRange() {
-  const totalPages = Math.max(1, Math.ceil(filteredNodes.value.length / pageSize.value))
+  const totalPages = Math.max(1, Math.ceil(totalCount.value / pageSize.value))
   if (currentPage.value > totalPages) {
     currentPage.value = totalPages
   }
 }
 
 function pruneSelection() {
-  const validIds = new Set(nodes.value.map((node) => node.id))
+  const validIds = new Set(allNodes.value.map((node) => node.id))
   selectedNodeIds.value = selectedNodeIds.value.filter((id) => validIds.has(id))
 }
 
@@ -451,7 +448,7 @@ function syncTableSelection() {
 
     try {
       table.clearSelection()
-      paginatedNodes.value.forEach((node) => {
+      nodes.value.forEach((node) => {
         if (selectedNodeIds.value.includes(node.id)) {
           table.toggleRowSelection(node, true)
         }
@@ -469,13 +466,26 @@ async function loadNodeBoard() {
   errorMessage.value = ''
 
   try {
-    const [nodesResponse, groupsResponse, routesResponse] = await Promise.all([
-      fetchNodes(),
+    const paginationParams: Record<string, unknown> = {
+      current: currentPage.value,
+      page_size: pageSize.value,
+    }
+    if (keyword.value) paginationParams.keyword = keyword.value
+    if (typeFilter.value !== 'all') paginationParams.type = typeFilter.value
+    if (groupFilter.value !== 'all') paginationParams.group_id = groupFilter.value
+    if (visibilityFilter.value !== 'all') paginationParams.visibility = visibilityFilter.value
+    if (relationFilter.value !== 'all') paginationParams.relation = relationFilter.value
+
+    const [paginatedResult, allNodesResponse, groupsResponse, routesResponse] = await Promise.all([
+      fetchNodesPaginated(paginationParams),
+      fetchAllNodes(),
       getServerGroups(),
       fetchNodeRoutes(),
     ])
 
-    nodes.value = sortNodesByOrder(nodesResponse.data ?? [])
+    nodes.value = sortNodesByOrder(paginatedResult.data ?? [])
+    totalCount.value = paginatedResult.total ?? 0
+    allNodes.value = allNodesResponse.data ?? []
     groups.value = groupsResponse.data ?? []
     routes.value = routesResponse.data ?? []
     pruneSelection()
@@ -509,7 +519,7 @@ function handleSelectionChange(selection: AdminNodeItem[]) {
     return
   }
 
-  const currentPageIds = paginatedNodes.value.map((item) => item.id)
+  const currentPageIds = nodes.value.map((item) => item.id)
   const selectionIds = selection.map((item) => item.id)
   const persistedIds = selectedNodeIds.value.filter((id) => !currentPageIds.includes(id))
   selectedNodeIds.value = [...new Set([...persistedIds, ...selectionIds])]
@@ -853,23 +863,28 @@ watch(
   },
 )
 
-watch([keyword, typeFilter, groupFilter, statusFilter, visibilityFilter, relationFilter, gfwFilter], () => {
+// Server-side filters trigger a reload with the new filter applied.
+watch([keyword, typeFilter, groupFilter, visibilityFilter, relationFilter], () => {
+  currentPage.value = 1
+  void loadNodeBoard()
+})
+
+// Client-side-only filters (applied locally on the current page)
+watch([statusFilter, gfwFilter], () => {
   currentPage.value = 1
 })
 
 watch(pageSize, () => {
   currentPage.value = 1
+  void loadNodeBoard()
+})
+
+watch(totalCount, () => {
+  setCurrentPageInRange()
 })
 
 watch(
-  () => filteredNodes.value.length,
-  () => {
-    setCurrentPageInRange()
-  },
-)
-
-watch(
-  () => paginatedNodes.value.map((item) => item.id).join(','),
+  () => nodes.value.map((item) => item.id).join(','),
   () => {
     syncTableSelection()
   },
@@ -1022,7 +1037,7 @@ watch(
 
       <ElTable
         ref="tableRef"
-        :data="paginatedNodes"
+        :data="displayNodes"
         v-loading="loading"
         row-key="id"
         class="nodes-table"
@@ -1365,13 +1380,13 @@ watch(
       </ElTable>
 
       <footer class="board-footer">
-        <span>第 {{ currentPage }} 页 · 已显示 {{ paginatedNodes.length }} / {{ filteredNodes.length }} 个节点</span>
+        <span>第 {{ currentPage }} 页 · 已显示 {{ displayNodes.length }} / {{ totalCount }} 个节点</span>
         <ElPagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
           :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next"
-          :total="filteredNodes.length"
+          :total="totalCount"
           background
           class="footer-pagination"
         />
@@ -1393,13 +1408,13 @@ watch(
       :node="activeNode"
       :groups="groups"
       :routes="routes"
-      :nodes="nodes"
+      :all-nodes="allNodes"
       @success="() => loadNodeBoard()"
     />
 
     <NodeSortDialog
       v-model:visible="sortDialogVisible"
-      :nodes="nodes"
+      :nodes="allNodes"
       @success="() => loadNodeBoard()"
     />
 
