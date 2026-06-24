@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.9.7] - 2026-06-24
+
+### 性能优化
+- **[admin-getnodes-performance]**: 节点管理列表 `GET /server/manage/getNodes` 性能优化，消除权限组和父节点的 N+1 查询，批量预取 `ServerGroup` 和父 `Server` 并构建内存查找表替代循环内查询；`ServerTrafficLimitService::buildSnapshotsForServers()` 按 traffic limit scope 缓存 `currentCycleUsed()` 聚合结果，避免同 scope 内服务器重复执行 `v2_stat_server` 账期聚合查询 — by hlm123
+  - 方案: [202606241411_optimize-getnodes-performance](plan/202606241411_optimize-getnodes-performance/)
+  - 决策: optimize-getnodes-performance#D001(优先批量化装饰而非整接口缓存)
+
 ## [0.9.6] - 2026-06-24
 
 ### 修复

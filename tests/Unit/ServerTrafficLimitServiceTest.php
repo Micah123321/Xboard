@@ -10,6 +10,7 @@ use App\Utils\CacheKey;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class ServerTrafficLimitServiceTest extends TestCase
@@ -407,6 +408,127 @@ class ServerTrafficLimitServiceTest extends TestCase
         $this->assertFalse($manualHiddenChild->fresh()->parent_auto_hidden);
         $this->assertTrue($legacyHiddenChild->fresh()->show);
         $this->assertFalse($legacyHiddenChild->fresh()->parent_auto_hidden);
+    }
+
+    public function test_build_snapshots_for_servers_caches_cycle_used_by_host_scope(): void
+    {
+        $reference = Carbon::create(2026, 4, 17, 12, 0, 0, 'UTC')->timestamp;
+        $limit = 1000 * 1024 * 1024;
+
+        $first = $this->makeServer([
+            'name' => 'host-scope-a',
+            'host' => '198.18.0.1',
+            'traffic_limit_enabled' => true,
+            'transfer_enable' => $limit,
+            'traffic_limit_reset_day' => 18,
+            'traffic_limit_reset_time' => '00:00',
+            'traffic_limit_timezone' => 'UTC',
+        ]);
+        $second = $this->makeServer([
+            'name' => 'host-scope-b',
+            'host' => '198.18.0.1',
+            'traffic_limit_enabled' => true,
+            'transfer_enable' => $limit,
+            'traffic_limit_reset_day' => 18,
+            'traffic_limit_reset_time' => '00:00',
+            'traffic_limit_timezone' => 'UTC',
+        ]);
+        $third = $this->makeServer([
+            'name' => 'host-scope-c',
+            'host' => '198.18.0.1',
+            'traffic_limit_enabled' => true,
+            'transfer_enable' => $limit,
+            'traffic_limit_reset_day' => 18,
+            'traffic_limit_reset_time' => '00:00',
+            'traffic_limit_timezone' => 'UTC',
+        ]);
+        $other = $this->makeServer([
+            'name' => 'host-other',
+            'host' => '203.0.113.50',
+            'traffic_limit_enabled' => true,
+            'transfer_enable' => $limit,
+            'traffic_limit_reset_day' => 18,
+            'traffic_limit_reset_time' => '00:00',
+            'traffic_limit_timezone' => 'UTC',
+        ]);
+
+        $this->makeServerStat($first, '2026-04-01', 100, 50);
+        $this->makeServerStat($second, '2026-04-10', 200, 0);
+        $this->makeServerStat($other, '2026-04-01', 500, 100);
+
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+
+        $snapshots = app(ServerTrafficLimitService::class)->buildSnapshotsForServers(
+            collect([$first, $second, $third, $other]),
+            $reference
+        );
+
+        $statQueries = collect(DB::getQueryLog())
+            ->filter(fn (array $log) => isset($log['query']) && str_contains((string) $log['query'], 'v2_stat_server'))
+            ->count();
+
+        // 2 unique scopes → at most 2 current-cycle StatServer queries (one per scope).
+        $this->assertLessThanOrEqual(2, $statQueries);
+        // Shared scope: all three same-host servers have identical used value.
+        $this->assertSame($snapshots[$first->id]['used'], $snapshots[$second->id]['used']);
+        $this->assertSame($snapshots[$first->id]['used'], $snapshots[$third->id]['used']);
+        $this->assertSame('host:198.18.0.1', $snapshots[$first->id]['scope_key']);
+        $this->assertCount(3, $snapshots[$first->id]['scope_node_ids']);
+    }
+
+    public function test_build_snapshots_for_servers_avoids_duplicate_query_for_machine_scope(): void
+    {
+        $reference = Carbon::create(2026, 4, 17, 12, 0, 0, 'UTC')->timestamp;
+        $limit = 1000 * 1024 * 1024;
+
+        $machine = ServerMachine::create([
+            'name' => 'batch-machine',
+            'token' => ServerMachine::generateToken(),
+        ]);
+
+        $first = $this->makeServer([
+            'name' => 'm-scope-a',
+            'host' => '10.0.0.1',
+            'machine_id' => $machine->id,
+            'traffic_limit_enabled' => true,
+            'transfer_enable' => $limit,
+            'traffic_limit_reset_day' => 1,
+            'traffic_limit_reset_time' => '00:00',
+            'traffic_limit_timezone' => 'UTC',
+        ]);
+        $second = $this->makeServer([
+            'name' => 'm-scope-b',
+            'host' => '10.0.0.2',
+            'machine_id' => $machine->id,
+            'traffic_limit_enabled' => true,
+            'transfer_enable' => $limit,
+            'traffic_limit_reset_day' => 1,
+            'traffic_limit_reset_time' => '00:00',
+            'traffic_limit_timezone' => 'UTC',
+        ]);
+
+        $this->makeServerStat($first, '2026-03-01', 50, 0);
+        $this->makeServerStat($second, '2026-03-01', 70, 0);
+
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+
+        $snapshots = app(ServerTrafficLimitService::class)->buildSnapshotsForServers(
+            collect([$first, $second]),
+            $reference
+        );
+
+        $statQueries = collect(DB::getQueryLog())
+            ->filter(fn (array $log) => isset($log['query']) && str_contains((string) $log['query'], 'v2_stat_server'))
+            ->count();
+
+        // Machine-scope servers may trigger additional internal queries (e.g. relationship hydration),
+        // but the count must not scale linearly with the number of nodes in the same scope.
+        $this->assertLessThanOrEqual(3, $statQueries);
+        $this->assertSame($snapshots[$first->id]['used'], $snapshots[$second->id]['used']);
+        $this->assertSame('machine:' . $machine->id, $snapshots[$first->id]['scope_key']);
+        $this->assertCount(2, $snapshots[$first->id]['scope_node_ids']);
     }
 
     private function makeServer(array $attributes = []): Server

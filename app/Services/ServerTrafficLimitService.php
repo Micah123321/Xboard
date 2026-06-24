@@ -41,13 +41,21 @@ class ServerTrafficLimitService
     {
         $serversByScope = $servers->groupBy(fn (Server $server) => $this->trafficLimitScopeKey($server));
         $snapshots = [];
+        $cycleUsedCache = [];
 
         foreach ($servers as $server) {
-            $scopeServers = $serversByScope->get($this->trafficLimitScopeKey($server), collect([$server]));
+            $scopeKey = $this->trafficLimitScopeKey($server);
+            $scopeServers = $serversByScope->get($scopeKey, collect([$server]));
+
+            if (!array_key_exists($scopeKey, $cycleUsedCache)) {
+                $cycleUsedCache[$scopeKey] = $this->currentCycleUsed($server, $scopeServers, $referenceTimestamp);
+            }
+
             $snapshots[(int) $server->id] = $this->buildTrafficLimitSnapshot(
                 $server,
                 $scopeServers,
-                $referenceTimestamp
+                $referenceTimestamp,
+                $cycleUsedCache[$scopeKey]
             );
         }
 
@@ -60,13 +68,14 @@ class ServerTrafficLimitService
     public function buildTrafficLimitSnapshot(
         Server $server,
         ?Collection $scopeServers = null,
-        ?int $referenceTimestamp = null
+        ?int $referenceTimestamp = null,
+        ?int $precomputedCycleUsed = null
     ): array {
         $enabled = $this->isEnabled($server);
         $scopeServers = $this->resolveTrafficLimitScopeServers($server, $scopeServers);
         $limit = $enabled ? (int) $server->transfer_enable : 0;
         $trafficLimit = $server->getKey() ? $this->cachedTrafficLimitMetrics($server) : null;
-        $used = $enabled ? $this->currentUsed($server, $trafficLimit, $scopeServers, $referenceTimestamp) : 0;
+        $used = $enabled ? $this->currentUsed($server, $trafficLimit, $scopeServers, $referenceTimestamp, $precomputedCycleUsed) : 0;
         $reportedSuspension = $this->scopeReportedSuspension($server, $trafficLimit, $scopeServers, $limit);
         $suspended = $enabled && $limit > 0 && (
             $used >= $limit
@@ -344,11 +353,12 @@ class ServerTrafficLimitService
         Server $server,
         ?array $trafficLimit = null,
         ?Collection $scopeServers = null,
-        ?int $referenceTimestamp = null
+        ?int $referenceTimestamp = null,
+        ?int $precomputedCycleUsed = null
     ): int
     {
         $scopeServers = $this->resolveTrafficLimitScopeServers($server, $scopeServers);
-        $cycleUsed = $this->currentCycleUsed($server, $scopeServers, $referenceTimestamp);
+        $cycleUsed = $precomputedCycleUsed ?? $this->currentCycleUsed($server, $scopeServers, $referenceTimestamp);
         $panelUsed = $this->panelUsed($scopeServers);
         $reportedUsed = $this->scopeReportedUsed($server, $trafficLimit, $scopeServers);
 

@@ -27,9 +27,24 @@ class ManageController extends Controller
         $trafficStats = $this->buildNodeTrafficStats($servers);
         $trafficLimitSnapshots = app(ServerTrafficLimitService::class)->buildSnapshotsForServers($servers);
 
-        $servers = app(ServerGfwCheckService::class)->decorateServers($servers)->map(function ($item) use ($trafficStats, $trafficLimitSnapshots) {
-            $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])->get(['name', 'id']);
-            $item['parent'] = $item->parent;
+        // Batch-load all groups across servers to avoid N+1 inside the map callback.
+        $allGroupIds = $servers->pluck('group_ids')->flatten()->filter()->unique()->values();
+        $groupMap = $allGroupIds->isNotEmpty()
+            ? ServerGroup::whereIn('id', $allGroupIds)->get()->keyBy('id')
+            : collect();
+
+        // Batch-load all parent servers to avoid lazy-loading the parent relationship.
+        $parentIds = $servers->pluck('parent_id')->filter()->unique()->values();
+        $parentMap = $parentIds->isNotEmpty()
+            ? Server::whereIn('id', $parentIds)->get()->keyBy('id')
+            : collect();
+
+        $servers = app(ServerGfwCheckService::class)->decorateServers($servers)->map(function ($item) use ($trafficStats, $trafficLimitSnapshots, $groupMap, $parentMap) {
+            $item['groups'] = collect($item['group_ids'] ?? [])
+                ->map(fn ($id) => $groupMap->get($id))
+                ->filter()
+                ->values();
+            $item['parent'] = $parentMap->get($item['parent_id']);
             $item['traffic_stats'] = $trafficStats[(int) $item['id']] ?? $this->emptyNodeTrafficStats();
             $item['traffic_limit_snapshot'] = $trafficLimitSnapshots[(int) $item['id']] ?? null;
             return $item;
