@@ -292,6 +292,49 @@ class ManageControllerGetNodesTest extends TestCase
         $this->assertSame('hidden-node', $response->json('data.0.name'));
     }
 
+    public function test_get_nodes_paginated_filters_by_group_id(): void
+    {
+        // group_ids are stored as JSON string arrays, so this guards against the
+        // string/int type mismatch that whereJsonContains alone would miss.
+        $groupA = ServerGroup::create(['name' => 'Group A']);
+        $groupB = ServerGroup::create(['name' => 'Group B']);
+
+        $inGroupA = $this->makeServer(['name' => 'node-in-a', 'host' => '10.0.0.1', 'group_ids' => [$groupA->id]]);
+        $inBoth = $this->makeServer(['name' => 'node-in-both', 'host' => '10.0.0.2', 'group_ids' => [$groupA->id, $groupB->id]]);
+        $inGroupBOnly = $this->makeServer(['name' => 'node-in-b-only', 'host' => '10.0.0.3', 'group_ids' => [$groupB->id]]);
+        $noGroup = $this->makeServer(['name' => 'node-no-group', 'host' => '10.0.0.4']);
+
+        $response = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?group_id=' . $groupA->id);
+        $response->assertOk();
+
+        $names = collect($response->json('data'))->pluck('name')->all();
+        $this->assertContains('node-in-a', $names);
+        $this->assertContains('node-in-both', $names);
+        $this->assertNotContains('node-in-b-only', $names);
+        $this->assertNotContains('node-no-group', $names);
+    }
+
+    public function test_get_nodes_paginated_filters_by_relation(): void
+    {
+        $parent = $this->makeServer(['name' => 'relation-parent', 'host' => '10.0.0.1']);
+        $this->makeServer(['name' => 'relation-child', 'host' => '10.0.0.2', 'parent_id' => $parent->id]);
+        $this->makeServer(['name' => 'relation-standalone', 'host' => '10.0.0.3']);
+
+        $parentResponse = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?relation=parent');
+        $parentResponse->assertOk();
+        $parentNames = collect($parentResponse->json('data'))->pluck('name')->all();
+        $this->assertContains('relation-parent', $parentNames);
+        $this->assertContains('relation-standalone', $parentNames);
+        $this->assertNotContains('relation-child', $parentNames);
+
+        $childResponse = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?relation=child');
+        $childResponse->assertOk();
+        $childNames = collect($childResponse->json('data'))->pluck('name')->all();
+        $this->assertContains('relation-child', $childNames);
+        $this->assertNotContains('relation-parent', $childNames);
+        $this->assertNotContains('relation-standalone', $childNames);
+    }
+
     public function test_get_nodes_paginated_returns_full_decoration(): void
     {
         $group = ServerGroup::create(['name' => 'Paginated Group']);

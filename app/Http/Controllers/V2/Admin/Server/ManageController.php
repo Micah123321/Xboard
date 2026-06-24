@@ -89,7 +89,10 @@ class ManageController extends Controller
             $query->where('type', $params['type']);
         }
         if (!empty($params['group_id'])) {
-            $query->whereJsonContains('group_ids', (int) $params['group_id']);
+            // Reuse the existing scope which handles the JSON string/int type
+            // mismatch in how group_ids are stored (setGroupIdsAttribute stores
+            // them as strings, so JSON_CONTAINS needs both variants).
+            $query->whereGroupId($params['group_id']);
         }
         if (!empty($params['visibility'])) {
             $query->where('show', $params['visibility'] === 'visible' ? 1 : 0);

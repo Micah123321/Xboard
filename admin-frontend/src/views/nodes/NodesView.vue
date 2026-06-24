@@ -32,6 +32,7 @@ import type {
   AdminNodePaginationResult,
   AdminNodeRouteItem,
   AdminServerGroupItem,
+  ApiResponse,
 } from '@/types/api'
 import NodeBatchEditDialog from './NodeBatchEditDialog.vue'
 import NodeEditorDialog from './NodeEditorDialog.vue'
@@ -461,7 +462,14 @@ function syncTableSelection() {
   })
 }
 
-async function loadNodeBoard() {
+// Reload the lightweight full node list (for summary cards, sort dialog,
+// parent-node dropdown). Only needed when node topology changes.
+async function loadAllNodes() {
+  const allNodesResponse = await fetchAllNodes()
+  allNodes.value = allNodesResponse.data ?? []
+}
+
+async function loadNodeBoard(reloadAllNodes = false) {
   loading.value = true
   errorMessage.value = ''
 
@@ -476,18 +484,26 @@ async function loadNodeBoard() {
     if (visibilityFilter.value !== 'all') paginationParams.visibility = visibilityFilter.value
     if (relationFilter.value !== 'all') paginationParams.relation = relationFilter.value
 
-    const [paginatedResult, allNodesResponse, groupsResponse, routesResponse] = await Promise.all([
+    const tasks: Array<Promise<unknown>> = [
       fetchNodesPaginated(paginationParams),
-      fetchAllNodes(),
       getServerGroups(),
       fetchNodeRoutes(),
-    ])
+    ]
+    // Fetch lightweight full list only on first mount or after a mutation,
+    // not on every filter toggle — it is independent of pagination filters.
+    if (reloadAllNodes || allNodes.value.length === 0) {
+      tasks.unshift(loadAllNodes())
+    }
+
+    const results = await Promise.all(tasks)
+    const hasAllNodes = reloadAllNodes || allNodes.value.length === 0 || tasks.length === 4
+    const offset = hasAllNodes && tasks.length === 4 ? 1 : 0
+    const paginatedResult = results[offset] as AdminNodePaginationResult
 
     nodes.value = sortNodesByOrder(paginatedResult.data ?? [])
     totalCount.value = paginatedResult.total ?? 0
-    allNodes.value = allNodesResponse.data ?? []
-    groups.value = groupsResponse.data ?? []
-    routes.value = routesResponse.data ?? []
+    groups.value = (results[offset + 1] as ApiResponse<AdminServerGroupItem[]>)?.data ?? []
+    routes.value = (results[offset + 2] as ApiResponse<AdminNodeRouteItem[]>)?.data ?? []
     pruneSelection()
     applyRouteGroupFilter()
     setCurrentPageInRange()
@@ -574,7 +590,7 @@ async function handleBatchSubmit(payload: NodeBatchEditPayload) {
     } else {
       ElMessage.success(`已批量更新 ${updatePayload.ids.length} 个节点`)
     }
-    await loadNodeBoard()
+    await loadNodeBoard(true)
   } catch (error) {
     if (error === 'cancel' || error === 'close') {
       return
@@ -609,7 +625,7 @@ async function handleBatchDelete() {
     await batchDeleteNodes([...selectedNodeIds.value])
     clearSelection()
     ElMessage.success(`已批量删除 ${deleteCount} 个节点`)
-    await loadNodeBoard()
+    await loadNodeBoard(true)
   } catch (error) {
     if (error === 'cancel' || error === 'close') {
       return
@@ -788,7 +804,7 @@ async function handlePinTop(node: AdminNodeItem) {
     })))
     currentPage.value = 1
     ElMessage.success(`已将“${node.name}”置顶`)
-    await loadNodeBoard()
+    await loadNodeBoard(true)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '节点置顶失败')
   } finally {
@@ -818,7 +834,7 @@ async function handleAction(action: NodeAction, node: AdminNodeItem) {
     if (action === 'copy') {
       await copyNode(node.id)
       ElMessage.success('节点已复制')
-      await loadNodeBoard()
+      await loadNodeBoard(true)
       return
     }
 
@@ -830,7 +846,7 @@ async function handleAction(action: NodeAction, node: AdminNodeItem) {
 
     await deleteNode(node.id)
     ElMessage.success('节点已删除')
-    await loadNodeBoard()
+    await loadNodeBoard(true)
   } catch (error) {
     if (action === 'delete' && (error === 'cancel' || error === 'close')) {
       return
@@ -1409,13 +1425,13 @@ watch(
       :groups="groups"
       :routes="routes"
       :all-nodes="allNodes"
-      @success="() => loadNodeBoard()"
+      @success="() => loadNodeBoard(true)"
     />
 
     <NodeSortDialog
       v-model:visible="sortDialogVisible"
       :nodes="allNodes"
-      @success="() => loadNodeBoard()"
+      @success="() => loadNodeBoard(true)"
     />
 
     <NodeBatchEditDialog
