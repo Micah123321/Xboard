@@ -880,9 +880,14 @@ watch(
 )
 
 // Server-side filters trigger a reload with the new filter applied.
+// Reset to page 1; if already on page 1 the currentPage watcher won't fire,
+// so reload explicitly.
 watch([keyword, typeFilter, groupFilter, visibilityFilter, relationFilter], () => {
-  currentPage.value = 1
-  void loadNodeBoard()
+  if (currentPage.value === 1) {
+    void loadNodeBoard()
+  } else {
+    currentPage.value = 1
+  }
 })
 
 // Client-side-only filters (applied locally on the current page)
@@ -890,8 +895,23 @@ watch([statusFilter, gfwFilter], () => {
   currentPage.value = 1
 })
 
+// Pagination: page change or page-size change triggers a server reload.
+// Changing page size resets to page 1; both reload the current page from server.
 watch(pageSize, () => {
-  currentPage.value = 1
+  if (currentPage.value === 1) {
+    void loadNodeBoard()
+  } else {
+    currentPage.value = 1
+  }
+})
+
+watch(currentPage, (next, prev) => {
+  // React to user-driven page changes and page resets from filter/page-size
+  // watchers. Skip the initial set (prev === undefined) and no-op resets
+  // (next === prev) — those are handled by their own watchers when needed.
+  if (prev === undefined || next === prev) {
+    return
+  }
   void loadNodeBoard()
 })
 
