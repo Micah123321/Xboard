@@ -1009,7 +1009,7 @@ watch(
           </ElButton>
           <ElButton
             :loading="loading"
-            @click="loadNodeBoard"
+            @click="loadNodeBoard(true)"
           >
             <ElIcon><RefreshRight /></ElIcon>
             刷新数据
@@ -1047,7 +1047,7 @@ watch(
         :title="errorMessage"
       >
         <template #default>
-          <ElButton text @click="loadNodeBoard">重新加载</ElButton>
+          <ElButton text @click="loadNodeBoard(true)">重新加载</ElButton>
         </template>
       </ElAlert>
 
@@ -1386,7 +1386,7 @@ watch(
               :description="hasActiveFilters ? '当前筛选条件下暂无节点。' : '暂无节点数据。'"
             >
               <ElButton v-if="hasActiveFilters" @click="handleReset">清空筛选</ElButton>
-              <ElButton v-else @click="loadNodeBoard">
+              <ElButton v-else @click="loadNodeBoard(true)">
                 <ElIcon><RefreshRight /></ElIcon>
                 重新加载
               </ElButton>
