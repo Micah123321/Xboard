@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.9.8] - 2026-06-25
+
+### 快速修改
+- **[admin-frontend]**: 修复节点列表开启自动上线后仍保留旧显隐状态的问题；自动上线切换成功后会重新加载节点数据，使用后端 `ServerAutoOnlineService` 同步后的真实 `show` 值，并补充离线节点开启自动上线应立即隐藏的管理端接口回归测试 — by hlm123
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/views/nodes/NodesView.vue:717-736, tests/Unit/Admin/ManageControllerGetNodesTest.php:295-314
+
 ## [0.9.7] - 2026-06-24
 
 ### 性能优化

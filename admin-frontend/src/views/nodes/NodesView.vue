@@ -728,6 +728,7 @@ async function handleToggleAutoOnline(node: AdminNodeItem, nextValue: boolean) {
       id: node.id,
       auto_online: nextValue,
     })
+    await loadNodeBoard(true)
     ElMessage.success(nextValue ? '已开启自动上线' : '已关闭自动上线')
   } catch (error) {
     node.auto_online = previous

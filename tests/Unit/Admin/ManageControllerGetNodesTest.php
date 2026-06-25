@@ -292,6 +292,26 @@ class ManageControllerGetNodesTest extends TestCase
         $this->assertSame('hidden-node', $response->json('data.0.name'));
     }
 
+    public function test_update_auto_online_hides_offline_node_immediately(): void
+    {
+        $server = $this->makeServer([
+            'name' => 'offline-auto-online-node',
+            'show' => true,
+            'auto_online' => false,
+        ]);
+
+        $response = $this->postJson($this->url('/server/manage/update'), [
+            'id' => $server->id,
+            'auto_online' => true,
+        ]);
+
+        $response->assertOk();
+
+        $freshServer = $server->fresh();
+        $this->assertTrue($freshServer->auto_online);
+        $this->assertFalse($freshServer->show);
+    }
+
     public function test_get_nodes_paginated_filters_by_group_id(): void
     {
         // group_ids are stored as JSON string arrays, so this guards against the

@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "mcp__contextweaver__codebase-retrieval"
+      "mcp__contextweaver__codebase-retrieval",
+      "Bash(ADMIN_BUILD_OUT_DIR=dist npx vue-tsc -b)",
+      "Bash(echo \"EXIT_CODE=$?\")"
     ]
   }
 }
