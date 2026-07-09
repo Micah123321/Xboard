@@ -8,6 +8,7 @@ import { useTicketReturnLink } from '@/views/tickets/useTicketReturnLink'
 import UserAdvancedFilterDialog from './UserAdvancedFilterDialog.vue'
 import UserBatchMailDialog from './UserBatchMailDialog.vue'
 import UserFormDrawer from './UserFormDrawer.vue'
+import UserInviteDialog from './UserInviteDialog.vue'
 import UserTemporaryTrafficDialog from './UserTemporaryTrafficDialog.vue'
 import { useUsersManagement } from './useUsersManagement'
 
@@ -45,6 +46,9 @@ const {
   trafficLogVisible,
   trafficLogUserId,
   trafficLogUserEmail,
+  inviteDialogVisible,
+  inviteDialogUserId,
+  inviteDialogUserEmail,
   drawerVisible,
   drawerMode,
   activeUser,
@@ -375,6 +379,12 @@ const {
       v-model:visible="trafficLogVisible"
       :user-id="trafficLogUserId"
       :user-email="trafficLogUserEmail"
+    />
+
+    <UserInviteDialog
+      v-model:visible="inviteDialogVisible"
+      :user-id="inviteDialogUserId"
+      :user-email="inviteDialogUserEmail"
     />
   </div>
 </template>

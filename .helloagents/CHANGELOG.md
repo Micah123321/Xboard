@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## [0.10.0] - 2026-07-10
+
+### 新功能
+- **[invite-visibility]**: 完善邀请可见性——用户端可查看自己邀请到的用户邮箱；管理端可查看用户生成的邀请链接、被邀请用户邮箱与邀请订单摘要，并支持跳转到完整筛选列表 — by hlm123
+  - 方案: [202607100107_invite-visibility](plan/202607100107_invite-visibility/)
+  - 决策: invite-visibility#D001(增量 API + 复用现有列表跳转)
+  - 文件: app/Http/Controllers/V1/User/InviteController.php, app/Http/Controllers/V2/Admin/UserController.php, app/Http/Routes/V1/UserRoute.php, app/Http/Routes/V2/AdminRoute.php, admin-frontend/src/views/users/*, admin-frontend/src/views/subscriptions/OrdersView.vue, E:/code/vue/vue-xboard-theme-micah/src/views/finance/invite.vue, tests/Unit/Admin/InviteVisibilityTest.php
+
 ## [0.9.9] - 2026-07-09
 
 ### 快速修改

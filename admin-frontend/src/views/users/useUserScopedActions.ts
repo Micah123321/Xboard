@@ -96,10 +96,9 @@ export function useUserScopedActions(options: UserScopedActionOptions = {}) {
 
   function viewUserInvites(
     user: Pick<AdminUserListItem, 'id' | 'email'>,
-    resetLocalFilters: () => void,
+    _resetLocalFilters: () => void,
   ) {
-    resetLocalFilters()
-    return rowActions.viewUserInvites(user)
+    return rowActions.openInviteDialog(user)
   }
 
   return {
@@ -109,6 +108,9 @@ export function useUserScopedActions(options: UserScopedActionOptions = {}) {
     trafficLogVisible: rowActions.trafficLogVisible,
     trafficLogUserId: rowActions.trafficLogUserId,
     trafficLogUserEmail: rowActions.trafficLogUserEmail,
+    inviteDialogVisible: rowActions.inviteDialogVisible,
+    inviteDialogUserId: rowActions.inviteDialogUserId,
+    inviteDialogUserEmail: rowActions.inviteDialogUserEmail,
     resettingTrafficId: rowActions.resettingTrafficId,
     scopedUserId,
     scopedUserFilters,
@@ -124,6 +126,7 @@ export function useUserScopedActions(options: UserScopedActionOptions = {}) {
     openAssignOrder: rowActions.openAssignOrder,
     handleAssignOrderSuccess: rowActions.handleAssignOrderSuccess,
     openTrafficLogs: rowActions.openTrafficLogs,
+    openInviteDialog: rowActions.openInviteDialog,
     viewUserOrders,
     viewUserInvites,
     performResetTraffic: rowActions.performResetTraffic,

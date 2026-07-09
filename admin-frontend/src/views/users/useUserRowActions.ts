@@ -35,6 +35,9 @@ export function useUserRowActions(options: UserRowActionOptions = {}) {
   const trafficLogVisible = ref(false)
   const trafficLogUserId = ref<number | null>(null)
   const trafficLogUserEmail = ref('')
+  const inviteDialogVisible = ref(false)
+  const inviteDialogUserId = ref<number | null>(null)
+  const inviteDialogUserEmail = ref('')
   const resettingTrafficId = ref<number | null>(null)
 
   async function notifyUserChanged() {
@@ -123,6 +126,12 @@ export function useUserRowActions(options: UserRowActionOptions = {}) {
     trafficLogVisible.value = true
   }
 
+  function openInviteDialog(user: Pick<AdminUserListItem, 'id' | 'email'>) {
+    inviteDialogUserId.value = user.id
+    inviteDialogUserEmail.value = user.email
+    inviteDialogVisible.value = true
+  }
+
   function viewUserOrders(user: Pick<AdminUserListItem, 'id' | 'email'>, extraQuery: LocationQueryRaw = {}) {
     return router.push({
       name: 'SubscriptionOrders',
@@ -138,6 +147,11 @@ export function useUserRowActions(options: UserRowActionOptions = {}) {
     user: Pick<AdminUserListItem, 'id' | 'email'>,
     extraQuery: LocationQueryRaw = {},
   ) {
+    if (Object.keys(extraQuery).length === 0) {
+      openInviteDialog(user)
+      return Promise.resolve()
+    }
+
     return router.push({
       name: 'Users',
       query: {
@@ -165,6 +179,9 @@ export function useUserRowActions(options: UserRowActionOptions = {}) {
     trafficLogVisible,
     trafficLogUserId,
     trafficLogUserEmail,
+    inviteDialogVisible,
+    inviteDialogUserId,
+    inviteDialogUserEmail,
     resettingTrafficId,
     copySubscribeUrl,
     resetSecret,
@@ -173,6 +190,7 @@ export function useUserRowActions(options: UserRowActionOptions = {}) {
     openAssignOrder,
     handleAssignOrderSuccess,
     openTrafficLogs,
+    openInviteDialog,
     viewUserOrders,
     viewUserInvites,
     viewUserManagement,

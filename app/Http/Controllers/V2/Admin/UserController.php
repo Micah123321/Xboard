@@ -8,6 +8,8 @@ use App\Http\Requests\Admin\UserAssignTemporaryTraffic;
 use App\Http\Requests\Admin\UserSendMail;
 use App\Http\Requests\Admin\UserUpdate;
 use App\Jobs\SendEmailJob;
+use App\Models\InviteCode;
+use App\Models\Order;
 use App\Models\Plan;
 use App\Models\User;
 use App\Services\AuthService;
@@ -272,6 +274,88 @@ class UserController extends Controller
         ]);
         $user = User::find($request->input('id'))->load('invite_user');
         return $this->success($user);
+    }
+
+    public function inviteInfo(Request $request)
+    {
+        $request->validate([
+            'id' => 'required|numeric',
+        ], [
+            'id.required' => '用户ID不能为空',
+        ]);
+
+        $user = User::query()->find($request->input('id'));
+        if (!$user) {
+            return $this->fail([400202, '用户不存在']);
+        }
+
+        $baseUrl = rtrim((string) (admin_setting('app_url') ?: $request->getSchemeAndHttpHost()), '/');
+        $codes = InviteCode::query()
+            ->where('user_id', $user->id)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get(['code', 'status', 'pv', 'created_at'])
+            ->map(static function (InviteCode $code) use ($baseUrl): array {
+                return [
+                    'code' => (string) $code->code,
+                    'status' => (int) $code->status,
+                    'pv' => (int) ($code->pv ?? 0),
+                    'created_at' => (int) $code->created_at,
+                    'invite_url' => $baseUrl . '/?code=' . $code->code,
+                ];
+            })
+            ->values()
+            ->all();
+
+        $invitedUsersQuery = User::query()->where('invite_user_id', $user->id);
+        $invitedOrdersQuery = Order::query()->where('invite_user_id', $user->id);
+
+        $invitedUsers = (clone $invitedUsersQuery)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit(20)
+            ->get(['id', 'email', 'created_at'])
+            ->map(static function (User $invited): array {
+                return [
+                    'id' => (int) $invited->id,
+                    'email' => (string) $invited->email,
+                    'created_at' => (int) $invited->created_at,
+                ];
+            })
+            ->values()
+            ->all();
+
+        $invitedOrders = (clone $invitedOrdersQuery)
+            ->with(['user:id,email'])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit(20)
+            ->get(['id', 'trade_no', 'user_id', 'total_amount', 'status', 'commission_status', 'created_at'])
+            ->map(static function (Order $order): array {
+                return [
+                    'id' => (int) $order->id,
+                    'trade_no' => (string) $order->trade_no,
+                    'email' => (string) ($order->user?->email ?? ''),
+                    'total_amount' => (int) $order->total_amount,
+                    'status' => (int) $order->status,
+                    'commission_status' => $order->commission_status === null ? null : (int) $order->commission_status,
+                    'created_at' => (int) $order->created_at,
+                ];
+            })
+            ->values()
+            ->all();
+
+        return $this->success([
+            'user' => [
+                'id' => (int) $user->id,
+                'email' => (string) $user->email,
+            ],
+            'codes' => $codes,
+            'invited_users_count' => (int) (clone $invitedUsersQuery)->count(),
+            'invited_orders_count' => (int) (clone $invitedOrdersQuery)->count(),
+            'invited_users' => $invitedUsers,
+            'invited_orders' => $invitedOrders,
+        ]);
     }
 
     public function update(UserUpdate $request)

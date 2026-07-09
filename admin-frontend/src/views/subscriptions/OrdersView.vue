@@ -103,9 +103,28 @@ const scopedUserEmail = computed(() => {
   return typeof value === 'string' ? value : ''
 })
 
+const scopedInviteUserId = computed(() => {
+  const raw = route.query.invite_user_id
+  const value = Array.isArray(raw) ? raw[0] : raw
+  const numeric = Number(value)
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null
+})
+
+const scopedInviteUserEmail = computed(() => {
+  const raw = route.query.invite_user_email
+  const value = Array.isArray(raw) ? raw[0] : raw
+  return typeof value === 'string' ? value : ''
+})
+
 const scopedUserFilters = computed(() => (
   scopedUserId.value
     ? [{ id: 'user_id', value: [scopedUserId.value] }]
+    : []
+))
+
+const scopedInviteFilters = computed(() => (
+  scopedInviteUserId.value
+    ? [{ id: 'invite_user_id', value: [scopedInviteUserId.value] }]
     : []
 ))
 
@@ -137,11 +156,17 @@ const dashboardEntryNotice = computed(() => {
   return '已从仪表盘进入订单工作台。'
 })
 
-const scopedUserNotice = computed(() => (
-  scopedUserId.value
-    ? `当前仅展示 ${scopedUserEmail.value || `用户 #${scopedUserId.value}`} 的订单。`
-    : ''
-))
+const scopedUserNotice = computed(() => {
+  if (scopedInviteUserId.value) {
+    return `当前仅展示邀请人 ${scopedInviteUserEmail.value || `用户 #${scopedInviteUserId.value}`} 带来的订单。`
+  }
+
+  if (scopedUserId.value) {
+    return `当前仅展示 ${scopedUserEmail.value || `用户 #${scopedUserId.value}`} 的订单。`
+  }
+
+  return ''
+})
 
 const commissionWorkbenchLabel = computed(() => {
   switch (commissionWorkbench.value) {
@@ -210,6 +235,7 @@ async function loadOrders() {
           commissionStatus: commissionFilter.value,
         }),
         ...scopedUserFilters.value,
+        ...scopedInviteFilters.value,
       ],
       sort: sortState.value ? [sortState.value] : undefined,
       is_commission: commissionWorkbench.value !== 'all' || commissionFilter.value !== 'all',
@@ -316,10 +342,12 @@ function clearFilters() {
   commissionFilter.value = 'all'
   commissionWorkbench.value = 'all'
   sortState.value = { id: 'created_at', desc: true }
-  if (scopedUserId.value) {
+  if (scopedUserId.value || scopedInviteUserId.value) {
     const nextQuery = { ...route.query }
     delete nextQuery.user_id
     delete nextQuery.user_email
+    delete nextQuery.invite_user_id
+    delete nextQuery.invite_user_email
     void router.replace({ name: 'SubscriptionOrders', query: nextQuery }).finally(() => {
       refreshOrders(true)
     })
@@ -538,7 +566,13 @@ watch([current, pageSize], () => {
 })
 
 watch(
-  () => [route.query.user_id, route.query.user_email, route.query.workbench],
+  () => [
+    route.query.user_id,
+    route.query.user_email,
+    route.query.invite_user_id,
+    route.query.invite_user_email,
+    route.query.workbench,
+  ],
   () => {
     syncDashboardWorkbench()
     refreshOrders(true)

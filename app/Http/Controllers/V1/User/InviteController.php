@@ -42,6 +42,42 @@ class InviteController extends Controller
         ]);
     }
 
+    public function users(Request $request)
+    {
+        $current = max(1, (int) $request->input('current', 1));
+        $pageSize = (int) $request->input('page_size', 10);
+        if ($pageSize < 10) {
+            $pageSize = 10;
+        }
+        if ($pageSize > 100) {
+            $pageSize = 100;
+        }
+
+        $builder = User::query()
+            ->where('invite_user_id', $request->user()->id)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
+
+        $total = (clone $builder)->count();
+        $users = $builder
+            ->forPage($current, $pageSize)
+            ->get(['id', 'email', 'created_at'])
+            ->map(static function (User $user): array {
+                return [
+                    'id' => (int) $user->id,
+                    'email' => (string) $user->email,
+                    'created_at' => (int) $user->created_at,
+                ];
+            })
+            ->values()
+            ->all();
+
+        return response([
+            'data' => $users,
+            'total' => $total,
+        ]);
+    }
+
     public function fetch(Request $request)
     {
         $commission_rate = admin_setting('invite_commission', 10);

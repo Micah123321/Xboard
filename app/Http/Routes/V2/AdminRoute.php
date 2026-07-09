@@ -134,6 +134,7 @@ class AdminRoute
                 $router->post('/update', [UserController::class, 'update']);
                 $router->post('/assignTemporaryTraffic', [UserController::class, 'assignTemporaryTraffic']);
                 $router->get('/getUserInfoById', [UserController::class, 'getUserInfoById']);
+                $router->get('/inviteInfo', [UserController::class, 'inviteInfo']);
                 $router->post('/generate', [UserController::class, 'generate']);
                 $router->post('/dumpCSV', [UserController::class, 'dumpCSV']);
                 $router->post('/sendMail', [UserController::class, 'sendMail']);

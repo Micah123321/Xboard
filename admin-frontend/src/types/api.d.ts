@@ -779,6 +779,42 @@ export interface AdminUserTemporaryTrafficResult {
   temporary_transfer_enable: number
 }
 
+export interface AdminUserInviteCodeItem {
+  code: string
+  status: number
+  pv: number
+  created_at: number
+  invite_url: string
+}
+
+export interface AdminUserInvitedUserItem {
+  id: number
+  email: string
+  created_at: number
+}
+
+export interface AdminUserInvitedOrderItem {
+  id: number
+  trade_no: string
+  email: string
+  total_amount: number
+  status: number
+  commission_status: number | null
+  created_at: number
+}
+
+export interface AdminUserInviteInfo {
+  user: {
+    id: number
+    email: string
+  }
+  codes: AdminUserInviteCodeItem[]
+  invited_users_count: number
+  invited_orders_count: number
+  invited_users: AdminUserInvitedUserItem[]
+  invited_orders: AdminUserInvitedOrderItem[]
+}
+
 export interface AdminTicketMessage {
   id: number
   ticket_id: number

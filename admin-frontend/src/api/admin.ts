@@ -57,6 +57,7 @@ import type {
   AdminUserListItem,
   AdminUserTemporaryTrafficPayload,
   AdminUserTemporaryTrafficResult,
+  AdminUserInviteInfo,
   AdminUserUpdatePayload,
   ApiResponse,
   DashboardStats,
@@ -573,6 +574,10 @@ export function fetchUsers(params: AdminUserFetchParams): Promise<AdminPaginatio
 
 export function getUserById(id: number): Promise<ApiResponse<AdminUserListItem>> {
   return unwrap<AdminUserListItem>('/user/getUserInfoById', { id })
+}
+
+export function fetchUserInviteInfo(id: number): Promise<ApiResponse<AdminUserInviteInfo>> {
+  return unwrap<AdminUserInviteInfo>('/user/inviteInfo', { id })
 }
 
 export function createUser(payload: AdminUserGeneratePayload): Promise<ApiResponse<boolean>> {
