@@ -18,7 +18,8 @@
 - 节点端 `GET server/gfw/task` 只向父节点返回待执行任务；节点端 `POST server/gfw/report` 必须校验 `check_id` 归属当前节点
 - `v2_server.gfw_check_enabled` 控制节点是否参与自动墙检测与墙状态自动显隐；该字段按“未明确关闭即开启”处理，管理端开启父节点墙检测托管时会立即发起一次检测，后续由定时命令持续检测；子节点不独立检测，但父节点检测结果只作为列表继承状态展示，不再自动改写子节点显隐
 - `blocked` 结果会自动隐藏仍开启墙检测托管且当前显示中的检测源节点，并设置 `gfw_auto_hidden=1`；不会隐藏该节点的直接子节点
-- `normal` 结果只恢复检测源节点自身的 `gfw_auto_hidden=1` 状态，避免误恢复管理员手动隐藏的节点；`partial/failed` 只记录状态，不触发自动上线或下线
+- `normal` 结果只解除检测源节点自身的 `gfw_auto_hidden=1`；若该节点开启了 `auto_online`，最终 `show` 由 `ServerAutoOnlineService` 按当前运行状态判定，不得因墙状态恢复而强制显示离线节点；未开启自动上线的节点才会在解除 hold 后恢复显示；`partial/failed` 只记录状态，不触发自动上线或下线
+- 历史遗留的子节点 `gfw_auto_hidden` / `parent_auto_hidden` 清理同样遵守自动上线边界：开启 `auto_online` 的子节点只解除 hold 并交给自动上线重算，不会被强制 `show=true`
 - `sync:server-auto-online` 会把当前节点最新墙状态 `blocked`、未恢复的 `gfw_auto_hidden` 和节点重连冷却状态作为显示否决条件，防止自动上线重新发布疑似被墙或短期频繁连断的节点
 - 当前检测方向只做节点服务器主动 ping 国内三网目标；后续墙内探测 IP 可在同一任务模型中扩展
 - 参考脚本中的 Telegram 通知、chat_id、bot token 和自动安装依赖逻辑不得进入项目实现

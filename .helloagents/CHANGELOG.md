@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.9.9] - 2026-07-09
+
+### 快速修改
+- **[node-gfw-check / node-auto-online]**: 修复墙检测上报 `normal` 时强制 `show=true`，把已开启自动上线但仍离线的节点重新显示的问题；恢复路径改为只解除 `gfw_auto_hidden`，自动上线节点最终显隐交由 `ServerAutoOnlineService` 按运行状态判定，并同步修正历史子节点 hold 清理逻辑 — by hlm123
+  - 类型: 快速修改（无方案包）
+  - 文件: app/Services/ServerGfwCheckService.php:373-430, app/Services/ServerParentVisibilityService.php:22-50, tests/Unit/ServerGfwCheckServiceTest.php:143-200
+
 ## [0.9.8] - 2026-06-25
 
 ### 快速修改

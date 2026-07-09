@@ -5,7 +5,9 @@ namespace Tests\Unit;
 use App\Models\Server;
 use App\Models\ServerGfwCheck;
 use App\Services\ServerGfwCheckService;
+use App\Utils\CacheKey;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class ServerGfwCheckServiceTest extends TestCase
@@ -138,6 +140,63 @@ class ServerGfwCheckServiceTest extends TestCase
         $this->assertFalse($legacyGfwHiddenChild->fresh()->gfw_auto_hidden);
         $this->assertTrue($legacyParentHiddenChild->fresh()->show);
         $this->assertFalse($legacyParentHiddenChild->fresh()->parent_auto_hidden);
+    }
+
+    public function test_normal_report_does_not_force_show_offline_auto_online_node(): void
+    {
+        $server = $this->makeServer([
+            'name' => 'offline-auto-online',
+            'show' => false,
+            'auto_online' => true,
+            'gfw_auto_hidden' => true,
+            'gfw_auto_action_at' => 123456,
+        ]);
+
+        $check = ServerGfwCheck::create([
+            'server_id' => $server->id,
+            'status' => ServerGfwCheck::STATUS_PENDING,
+        ]);
+
+        $this->assertTrue(app(ServerGfwCheckService::class)->reportResult($server, [
+            'check_id' => $check->id,
+            'operator_summary' => $this->normalOperators(),
+        ]));
+
+        $fresh = $server->fresh();
+        $this->assertFalse($fresh->show);
+        $this->assertFalse($fresh->gfw_auto_hidden);
+        $this->assertSame(Server::STATUS_OFFLINE, $fresh->available_status);
+    }
+
+    public function test_normal_report_restores_online_auto_online_node(): void
+    {
+        $server = $this->makeServer([
+            'name' => 'online-auto-online',
+            'show' => false,
+            'auto_online' => true,
+            'gfw_auto_hidden' => true,
+            'gfw_auto_action_at' => 123456,
+        ]);
+
+        Cache::put(
+            CacheKey::get('SERVER_' . strtoupper($server->type) . '_LAST_CHECK_AT', $server->id),
+            time(),
+            3600
+        );
+
+        $check = ServerGfwCheck::create([
+            'server_id' => $server->id,
+            'status' => ServerGfwCheck::STATUS_PENDING,
+        ]);
+
+        $this->assertTrue(app(ServerGfwCheckService::class)->reportResult($server, [
+            'check_id' => $check->id,
+            'operator_summary' => $this->normalOperators(),
+        ]));
+
+        $fresh = $server->fresh();
+        $this->assertTrue($fresh->show);
+        $this->assertFalse($fresh->gfw_auto_hidden);
     }
 
     private function makeServer(array $attributes = []): Server

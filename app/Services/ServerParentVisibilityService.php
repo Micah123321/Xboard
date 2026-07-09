@@ -24,9 +24,27 @@ class ServerParentVisibilityService
                 continue;
             }
 
+            $wasShown = (bool) $child->show;
+            $child->forceFill([
+                'parent_auto_hidden' => false,
+                'parent_auto_action_at' => $now,
+            ])->save();
+
+            // 自动上线子节点不能被历史父节点联动直接强制显示。
+            if ((bool) $child->auto_online) {
+                app(ServerAutoOnlineService::class)->syncServer($child->fresh() ?? $child);
+                if ((bool) ($child->fresh()?->show) && !$wasShown) {
+                    $restored++;
+                }
+                continue;
+            }
+
+            if ($wasShown) {
+                continue;
+            }
+
             $child->forceFill([
                 'show' => true,
-                'parent_auto_hidden' => false,
                 'parent_auto_action_at' => $now,
             ])->save();
             $restored++;

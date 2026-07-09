@@ -14,6 +14,7 @@
 - 自动上线写入 `show` 时使用当前节点的 `available_status` 判断有效运行状态；普通节点只读取自身运行缓存，转发子节点在自身缓存缺失或过期时可回退父节点运行缓存，避免只由父入口上报的转发子节点被定时同步误隐藏。
 - `Server` 模型的 `last_check_at`、`last_push_at`、在线用户、metrics 和负载状态访问器优先按当前节点 ID 读取缓存；子节点自身运行缓存缺失或过期时回退读取父节点运行缓存，父子协议类型不一致时优先使用父节点真实 type，再兼容旧的子节点 type + parent_id 缓存键。
 - 墙检测状态参与当前节点的显示否决：最新墙状态为 `blocked`，或节点仍处于 `gfw_auto_hidden=true` 且最新墙状态未恢复 `normal` 时，自动上线不得重新显示当前节点。
+- 墙检测上报 `normal` 时只解除 `gfw_auto_hidden`；若节点开启了 `auto_online`，最终 `show` 必须再走 `ServerAutoOnlineService` 按运行状态重算，禁止因墙状态恢复直接强制显示离线节点。
 - `v2_server.auto_online_cooldown_enabled` 是自动上线的节点级重连冷却开关；只有同时开启 `auto_online` 和该开关时才生效。
 - `ServerReconnectCooldownService` 使用 Cache/Redis 记录运行时状态：首次状态只记录不计数；后续在线 / 离线状态切换会写入 1 小时窗口内的切换时间戳。
 - 同一节点 1 小时内在线 / 离线切换次数超过 10 次时，`ServerReconnectCooldownService` 写入 6 小时冷却键；冷却期间 `ServerAutoOnlineService` 仅强制当前节点 `show=false`，不改写其子节点。

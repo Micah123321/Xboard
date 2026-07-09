@@ -375,11 +375,36 @@ class ServerGfwCheckService
             return $result;
         }
 
-        $node->update([
-            'show' => true,
+        // 墙状态恢复后只解除 gfw hold。自动上线节点的最终显隐交给
+        // ServerAutoOnlineService，避免离线节点被强制 show=true。
+        $wasShown = (bool) $node->show;
+        $node->forceFill([
             'gfw_auto_hidden' => false,
             'gfw_auto_action_at' => $now,
-        ]);
+        ])->save();
+
+        if ((bool) $node->auto_online) {
+            app(ServerAutoOnlineService::class)->syncServer($node->fresh() ?? $node);
+            $isShown = (bool) ($node->fresh()?->show ?? $wasShown);
+            if ($isShown && !$wasShown) {
+                $result['shown']++;
+            } elseif (!$isShown && $wasShown) {
+                $result['hidden']++;
+            } else {
+                $result['unchanged']++;
+            }
+            return $result;
+        }
+
+        if ($wasShown) {
+            $result['unchanged']++;
+            return $result;
+        }
+
+        $node->forceFill([
+            'show' => true,
+            'gfw_auto_action_at' => $now,
+        ])->save();
         $result['shown']++;
 
         return $result;
@@ -404,9 +429,29 @@ class ServerGfwCheckService
                 continue;
             }
 
+            $wasShown = (bool) $child->show;
+            $child->forceFill([
+                'gfw_auto_hidden' => false,
+                'gfw_auto_action_at' => $now,
+            ])->save();
+
+            if ((bool) $child->auto_online) {
+                app(ServerAutoOnlineService::class)->syncServer($child->fresh() ?? $child);
+                $isShown = (bool) ($child->fresh()?->show ?? $wasShown);
+                if ($isShown && !$wasShown) {
+                    $result['shown']++;
+                } elseif (!$isShown && $wasShown) {
+                    $result['hidden']++;
+                }
+                continue;
+            }
+
+            if ($wasShown) {
+                continue;
+            }
+
             $child->forceFill([
                 'show' => true,
-                'gfw_auto_hidden' => false,
                 'gfw_auto_action_at' => $now,
             ])->save();
             $result['shown']++;
