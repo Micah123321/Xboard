@@ -10,6 +10,7 @@ import {
   createEmptyCouponForm,
   getCouponDateRangeError,
   getCouponTypeLabel,
+  getCouponValueHelper,
   toCouponFormModel,
   toCouponSavePayload,
   type CouponFormModel,
@@ -32,17 +33,29 @@ const submitting = ref(false)
 const form = reactive<CouponFormModel>(createEmptyCouponForm())
 
 const dialogTitle = computed(() => props.mode === 'create' ? '添加优惠券' : '编辑优惠券')
-const valueHelper = computed(() => form.type === 1 ? '按金额优惠时请输入元，例如 50 表示减免 50 元。' : '按比例优惠时请输入百分比，例如 85 表示 85 折。')
+const valueHelper = computed(() => getCouponValueHelper(form.type))
+const valueInputMax = computed(() => form.type === 1 ? undefined : 100)
+const valueInputPrecision = computed(() => form.type === 1 ? 2 : 0)
+const valueInputPlaceholder = computed(() => (
+  form.type === 1 ? '减免金额（元）' : '减免百分比（1-100）'
+))
 
 const rules = computed<FormRules<CouponFormModel>>(() => ({
   name: [{ required: true, message: '请输入优惠券名称', trigger: 'blur' }],
   value: [
     {
       validator: (_rule, value, callback) => {
-        if (!Number.isFinite(Number(value)) || Number(value) <= 0) {
+        const numeric = Number(value)
+        if (!Number.isFinite(numeric) || numeric <= 0) {
           callback(new Error(`请输入有效的${getCouponTypeLabel(form.type)}值`))
           return
         }
+
+        if (form.type === 2 && (numeric < 1 || numeric > 100)) {
+          callback(new Error('比例减免请输入 1–100 的整数百分比（减免比例，不是几折）'))
+          return
+        }
+
         callback()
       },
       trigger: 'blur',
@@ -127,6 +140,15 @@ watch(
   },
   { immediate: true },
 )
+
+watch(
+  () => form.type,
+  () => {
+    nextTick(() => {
+      formRef.value?.clearValidate(['value'])
+    })
+  },
+)
 </script>
 
 <template>
@@ -144,7 +166,7 @@ watch(
       <div class="dialog-copy">
         <p>订阅管理</p>
         <h2>{{ dialogTitle }}</h2>
-        <span>创建或调整优惠券策略，支持金额、折扣、批量生成与订阅限制。</span>
+        <span>配置金额减免或比例减免；比例值是「减免百分比」，不是中文里的“几折”。</span>
       </div>
 
       <ElForm
@@ -177,7 +199,7 @@ watch(
             <p class="field-helper">单张优惠券可指定券码；批量生成时请保持为空。</p>
           </ElFormItem>
 
-          <ElFormItem label="优惠券类型和值" prop="value">
+          <ElFormItem label="优惠方式与数值" prop="value">
             <div class="value-row">
               <ElSelect v-model="form.type" class="value-type">
                 <ElOption
@@ -191,9 +213,11 @@ watch(
               <ElInputNumber
                 v-model="form.value"
                 :min="0"
-                :precision="form.type === 1 ? 2 : 0"
+                :max="valueInputMax"
+                :precision="valueInputPrecision"
                 :controls="false"
                 class="value-input"
+                :placeholder="valueInputPlaceholder"
               />
             </div>
             <p class="field-helper">{{ valueHelper }}</p>
@@ -221,7 +245,7 @@ watch(
               class="full-width"
               placeholder="留空则不限"
             />
-            <p class="field-helper">设置优惠券总共可被使用的次数；留空表示不限次数。</p>
+            <p class="field-helper">优惠券总可用次数；用户下单创建时扣减，留空表示不限次数。</p>
           </ElFormItem>
 
           <ElFormItem label="每个用户可使用次数">
@@ -232,7 +256,7 @@ watch(
               class="full-width"
               placeholder="留空则不限"
             />
-            <p class="field-helper">用于限制单个用户重复使用同一优惠券的次数。</p>
+            <p class="field-helper">限制单个用户累计成功使用同一优惠券的次数（不含已取消订单）。</p>
           </ElFormItem>
 
           <ElFormItem label="指定周期">
@@ -270,7 +294,7 @@ watch(
                 :value="plan.id"
               />
             </ElSelect>
-            <p class="field-helper">只在指定套餐下生效，适合为活动套餐或定向促销设置专属优惠。</p>
+            <p class="field-helper">只在指定套餐下生效；升级单按目标套餐校验，留空表示不限套餐。</p>
           </ElFormItem>
         </div>
       </ElForm>

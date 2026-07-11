@@ -38,8 +38,8 @@ export const COUPON_TYPE_OPTIONS: Array<{
   shortLabel: string
   value: AdminCouponType
 }> = [
-  { label: '按金额优惠', shortLabel: '金额优惠', value: 1 },
-  { label: '按比例优惠', shortLabel: '比例优惠', value: 2 },
+  { label: '按金额减免', shortLabel: '金额减免', value: 1 },
+  { label: '按比例减免', shortLabel: '比例减免', value: 2 },
 ]
 
 export const COUPON_PERIOD_OPTIONS = [
@@ -100,6 +100,26 @@ function normalizePickerTimestamp(value: CouponDateValue | undefined): number {
   }
   const timestamp = numeric > MAX_COUPON_TIMESTAMP ? numeric / 1000 : numeric
   return Math.floor(timestamp)
+}
+
+function formatPayableRatioLabel(discountPercent: number): string {
+  const payablePercent = Math.max(0, Math.min(100, 100 - discountPercent))
+  // 中文「N 折」= 实付 N×10%；这里用可读比例，避免与减免百分比混淆
+  if (payablePercent === 0) {
+    return '实付 0%'
+  }
+  if (payablePercent % 10 === 0) {
+    return `实付 ${payablePercent}%（约 ${payablePercent / 10} 折）`
+  }
+  return `实付 ${payablePercent}%`
+}
+
+export function getCouponValueHelper(type: AdminCouponType): string {
+  if (type === 1) {
+    return '按金额减免：输入元，例如 50 表示订单减免 ¥50。'
+  }
+
+  return '按比例减免：输入 1–100 的减免百分比，不是“几折”。例如 20 表示减免 20%（实付 80%，约 8 折）；85 表示减免 85%（实付 15%）。不要填 85 当 8.5 折。'
 }
 
 export function getCouponDateRangeError(dateRange: CouponFormModel['dateRange']): string {
@@ -238,9 +258,15 @@ export function getCouponTypeShortLabel(type: AdminCouponType): string {
 
 export function formatCouponValue(coupon: Pick<AdminCouponListItem, 'type' | 'value'>): string {
   if (coupon.type === 1) {
-    return `¥${(coupon.value / 100).toFixed(2).replace(/\.00$/, '')}`
+    return `减免 ¥${(coupon.value / 100).toFixed(2).replace(/\.00$/, '')}`
   }
-  return `${coupon.value}%`
+
+  const discountPercent = Number(coupon.value)
+  if (!Number.isFinite(discountPercent)) {
+    return '减免 -'
+  }
+
+  return `减免 ${discountPercent}%（${formatPayableRatioLabel(discountPercent)}）`
 }
 
 export function filterCoupons(

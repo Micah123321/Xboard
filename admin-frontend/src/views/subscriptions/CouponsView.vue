@@ -172,7 +172,9 @@ onMounted(() => {
       <div class="coupons-copy">
         <p class="coupons-kicker">Promotions</p>
         <h1>优惠券管理</h1>
-        <span>在这里可以查看和维护优惠券，包括启用、筛选、批量生成、编辑与删除等操作。</span>
+        <span>
+          维护金额减免与比例减免券。比例值表示「减免百分比」，不是“几折”；例如 20 = 减免 20%（约 8 折），85 = 减免 85%（实付 15%）。
+        </span>
       </div>
 
       <div class="hero-stats">
@@ -232,7 +234,7 @@ onMounted(() => {
             />
           </template>
         </ElTableColumn>
-        <ElTableColumn label="券名称" min-width="200">
+        <ElTableColumn label="券名称" min-width="240">
           <template #default="{ row }">
             <div class="name-cell">
               <strong>{{ row.name }}</strong>

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.10.1] - 2026-07-12
+
+### 快速修改
+- **[admin-frontend / coupons]**: 修正优惠券比例语义文案——后端 `value` 是减免百分比，不是中文“几折”；编辑页说明、列表展示与校验同步改为「减免 X% / 实付 Y%」，避免把 85 填成“85 折”导致超低价单 — by hlm123
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/utils/coupons.ts, admin-frontend/src/views/subscriptions/CouponEditorDialog.vue, admin-frontend/src/views/subscriptions/CouponsView.vue
+
 ## [0.10.0] - 2026-07-10
 
 ### 新功能
