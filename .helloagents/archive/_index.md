@@ -7,6 +7,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202607150043 | fix-offline-node-distribution | implementation | subscription-protocols,node-auto-online | - | ✅完成 |
 | 202606240054 | fix-auto-online-forward-child-runtime | implementation | node-auto-online | fix-auto-online-forward-child-runtime#D001 | ✅完成 |
 | 202606141635 | fix-auto-online-child-offline | - | - | - | ✅完成 |
 | 202606130205 | child-runtime-cache-fallback | implementation | node-auto-online | child-runtime-cache-fallback#D001 | ✅完成 |
@@ -68,6 +69,9 @@
 | 202604161655 | merge-upstream-preserve-local | - | - | - | ✅完成 |
 
 ## 按月归档
+
+### 2026-07
+- [202607150043_fix-offline-node-distribution](./2026-07/202607150043_fix-offline-node-distribution/) - 修复离线节点仍进入用户节点列表、订阅分发和 App 自动选择候选的问题；标准入口统一排除 `STATUS_OFFLINE`，保留两种在线状态，并在心跳恢复后自动重新加入
 
 ### 2026-06
 - [202606240054_fix-auto-online-forward-child-runtime](./2026-06/202606240054_fix-auto-online-forward-child-runtime/) - 修复自动上线仅看自身心跳导致只由父入口上报运行缓存的转发子节点被定时同步误隐藏的问题，`ServerAutoOnlineService` 使用 `available_status` 作为有效运行状态来源，同时保留父子显隐隔离

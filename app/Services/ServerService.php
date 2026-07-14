@@ -63,7 +63,9 @@ class ServerService
             })
             ->orderBy('sort', 'ASC')
             ->get()
-            ->append(['last_check_at', 'last_push_at', 'online', 'is_online', 'available_status', 'cache_key', 'server_key']);
+            ->append(['last_check_at', 'last_push_at', 'online', 'is_online', 'available_status', 'cache_key', 'server_key'])
+            ->filter(fn (Server $server) => $server->available_status !== Server::STATUS_OFFLINE)
+            ->values();
 
         $servers = collect($servers)->map(function ($server) use ($user) {
             // 判断动态端口

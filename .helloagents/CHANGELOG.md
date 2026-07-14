@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## [0.10.2] - 2026-07-15
+
+### 修复
+- **[subscription-protocols]**: 修复离线节点仍进入用户节点分发和客户端自动选择候选的问题；标准分发入口现在统一排除 `STATUS_OFFLINE`，保留两种在线状态，并在节点恢复心跳后自动重新加入，同时补充真实订阅与 ETag 回归测试 — by hlm123
+  - 方案: [202607150043_fix-offline-node-distribution](archive/2026-07/202607150043_fix-offline-node-distribution/)
+
 ## [0.10.1] - 2026-07-12
 
 ### 快速修改
