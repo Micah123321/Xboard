@@ -174,6 +174,7 @@ export interface AdminPlanOption {
   transfer_enable?: number | null
   group_id?: number | null
   users_count?: number
+  orders_count?: number
   active_users_count?: number
   group?: AdminGroupOption | null
 }

@@ -485,8 +485,15 @@ export function updatePlan(id: number, payload: Partial<Pick<AdminPlanListItem, 
   })
 }
 
-export function deletePlan(id: number): Promise<ApiResponse<boolean>> {
-  return unwrapPost<boolean>('/plan/drop', { id })
+export function deletePlan(id: number, replacementPlanId?: number): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/plan/drop', {
+    id,
+    replacement_plan_id: replacementPlanId,
+  })
+}
+
+export function copyPlan(id: number): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/plan/copy', { id })
 }
 
 export function sortPlans(ids: number[]): Promise<ApiResponse<boolean>> {

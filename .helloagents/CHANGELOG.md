@@ -17,6 +17,13 @@
 - **[subscription-protocols]**: 修复离线节点仍进入用户节点分发和客户端自动选择候选的问题；标准分发入口现在统一排除 `STATUS_OFFLINE`，保留两种在线状态，并在节点恢复心跳后自动重新加入，同时补充真实订阅与 ETag 回归测试 — by hlm123
   - 方案: [202607150043_fix-offline-node-distribution](archive/2026-07/202607150043_fix-offline-node-distribution/)
 
+## [0.11.0] - 2026-07-29
+
+### 新功能
+- **[admin-frontend / subscription-plans]**: 套餐管理支持选择替代套餐后强制删除关联套餐，后端在事务中锁定并迁移订单和用户的 `plan_id`，并为关联字段补充索引；新增套餐复制操作，复制全部配置并将名称追加 `--复制` — by hlm123
+  - 方案: [202607292129_plan-force-delete-copy](archive/2026-07/202607292129_plan-force-delete-copy/)
+  - 决策: plan-force-delete-copy#D001(后端事务迁移后删除)
+
 ## [0.10.1] - 2026-07-12
 
 ### 快速修改

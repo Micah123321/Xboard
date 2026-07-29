@@ -21,6 +21,7 @@ class PlanController extends Controller
             ])
             ->withCount([
                 'users',
+                'orders',
                 'users as active_users_count' => function ($query) {
                     $query->where(function ($q) {
                         $q->where('expired_at', '>', time())
@@ -71,19 +72,83 @@ class PlanController extends Controller
 
     public function drop(Request $request)
     {
-        if (Order::where('plan_id', $request->input('id'))->first()) {
-            return $this->fail([400201, '该订阅下存在订单无法删除']);
+        $params = $request->validate([
+            'id' => 'required|integer',
+            'replacement_plan_id' => 'nullable|integer',
+        ]);
+
+        try {
+            return DB::transaction(function () use ($params) {
+                $plan = Plan::lockForUpdate()->find($params['id']);
+                if (!$plan) {
+                    return $this->fail([400202, '该订阅不存在']);
+                }
+
+                $relatedOrderIds = Order::where('plan_id', $plan->id)
+                    ->lockForUpdate()
+                    ->pluck('id');
+                $relatedUserIds = User::where('plan_id', $plan->id)
+                    ->lockForUpdate()
+                    ->pluck('id');
+                $hasRelatedRecords = $relatedOrderIds->isNotEmpty() || $relatedUserIds->isNotEmpty();
+
+                if ($hasRelatedRecords) {
+                    $replacementPlanId = isset($params['replacement_plan_id'])
+                        ? (int) $params['replacement_plan_id']
+                        : null;
+                    if (!$replacementPlanId || $replacementPlanId === $plan->id) {
+                        return $this->fail([400201, '请选择其他套餐作为替代套餐']);
+                    }
+
+                    $replacementPlan = Plan::lockForUpdate()->find($replacementPlanId);
+                    if (!$replacementPlan) {
+                        return $this->fail([400202, '替代套餐不存在']);
+                    }
+
+                    if ($relatedOrderIds->isNotEmpty()) {
+                        Order::whereIn('id', $relatedOrderIds)->update(['plan_id' => $replacementPlan->id]);
+                    }
+                    if ($relatedUserIds->isNotEmpty()) {
+                        User::whereIn('id', $relatedUserIds)->update(['plan_id' => $replacementPlan->id]);
+                    }
+                }
+
+                return $this->success($plan->delete());
+            });
+        } catch (\Exception $e) {
+            Log::error($e);
+            return $this->fail([500, '删除失败']);
         }
-        if (User::where('plan_id', $request->input('id'))->first()) {
-            return $this->fail([400201, '该订阅下存在用户无法删除']);
+    }
+
+    public function copy(Request $request)
+    {
+        $params = $request->validate([
+            'id' => 'required|integer',
+        ]);
+
+        try {
+            return DB::transaction(function () use ($params) {
+                $plan = Plan::lockForUpdate()->find($params['id']);
+                if (!$plan) {
+                    return $this->fail([400202, '该订阅不存在']);
+                }
+
+                $lastPlan = Plan::lockForUpdate()
+                    ->orderByDesc('sort')
+                    ->orderByDesc('id')
+                    ->first();
+                $copy = $plan->replicate();
+                $copy->name = "{$plan->name}--复制";
+                $copy->sort = ((int) ($lastPlan?->sort ?? 0)) + 1;
+                $copy->save();
+
+                return $this->success(true);
+            });
+        } catch (\Exception $e) {
+            Log::error($e);
+            return $this->fail([500, '复制失败']);
         }
-        
-        $plan = Plan::find($request->input('id'));
-        if (!$plan) {
-            return $this->fail([400202, '该订阅不存在']);
-        }
-        
-        return $this->success($plan->delete());
     }
 
     public function update(Request $request)

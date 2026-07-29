@@ -60,6 +60,7 @@ class AdminRoute
                 $router->get('/fetch', [PlanController::class, 'fetch']);
                 $router->post('/save', [PlanController::class, 'save']);
                 $router->post('/drop', [PlanController::class, 'drop']);
+                $router->post('/copy', [PlanController::class, 'copy']);
                 $router->post('/update', [PlanController::class, 'update']);
                 $router->post('/sort', [PlanController::class, 'sort']);
             });

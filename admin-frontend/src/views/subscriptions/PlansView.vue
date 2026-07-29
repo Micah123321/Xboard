@@ -4,12 +4,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown,
   ArrowUp,
+  CopyDocument,
   Delete,
   EditPen,
   Plus,
   Search,
 } from '@element-plus/icons-vue'
 import {
+  copyPlan,
   deletePlan,
   getPlans,
   getServerGroups,
@@ -26,6 +28,7 @@ import {
   normalizePlanToggleFields,
 } from '@/utils/plans'
 import PlanEditorDrawer from './PlanEditorDrawer.vue'
+import PlanDeleteDialog from './PlanDeleteDialog.vue'
 
 type DrawerMode = 'create' | 'edit'
 type PlanToggleField = 'show' | 'sell' | 'renew'
@@ -36,6 +39,9 @@ const drawerVisible = ref(false)
 const drawerMode = ref<DrawerMode>('create')
 const activePlan = ref<AdminPlanListItem | null>(null)
 const sortDialogVisible = ref(false)
+const deleteDialogVisible = ref(false)
+const deleting = ref(false)
+const copyLoadingMap = ref<Record<number, boolean>>({})
 
 const keyword = ref('')
 const current = ref(1)
@@ -65,6 +71,10 @@ function getToggleKey(id: number, field: PlanToggleField): string {
 
 function isToggleLoading(id: number, field: PlanToggleField): boolean {
   return Boolean(toggleLoadingMap.value[getToggleKey(id, field)])
+}
+
+function isCopyLoading(id: number): boolean {
+  return Boolean(copyLoadingMap.value[id])
 }
 
 async function loadData() {
@@ -111,18 +121,50 @@ async function handleToggle(plan: AdminPlanListItem, field: PlanToggleField, nex
 }
 
 async function handleDelete(plan: AdminPlanListItem) {
+  activePlan.value = plan
+  deleteDialogVisible.value = true
+}
+
+async function submitDelete(replacementPlanId?: number) {
+  const plan = activePlan.value
+  if (!plan) {
+    return
+  }
+
+  deleting.value = true
   try {
-    await ElMessageBox.confirm(`删除套餐「${plan.name}」后无法恢复，确认继续吗？`, '删除套餐', {
-      type: 'warning',
-    })
-    await deletePlan(plan.id)
+    await deletePlan(plan.id, replacementPlanId)
     ElMessage.success('套餐已删除')
+    deleteDialogVisible.value = false
+    activePlan.value = null
+    await loadData()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '套餐删除失败')
+  } finally {
+    deleting.value = false
+  }
+}
+
+async function handleCopy(plan: AdminPlanListItem) {
+  if (isCopyLoading(plan.id)) {
+    return
+  }
+
+  copyLoadingMap.value[plan.id] = true
+  try {
+    await ElMessageBox.confirm(`复制套餐「${plan.name}」并创建一条新记录吗？`, '复制套餐', {
+      type: 'info',
+    })
+    await copyPlan(plan.id)
+    ElMessage.success('套餐已复制')
     await loadData()
   } catch (error) {
     if (error === 'cancel' || error === 'close') {
       return
     }
-    ElMessage.error(error instanceof Error ? error.message : '套餐删除失败')
+    ElMessage.error(error instanceof Error ? error.message : '套餐复制失败')
+  } finally {
+    copyLoadingMap.value[plan.id] = false
   }
 }
 
@@ -293,15 +335,31 @@ onMounted(() => {
             </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="操作" width="108" fixed="right">
+        <ElTableColumn label="操作" width="148" fixed="right">
           <template #default="{ row }">
             <div class="action-group">
-              <ElButton text class="action-btn" @click="openEditDrawer(row)">
-                <ElIcon><EditPen /></ElIcon>
-              </ElButton>
-              <ElButton text class="action-btn danger-btn" @click="handleDelete(row)">
-                <ElIcon><Delete /></ElIcon>
-              </ElButton>
+              <ElTooltip content="编辑套餐">
+                <ElButton text class="action-btn" aria-label="编辑套餐" @click="openEditDrawer(row)">
+                  <ElIcon><EditPen /></ElIcon>
+                </ElButton>
+              </ElTooltip>
+              <ElTooltip content="复制套餐">
+                <ElButton
+                  text
+                  class="action-btn"
+                  aria-label="复制套餐"
+                  :loading="isCopyLoading(row.id)"
+                  :disabled="isCopyLoading(row.id)"
+                  @click="handleCopy(row)"
+                >
+                  <ElIcon><CopyDocument /></ElIcon>
+                </ElButton>
+              </ElTooltip>
+              <ElTooltip content="删除套餐">
+                <ElButton text class="action-btn danger-btn" aria-label="删除套餐" @click="handleDelete(row)">
+                  <ElIcon><Delete /></ElIcon>
+                </ElButton>
+              </ElTooltip>
             </div>
           </template>
         </ElTableColumn>
@@ -326,6 +384,14 @@ onMounted(() => {
       :plan="activePlan"
       :groups="groups"
       @success="() => loadData()"
+    />
+
+    <PlanDeleteDialog
+      v-model:visible="deleteDialogVisible"
+      :plan="activePlan"
+      :plans="plans"
+      :submitting="deleting"
+      @submit="submitDelete"
     />
 
     <ElDialog

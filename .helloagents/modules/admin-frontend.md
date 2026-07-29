@@ -62,7 +62,7 @@
 - 路由管理页的节点引用摘要由 `server/manage/getNodes` 返回的 `route_ids` 推导，不在前端伪造额外接口
 - 节点页会读取路由查询中的 `group` 参数并自动应用对应权限组筛选，同时提供“管理权限组”入口回到权限组页；`/node-routes` 已升级为真实工作台
 - 订阅管理新增独立“订阅管理”侧边栏分组，现已完整实现 `#/subscriptions/plans`、`#/subscriptions/orders`、`#/subscriptions/coupons` 与 `#/subscriptions/gift-cards`
-- 套餐管理页使用真实后端 `plan/fetch`、`plan/save`、`plan/update`、`plan/drop`、`plan/sort` 与 `server/group/fetch`
+- 套餐管理页使用真实后端 `plan/fetch`、`plan/save`、`plan/update`、`plan/drop`、`plan/copy`、`plan/sort` 与 `server/group/fetch`；删除存在关联订单或用户的套餐时必须选择替代套餐，后端在同一事务中锁定并批量迁移关联记录后删除源套餐，`v2_user.plan_id` / `v2_order.plan_id` 通过索引支持关联扫描，列表可直接复制同配置套餐并在名称末尾追加 `--复制`
 - 侧边栏在低窗口高度下采用“顶部品牌区固定 + 菜单区独立纵向滚动”的结构，避免新增分组后底部导航入口被直接裁切
 - 套餐管理页渲染 `ElSwitch` 前，会先把 `show / sell / renew` 归一化成布尔值；开关事件若新旧值相同则直接短路，避免初始化阶段误写后台状态
 - 套餐说明编辑采用轻量 Markdown/HTML 编辑器与预览模式，不引入额外富文本依赖

@@ -65,6 +65,7 @@
   - `plan/save`
   - `plan/update`
   - `plan/drop`
+  - `plan/copy`
   - `plan/sort`
   - `server/group/fetch`
 - 管理端订单管理现已接入:
