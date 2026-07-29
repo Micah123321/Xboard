@@ -9,6 +9,7 @@ import type {
 import type { GiftCardOption, GiftCardTemplateStatusFilter } from '@/utils/giftCards'
 import {
   formatGiftCardDateTime,
+  formatGiftCardTypeLabel,
   getGiftCardTemplateRewardSummary,
 } from '@/utils/giftCards'
 
@@ -118,7 +119,7 @@ const pageSizeModel = computed({
       </ElTableColumn>
       <ElTableColumn label="类型" width="150">
         <template #default="{ row }">
-          <span class="pill pill--soft">{{ row.type_name }}</span>
+          <span class="pill pill--soft">{{ row.type_name || formatGiftCardTypeLabel(row.type, typeOptions) }}</span>
         </template>
       </ElTableColumn>
       <ElTableColumn label="奖励内容" min-width="260">

@@ -1,6 +1,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  batchDeleteGiftCardCodes,
   deleteGiftCardCode,
   deleteGiftCardTemplate,
   exportGiftCardCodes,
@@ -65,6 +66,7 @@ export function useGiftCardsManagement() {
   const codeCurrent = ref(1)
   const codePageSize = ref(20)
   const selectedBatchId = ref('')
+  const selectedCodeIds = ref<number[]>([])
 
   const usageKeyword = ref('')
   const usageCurrent = ref(1)
@@ -294,6 +296,50 @@ export function useGiftCardsManagement() {
     }
   }
 
+  function syncCodeSelection(selectedCodes: AdminGiftCardCodeItem[]) {
+    const visibleIds = new Set(visibleCodes.value.map((code) => code.id))
+    const selectedIds = new Set(selectedCodes.map((code) => code.id))
+
+    selectedCodeIds.value = [
+      ...selectedCodeIds.value.filter((id) => !visibleIds.has(id)),
+      ...selectedIds,
+    ].filter((id, index, ids) => ids.indexOf(id) === index)
+  }
+
+  async function handleSelectedCodeDelete() {
+    if (selectedCodeIds.value.length === 0) {
+      return
+    }
+
+    try {
+      const selectedCount = selectedCodeIds.value.length
+      await ElMessageBox.confirm(`将删除已选的 ${selectedCount} 个兑换码，且无法恢复，确认继续吗？`, '批量删除兑换码', {
+        type: 'warning',
+      })
+      const response = await batchDeleteGiftCardCodes(selectedCodeIds.value)
+      const result = response.data
+      const deletedCount = result?.deleted_count ?? 0
+      const skippedCount = result?.skipped_count ?? 0
+      const deletedIds = new Set(result?.deleted_ids ?? [])
+
+      selectedCodeIds.value = selectedCodeIds.value.filter((id) => !deletedIds.has(id))
+      await Promise.all([loadCodes(), loadStatistics()])
+
+      if (deletedCount > 0) {
+        ElMessage.success(skippedCount > 0
+          ? `已删除 ${deletedCount} 个兑换码，跳过 ${skippedCount} 个受保护兑换码`
+          : `已删除 ${deletedCount} 个兑换码`)
+      } else {
+        ElMessage.warning('未删除任何兑换码，所选项均受保护')
+      }
+    } catch (error) {
+      if (error === 'cancel' || error === 'close') {
+        return
+      }
+      ElMessage.error(error instanceof Error ? error.message : '批量删除兑换码失败')
+    }
+  }
+
   async function handleExportBatch() {
     if (!resolvedBatchId.value) {
       ElMessage.warning('请先选中一个批次后再导出')
@@ -330,6 +376,7 @@ export function useGiftCardsManagement() {
     codeTemplateFilter.value = 'all'
     codeStatusFilter.value = 'all'
     selectedBatchId.value = ''
+    selectedCodeIds.value = []
   }
 
   function resetUsageFilters() {
@@ -342,6 +389,10 @@ export function useGiftCardsManagement() {
 
   watch([codeKeyword, codeTemplateFilter, codeStatusFilter, codePageSize], () => {
     codeCurrent.value = 1
+  })
+
+  watch([codeKeyword, codeTemplateFilter, codeStatusFilter], () => {
+    selectedCodeIds.value = []
   })
 
   watch([usageKeyword, usagePageSize], () => {
@@ -401,6 +452,7 @@ export function useGiftCardsManagement() {
     filteredUsages,
     visibleUsages,
     resolvedBatchId,
+    selectedCodeIds,
     templateDrawerVisible,
     templateDrawerMode,
     activeTemplate,
@@ -416,11 +468,13 @@ export function useGiftCardsManagement() {
     handleCodeToggle,
     copyCode,
     handleCodeDelete,
+    handleSelectedCodeDelete,
     handleExportBatch,
     handleBatchGenerated,
     resetTemplateFilters,
     resetCodeFilters,
     resetUsageFilters,
+    syncCodeSelection,
     setSelectedBatchId: (batchId: string) => {
       selectedBatchId.value = batchId
     },

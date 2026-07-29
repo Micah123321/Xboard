@@ -104,6 +104,7 @@ async function submitCodeEdit() {
         :total="vm.filteredCodes.length"
         :templates="vm.templates"
         :resolved-batch-id="vm.resolvedBatchId"
+        :selected-count="vm.selectedCodeIds.length"
         @update:keyword="vm.codeKeyword = $event"
         @update:template-filter="vm.codeTemplateFilter = $event"
         @update:status-filter="vm.codeStatusFilter = $event"
@@ -116,6 +117,8 @@ async function submitCodeEdit() {
         @select-batch="vm.setSelectedBatchId($event)"
         @edit="openCodeEditor"
         @delete="vm.handleCodeDelete"
+        @delete-selected="vm.handleSelectedCodeDelete"
+        @selection-change="vm.syncCodeSelection"
         @toggle="vm.handleCodeToggle"
       />
 

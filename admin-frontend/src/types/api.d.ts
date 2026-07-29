@@ -535,6 +535,16 @@ export interface AdminGiftCardCodeUpdatePayload {
   status?: AdminGiftCardCodeStatus
 }
 
+export interface AdminGiftCardCodeBatchDeleteResult {
+  deleted_ids: number[]
+  deleted_count: number
+  skipped_count: number
+  skipped: Array<{
+    id: number
+    reason: string
+  }>
+}
+
 export interface AdminGiftCardUsageItem {
   id: number
   code: string

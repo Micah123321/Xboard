@@ -74,8 +74,8 @@
 - 订单页现支持勾选订单后批量确认邀请佣金；前端会提交已选订单 ID，后端仅同意真实待确认佣金记录，其余已选记录跳过并返回确认 / 跳过数量
 - 优惠券管理页使用真实后端 `coupon/fetch`、`coupon/generate`、`coupon/update` 与 `coupon/drop`，支持本地搜索、类型筛选、启停、删除与弹窗式新增/编辑
 - 优惠券编辑弹窗的有效期控件内部使用 Element Plus 支持的 `value-format="x"` 毫秒级时间戳字符串，保存前再转换为后端 `started_at` / `ended_at` 需要的秒级 Unix 时间戳
-- 礼品卡管理页使用真实后端 `gift-card/templates`、`gift-card/create-template`、`gift-card/update-template`、`gift-card/delete-template`、`gift-card/generate-codes`、`gift-card/codes`、`gift-card/toggle-code`、`gift-card/export-codes`、`gift-card/update-code`、`gift-card/delete-code`、`gift-card/usages`、`gift-card/statistics` 与 `gift-card/types`
-- 礼品卡工作台采用单页四页签结构，覆盖模板管理、兑换码管理、使用记录和统计数据；模板编辑使用分组式大抽屉，兑换码生成使用独立对话框
+- 礼品卡管理页使用真实后端 `gift-card/templates`、`gift-card/create-template`、`gift-card/update-template`、`gift-card/delete-template`、`gift-card/generate-codes`、`gift-card/codes`、`gift-card/toggle-code`、`gift-card/export-codes`、`gift-card/update-code`、`gift-card/delete-code`、`gift-card/batch-delete-codes`、`gift-card/usages`、`gift-card/statistics` 与 `gift-card/types`
+- 礼品卡工作台采用单页四页签结构，覆盖模板管理、兑换码管理、使用记录和统计数据；模板类型优先使用接口名称，缺失时按稳定的类型编号映射显示。兑换码列表支持跨分页多选和删除已选，后端仅删除未使用且没有使用记录的兑换码，并返回受保护项的跳过数量。
 - 礼品卡模板的 `conditions / rewards / limits / special_config` 映射统一收敛到 `src/utils/giftCards.ts`，避免表单展示结构与提交 JSON 结构漂移
 - 优惠券编辑弹窗支持金额/比例两种优惠类型、有效期范围、批量生成、自定义券码、指定周期与指定订阅限制
 - 系统管理新增独立“系统管理”侧边栏分组，当前已完整实现 `#/system/config`、`#/system/themes`、`#/system/plugins`、`#/system/notices`、`#/system/payments` 与 `#/system/knowledge`

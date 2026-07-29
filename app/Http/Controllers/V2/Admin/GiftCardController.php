@@ -65,7 +65,9 @@ class GiftCardController extends Controller
             ];
         })->values();
 
-        return $this->paginate( $templates);
+        $templates->setCollection($data);
+
+        return $this->paginate($templates);
     }
 
     /**
@@ -383,6 +385,8 @@ class GiftCardController extends Controller
             ];
         })->values();
 
+        $codes->setCollection($data);
+
         return $this->paginate($codes);
     }
 
@@ -617,6 +621,68 @@ class GiftCardController extends Controller
                 'error' => $e->getMessage(),
             ]);
             return $this->fail([500, '删除失败']);
+        }
+    }
+
+    /**
+     * 批量删除未使用且无使用记录的兑换码。
+     */
+    public function batchDeleteCodes(Request $request)
+    {
+        $validatedData = $request->validate([
+            'ids' => 'required|array|min:1|max:500',
+            'ids.*' => 'required|integer|distinct|exists:v2_gift_card_code,id',
+        ]);
+
+        try {
+            $result = DB::transaction(function () use ($validatedData) {
+                $codes = GiftCardCode::query()
+                    ->whereIn('id', $validatedData['ids'])
+                    ->withCount('usages')
+                    ->lockForUpdate()
+                    ->get();
+                $deletedIds = [];
+                $skipped = [];
+
+                foreach ($codes as $code) {
+                    if ($code->status === GiftCardCode::STATUS_USED) {
+                        $skipped[] = ['id' => $code->id, 'reason' => '兑换码已使用'];
+                        continue;
+                    }
+
+                    if ($code->usages_count > 0) {
+                        $skipped[] = ['id' => $code->id, 'reason' => '兑换码存在使用记录'];
+                        continue;
+                    }
+
+                    $code->delete();
+                    $deletedIds[] = $code->id;
+                }
+
+                return [
+                    'deleted_ids' => $deletedIds,
+                    'deleted_count' => count($deletedIds),
+                    'skipped_count' => count($skipped),
+                    'skipped' => $skipped,
+                ];
+            });
+
+            Log::info('批量删除礼品卡兑换码', [
+                'admin_id' => $request->user()->id,
+                'requested_count' => count($validatedData['ids']),
+                'deleted_count' => $result['deleted_count'],
+                'skipped_count' => $result['skipped_count'],
+            ]);
+
+            return $this->success($result);
+        } catch (\Exception $e) {
+            Log::error('批量删除礼品卡兑换码失败', [
+                'admin_id' => $request->user()->id,
+                'requested_count' => count($validatedData['ids']),
+                'error' => $e->getMessage(),
+            ]);
+
+            return $this->fail([500, '批量删除失败']);
         }
     }
 }

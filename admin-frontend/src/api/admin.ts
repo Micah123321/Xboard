@@ -10,6 +10,7 @@ import type {
   AdminOrderFetchParams,
   AdminOrderListItem,
   AdminGiftCardCodeGeneratePayload,
+  AdminGiftCardCodeBatchDeleteResult,
   AdminGiftCardCodeItem,
   AdminGiftCardCodeStatus,
   AdminGiftCardCodeUpdatePayload,
@@ -297,6 +298,10 @@ export function updateGiftCardCode(payload: AdminGiftCardCodeUpdatePayload): Pro
 
 export function deleteGiftCardCode(id: number): Promise<ApiResponse<{ message: string }>> {
   return unwrapPost<{ message: string }>('/gift-card/delete-code', { id })
+}
+
+export function batchDeleteGiftCardCodes(ids: number[]): Promise<ApiResponse<AdminGiftCardCodeBatchDeleteResult>> {
+  return unwrapPost<AdminGiftCardCodeBatchDeleteResult>('/gift-card/batch-delete-codes', { ids })
 }
 
 export function fetchGiftCardUsages(params: {

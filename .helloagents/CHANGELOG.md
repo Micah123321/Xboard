@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## [0.12.0] - 2026-07-29
+
+### 新功能
+- **[admin-frontend / gift-card]**: 兑换码管理新增跨页多选与“删除已选”操作；后端仅删除未使用且无使用记录的兑换码，并返回已删除和跳过统计，避免批量操作绕过现有保护规则 — by hlm123
+  - 方案: [202607292133_gift-card-type-and-code-bulk-delete](archive/2026-07/202607292133_gift-card-type-and-code-bulk-delete/)
+  - 决策: gift-card-type-and-code-bulk-delete#D001(批量删除只接受已选 ID)
+
+### 修复
+- **[admin-frontend / gift-card]**: 修复礼品卡模板和兑换码分页接口未使用映射后集合导致附加展示字段丢失的问题；模板类型列同时增加基于 `type` 的前端标签兜底 — by hlm123
+  - 方案: [202607292133_gift-card-type-and-code-bulk-delete](archive/2026-07/202607292133_gift-card-type-and-code-bulk-delete/)
+
 ## [0.10.2] - 2026-07-15
 
 ### 修复

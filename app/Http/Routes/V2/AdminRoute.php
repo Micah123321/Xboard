@@ -208,6 +208,7 @@ class AdminRoute
                 $router->get('/export-codes', [GiftCardController::class, 'exportCodes']);
                 $router->post('/update-code', [GiftCardController::class, 'updateCode']);
                 $router->post('/delete-code', [GiftCardController::class, 'deleteCode']);
+                $router->post('/batch-delete-codes', [GiftCardController::class, 'batchDeleteCodes']);
 
                 // Usage records
                 $router->any('/usages', [GiftCardController::class, 'usages']);

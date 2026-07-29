@@ -31,6 +31,7 @@ const props = defineProps<{
   total: number
   templates: AdminGiftCardTemplateItem[]
   resolvedBatchId: string
+  selectedCount: number
 }>()
 
 const emit = defineEmits<{
@@ -46,6 +47,8 @@ const emit = defineEmits<{
   (e: 'select-batch', batchId: string): void
   (e: 'edit', code: AdminGiftCardCodeItem): void
   (e: 'delete', code: AdminGiftCardCodeItem): void
+  (e: 'delete-selected'): void
+  (e: 'selection-change', codes: AdminGiftCardCodeItem[]): void
   (e: 'toggle', code: AdminGiftCardCodeItem, nextValue: string | number | boolean): void
 }>()
 
@@ -126,6 +129,10 @@ function isCodeToggleDisabled(code: AdminGiftCardCodeItem): boolean {
           <ElIcon><Download /></ElIcon>
           导出
         </ElButton>
+        <ElButton type="danger" :disabled="selectedCount === 0" @click="emit('delete-selected')">
+          <ElIcon><Delete /></ElIcon>
+          删除已选{{ selectedCount ? ` (${selectedCount})` : '' }}
+        </ElButton>
         <ElButton @click="emit('reset')">重置</ElButton>
       </div>
     </div>
@@ -139,7 +146,15 @@ function isCodeToggleDisabled(code: AdminGiftCardCodeItem): boolean {
 
     <ElAlert v-if="error" type="error" :closable="false" show-icon :title="error" />
 
-    <ElTable :data="codes" v-loading="loading" class="data-table" row-key="id" empty-text="当前筛选条件下暂无兑换码">
+    <ElTable
+      :data="codes"
+      v-loading="loading"
+      class="data-table"
+      row-key="id"
+      empty-text="当前筛选条件下暂无兑换码"
+      @selection-change="emit('selection-change', $event)"
+    >
+      <ElTableColumn type="selection" width="54" reserve-selection />
       <ElTableColumn prop="id" label="ID" width="88" />
       <ElTableColumn label="兑换码" min-width="260">
         <template #default="{ row }">
@@ -192,7 +207,7 @@ function isCodeToggleDisabled(code: AdminGiftCardCodeItem): boolean {
     </ElTable>
 
     <footer class="table-footer">
-      <span>已选择 0 项，共 {{ total }} 项</span>
+      <span>已选择 {{ selectedCount }} 项，共 {{ total }} 项</span>
       <ElPagination
         v-model:current-page="currentModel"
         v-model:page-size="pageSizeModel"
