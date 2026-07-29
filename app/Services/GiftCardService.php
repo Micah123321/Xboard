@@ -15,8 +15,8 @@ use Illuminate\Support\Facades\Log;
 
 class GiftCardService
 {
-    protected readonly GiftCardCode $code;
-    protected readonly GiftCardTemplate $template;
+    protected GiftCardCode $code;
+    protected GiftCardTemplate $template;
     protected ?User $user = null;
 
     public function __construct(string $code)
@@ -105,11 +105,22 @@ class GiftCardService
             throw new ApiException('未设置使用用户');
         }
 
-        return DB::transaction(function () use ($options) {
+        return $this->runRedeemTransaction(function () use ($options) {
+            // 服务可能在并发兑换提交前构造，必须基于锁定后的最新状态校验。
+            $this->code = $this->lockCodeForRedeem();
+            $this->template = $this->code->template
+                ?? throw new ApiException('礼品卡模板不存在');
+            $this->user = $this->lockUserForRedeem();
+            $this->validate();
+
             $actualRewards = $this->template->calculateActualRewards($this->user);
 
             if ($this->template->type === GiftCardTemplate::TYPE_MYSTERY) {
-                $this->code->setActualRewards($actualRewards);
+                $this->code->actual_rewards = $actualRewards;
+            }
+
+            if (!$this->code->markAsUsed($this->user)) {
+                throw new ApiException('兑换码状态更新失败');
             }
 
             $this->giveRewards($actualRewards);
@@ -118,8 +129,6 @@ class GiftCardService
             if ($this->user->invite_user_id && isset($actualRewards['invite_reward_rate'])) {
                 $inviteRewards = $this->giveInviteRewards($actualRewards);
             }
-
-            $this->code->markAsUsed($this->user);
 
             GiftCardUsage::createRecord(
                 $this->code,
@@ -138,6 +147,28 @@ class GiftCardService
                 'template_name' => $this->template->name,
             ];
         });
+    }
+
+    protected function runRedeemTransaction(callable $callback): mixed
+    {
+        return DB::transaction($callback);
+    }
+
+    protected function lockCodeForRedeem(): GiftCardCode
+    {
+        return GiftCardCode::query()
+            ->with('template')
+            ->lockForUpdate()
+            ->find($this->code->id)
+            ?? throw new ApiException('兑换码不存在');
+    }
+
+    protected function lockUserForRedeem(): User
+    {
+        return User::query()
+            ->lockForUpdate()
+            ->find($this->user->id)
+            ?? throw new ApiException('用户不存在');
     }
 
     /**
