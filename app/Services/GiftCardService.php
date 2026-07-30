@@ -128,7 +128,7 @@ class GiftCardService
 
             $actualRewards = $this->template->calculateActualRewards($this->user);
             if ($this->redemptionMode === self::REDEMPTION_MODE_TRAFFIC && isset($actualRewards['plan_id'])) {
-                $this->redemptionTrafficBytes = $this->redemptionService()->getTrafficBytes($actualRewards['plan_id']);
+                $this->redemptionTrafficBytes = $this->user->getRemainingTraffic();
             }
             $rewardsGiven = $this->redemptionService()->getRewardsGiven(
                 $actualRewards,
@@ -223,9 +223,18 @@ class GiftCardService
         }
 
         if (isset($rewards['plan_id']) && $this->redemptionMode === self::REDEMPTION_MODE_TRAFFIC) {
-            $trafficBytes = $this->redemptionTrafficBytes
-                ?? $this->redemptionService()->getTrafficBytes($rewards['plan_id']);
-            $userService->addTemporaryTraffic($this->user, $trafficBytes);
+            $plan = Plan::find($rewards['plan_id']);
+            if ($plan) {
+                $trafficBytes = $this->redemptionTrafficBytes ?? 0;
+                $userService->assignPlan(
+                    $this->user,
+                    $plan,
+                    $rewards['plan_validity_days'] ?? 0
+                );
+                if ($trafficBytes > 0) {
+                    $userService->addTemporaryTraffic($this->user, $trafficBytes);
+                }
+            }
         } elseif (isset($rewards['plan_id'])) {
             $plan = Plan::find($rewards['plan_id']);
             if ($plan) {

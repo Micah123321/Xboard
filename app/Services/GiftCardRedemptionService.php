@@ -36,11 +36,13 @@ class GiftCardRedemptionService
             return $options;
         }
 
+        $remainingTraffic = $user->getRemainingTraffic();
+
         $options[] = [
             'mode' => self::REDEMPTION_MODE_TRAFFIC,
             'label' => '追加流量',
-            'description' => '保留当前套餐和有效期，将礼品卡套餐的流量追加到当前账户。',
-            'transfer_enable' => (int) ($plan->transfer_enable * 1073741824),
+            'description' => '切换至礼品卡套餐，保留当前账户的剩余流量并追加到新套餐中。',
+            'transfer_enable' => $remainingTraffic,
         ];
 
         return $options;
@@ -74,9 +76,8 @@ class GiftCardRedemptionService
             return $rewards;
         }
 
-        $trafficBytes ??= $this->getTrafficBytes($rewards['plan_id']);
-        unset($rewards['plan_id'], $rewards['plan_validity_days']);
-        $rewards['transfer_enable'] = ($rewards['transfer_enable'] ?? 0) + $trafficBytes;
+        // 追加流量模式：保留 plan_id 和 plan_validity_days，追加用户剩余流量
+        $rewards['transfer_enable'] = ($rewards['transfer_enable'] ?? 0) + ($trafficBytes ?? 0);
 
         return $rewards;
     }
