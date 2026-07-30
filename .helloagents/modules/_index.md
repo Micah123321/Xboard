@@ -14,3 +14,4 @@
 | [subscription-protocols](subscription-protocols.md) | 用户节点运行态准入、订阅导出入口、协议适配器与客户端兼容过滤 | 2026-07-15 |
 | [user-frontend-access](user-frontend-access.md) | 用户前端首页访问开关与 API 保留边界 | 2026-04-29 |
 | [user-temporary-traffic](user-temporary-traffic.md) | 管理员分配一次性临时流量、套餐重置和套餐切换时的清理规则 | 2026-05-09 |
+| [user-gift-card](user-gift-card.md) | 用户礼品卡查询、双模式兑换和兑换记录 | 2026-07-29 |

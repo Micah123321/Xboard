@@ -15,9 +15,15 @@ use Illuminate\Support\Facades\Log;
 
 class GiftCardService
 {
+    public const REDEMPTION_MODE_PLAN = GiftCardRedemptionService::REDEMPTION_MODE_PLAN;
+    public const REDEMPTION_MODE_TRAFFIC = GiftCardRedemptionService::REDEMPTION_MODE_TRAFFIC;
+
     protected GiftCardCode $code;
     protected GiftCardTemplate $template;
     protected ?User $user = null;
+    protected string $redemptionMode = self::REDEMPTION_MODE_PLAN;
+    protected ?GiftCardRedemptionService $redemptionService = null;
+    protected ?int $redemptionTrafficBytes = null;
 
     public function __construct(string $code)
     {
@@ -112,8 +118,23 @@ class GiftCardService
                 ?? throw new ApiException('礼品卡模板不存在');
             $this->user = $this->lockUserForRedeem();
             $this->validate();
+            $this->redemptionTrafficBytes = null;
+
+            $this->redemptionMode = $this->redemptionService()->resolveMode(
+                $options['redemption_mode'] ?? null,
+                $this->template,
+                $this->user,
+            );
 
             $actualRewards = $this->template->calculateActualRewards($this->user);
+            if ($this->redemptionMode === self::REDEMPTION_MODE_TRAFFIC && isset($actualRewards['plan_id'])) {
+                $this->redemptionTrafficBytes = $this->redemptionService()->getTrafficBytes($actualRewards['plan_id']);
+            }
+            $rewardsGiven = $this->redemptionService()->getRewardsGiven(
+                $actualRewards,
+                $this->redemptionMode,
+                $this->redemptionTrafficBytes,
+            );
 
             if ($this->template->type === GiftCardTemplate::TYPE_MYSTERY) {
                 $this->code->actual_rewards = $actualRewards;
@@ -133,7 +154,7 @@ class GiftCardService
             GiftCardUsage::createRecord(
                 $this->code,
                 $this->user,
-                $actualRewards,
+                $rewardsGiven,
                 array_merge($options, [
                     'invite_rewards' => $inviteRewards,
                     'multiplier' => $this->calculateMultiplier(),
@@ -141,12 +162,18 @@ class GiftCardService
             );
 
             return [
-                'rewards' => $actualRewards,
+                'rewards' => $rewardsGiven,
                 'invite_rewards' => $inviteRewards,
                 'code' => $this->code->code,
                 'template_name' => $this->template->name,
+                'redemption_mode' => $this->redemptionMode,
             ];
         });
+    }
+
+    public function getRedemptionOptions(): array
+    {
+        return $this->redemptionService()->getOptions($this->template, $this->user);
     }
 
     protected function runRedeemTransaction(callable $callback): mixed
@@ -171,9 +198,6 @@ class GiftCardService
             ?? throw new ApiException('用户不存在');
     }
 
-    /**
-     * 发放奖励
-     */
     protected function giveRewards(array $rewards): void
     {
         $userService = app(UserService::class);
@@ -198,7 +222,11 @@ class GiftCardService
             }
         }
 
-        if (isset($rewards['plan_id'])) {
+        if (isset($rewards['plan_id']) && $this->redemptionMode === self::REDEMPTION_MODE_TRAFFIC) {
+            $trafficBytes = $this->redemptionTrafficBytes
+                ?? $this->redemptionService()->getTrafficBytes($rewards['plan_id']);
+            $userService->addTemporaryTraffic($this->user, $trafficBytes);
+        } elseif (isset($rewards['plan_id'])) {
             $plan = Plan::find($rewards['plan_id']);
             if ($plan) {
                 $userService->assignPlan(
@@ -218,6 +246,11 @@ class GiftCardService
         if (!$this->user->save()) {
             throw new ApiException('用户信息更新失败');
         }
+    }
+
+    protected function redemptionService(): GiftCardRedemptionService
+    {
+        return $this->redemptionService ??= new GiftCardRedemptionService();
     }
 
     /**

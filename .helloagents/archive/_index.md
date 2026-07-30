@@ -7,9 +7,10 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202607292143 | gift-card-redemption-modes | - | - | - | ✅完成 |
 | 202607292133 | gift-card-type-and-code-bulk-delete | - | - | - | ✅完成 |
-| 202607150043 | fix-offline-node-distribution | implementation | subscription-protocols,node-auto-online | - | ✅完成 |
 | 202607292129 | plan-force-delete-copy | - | - | - | ✅完成 |
+| 202607150043 | fix-offline-node-distribution | implementation | subscription-protocols,node-auto-online | - | ✅完成 |
 | 202606240054 | fix-auto-online-forward-child-runtime | implementation | node-auto-online | fix-auto-online-forward-child-runtime#D001 | ✅完成 |
 | 202606141635 | fix-auto-online-child-offline | - | - | - | ✅完成 |
 | 202606130205 | child-runtime-cache-fallback | implementation | node-auto-online | child-runtime-cache-fallback#D001 | ✅完成 |

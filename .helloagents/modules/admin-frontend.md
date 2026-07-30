@@ -76,6 +76,7 @@
 - 优惠券编辑弹窗的有效期控件内部使用 Element Plus 支持的 `value-format="x"` 毫秒级时间戳字符串，保存前再转换为后端 `started_at` / `ended_at` 需要的秒级 Unix 时间戳
 - 礼品卡管理页使用真实后端 `gift-card/templates`、`gift-card/create-template`、`gift-card/update-template`、`gift-card/delete-template`、`gift-card/generate-codes`、`gift-card/codes`、`gift-card/toggle-code`、`gift-card/export-codes`、`gift-card/update-code`、`gift-card/delete-code`、`gift-card/batch-delete-codes`、`gift-card/usages`、`gift-card/statistics` 与 `gift-card/types`
 - 礼品卡工作台采用单页四页签结构，覆盖模板管理、兑换码管理、使用记录和统计数据；模板类型优先使用接口名称，缺失时按稳定的类型编号映射显示。兑换码列表支持跨分页多选和删除已选，后端仅删除未使用且没有使用记录的兑换码，并返回受保护项的跳过数量。
+- 用户礼品卡兑换接口支持套餐礼品卡的 `plan` / `traffic` 两种模式；有效订阅用户可选择切换套餐或追加目标套餐流量，Micah 主题必须展示后端返回的选项说明并提交 `redemption_mode`，追加模式使用 `temporary_transfer_enable` 记录当前周期临时流量。
 - 礼品卡模板的 `conditions / rewards / limits / special_config` 映射统一收敛到 `src/utils/giftCards.ts`，避免表单展示结构与提交 JSON 结构漂移
 - 优惠券编辑弹窗支持金额/比例两种优惠类型、有效期范围、批量生成、自定义券码、指定周期与指定订阅限制
 - 系统管理新增独立“系统管理”侧边栏分组，当前已完整实现 `#/system/config`、`#/system/themes`、`#/system/plugins`、`#/system/notices`、`#/system/payments` 与 `#/system/knowledge`

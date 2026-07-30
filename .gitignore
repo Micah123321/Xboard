@@ -31,3 +31,7 @@ bun.lockb
 compose.yaml
 .scribe
 .ace-tool/
+.playwright-cli
+.helloagents/
+.helloagents/**
+output/

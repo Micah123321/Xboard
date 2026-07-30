@@ -37,6 +37,7 @@ class GiftCardController extends Controller
                 'reward_preview' => $rewardPreview,
                 'can_redeem' => $eligibility['can_redeem'],
                 'reason' => $eligibility['reason'],
+                'redemption_options' => $giftCardService->getRedemptionOptions(),
             ]);
 
         } catch (ApiException $e) {
@@ -64,6 +65,7 @@ class GiftCardController extends Controller
 
             // 使用礼品卡
             $result = $giftCardService->redeem([
+                'redemption_mode' => $request->input('redemption_mode'),
                 // 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
             ]);
@@ -79,6 +81,7 @@ class GiftCardController extends Controller
                 'rewards' => $result['rewards'],
                 'invite_rewards' => $result['invite_rewards'],
                 'template_name' => $result['template_name'],
+                'redemption_mode' => $result['redemption_mode'],
             ]);
 
         } catch (ApiException $e) {

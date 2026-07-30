@@ -25,6 +25,7 @@ class GiftCardRedeemRequest extends FormRequest
     {
         return [
             'code' => 'required|string|min:8|max:32',
+            'redemption_mode' => 'nullable|in:plan,traffic',
         ];
     }
 
@@ -39,6 +40,7 @@ class GiftCardRedeemRequest extends FormRequest
             'code.required' => '请输入兑换码',
             'code.min' => '兑换码长度不能少于8位',
             'code.max' => '兑换码长度不能超过32位',
+            'redemption_mode.in' => '无效的礼品卡兑换方式',
         ];
     }
 }

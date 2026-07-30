@@ -113,6 +113,7 @@
 
 - 主仓仍以 Laravel 为后端真相源
 - 用户当前总流量仍以 `v2_user.transfer_enable` 为读取真相源；管理员一次性临时流量通过 `temporary_transfer_enable` 记录来源，只在重置或套餐重写时用于扣回和清空
+- 用户礼品卡兑换支持套餐卡的 `plan` / `traffic` 模式；`traffic` 模式保留当前套餐并通过 `temporary_transfer_enable` 追加目标套餐流量，模式和额度均以后端为准
 - `admin-frontend` 负责独立管理后台 UI 与交互逻辑
 - `admin-frontend` 现在同时支持两种交付路径：仓内构建产物写回 `public/assets/admin`，或独立构建为 GHCR 静态镜像供 compose 分支部署
 - `deploy/xboard-server/` 是可复制到服务器的一键部署模板，包含 `web / horizon / scheduler / admin / ws-server / redis` Compose 拓扑、`.env.example`、初始化/部署/更新/状态检查脚本和部署说明

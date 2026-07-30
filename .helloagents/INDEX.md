@@ -4,7 +4,7 @@
 kb_version: 2
 project: Xboard-new
 updated_at: 2026-06-14
-active_package: 202607100107_invite-visibility
+active_package:
 ```
 
 ## 项目概览
@@ -28,6 +28,7 @@ active_package: 202607100107_invite-visibility
 - [subscription-protocols](modules/subscription-protocols.md): 客户端订阅导出入口、协议适配器与版本兼容过滤
 - [user-frontend-access](modules/user-frontend-access.md): 用户前端首页访问开关与 API 保留边界
 - [user-temporary-traffic](modules/user-temporary-traffic.md): 管理员分配一次性临时流量、套餐重置和套餐切换时的清理规则
+- [user-gift-card](modules/user-gift-card.md): 用户礼品卡查询、双模式兑换和兑换记录
 
 ## 归档与变更
 

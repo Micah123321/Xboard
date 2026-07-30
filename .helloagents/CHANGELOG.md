@@ -3,6 +3,12 @@
 ## [0.12.0] - 2026-07-29
 
 ### 新功能
+- **[user-frontend / gift-card]**: 套餐礼品卡允许有效订阅用户在兑换前选择“切换套餐”或“追加流量”；追加模式保留当前套餐与有效期，使用后端计算的目标套餐流量累加到当前周期，并在 Micah 主题预览、确认框和成功结果中显示实际兑换内容 — by hlm123
+  - 方案: [202607292143_gift-card-redemption-modes](archive/2026-07/202607292143_gift-card-redemption-modes/)
+  - 决策: gift-card-redemption-modes#D001(使用后端兑换模式而非前端奖励参数)
+  - 文件: app/Services/GiftCardService.php, app/Services/GiftCardRedemptionService.php, app/Models/GiftCardTemplate.php, app/Http/Controllers/V1/User/GiftCardController.php, app/Http/Requests/User/GiftCardRedeemRequest.php, E:/code/vue/vue-xboard-theme-micah/src/views/finance/gift-card.vue
+
+### 新功能
 - **[admin-frontend / gift-card]**: 兑换码管理新增跨页多选与“删除已选”操作；后端仅删除未使用且无使用记录的兑换码，并返回已删除和跳过统计，避免批量操作绕过现有保护规则 — by hlm123
   - 方案: [202607292133_gift-card-type-and-code-bulk-delete](archive/2026-07/202607292133_gift-card-type-and-code-bulk-delete/)
   - 决策: gift-card-type-and-code-bulk-delete#D001(批量删除只接受已选 ID)
@@ -11,18 +17,18 @@
 - **[admin-frontend / gift-card]**: 修复礼品卡模板和兑换码分页接口未使用映射后集合导致附加展示字段丢失的问题；模板类型列同时增加基于 `type` 的前端标签兜底 — by hlm123
   - 方案: [202607292133_gift-card-type-and-code-bulk-delete](archive/2026-07/202607292133_gift-card-type-and-code-bulk-delete/)
 
-## [0.10.2] - 2026-07-15
-
-### 修复
-- **[subscription-protocols]**: 修复离线节点仍进入用户节点分发和客户端自动选择候选的问题；标准分发入口现在统一排除 `STATUS_OFFLINE`，保留两种在线状态，并在节点恢复心跳后自动重新加入，同时补充真实订阅与 ETag 回归测试 — by hlm123
-  - 方案: [202607150043_fix-offline-node-distribution](archive/2026-07/202607150043_fix-offline-node-distribution/)
-
 ## [0.11.0] - 2026-07-29
 
 ### 新功能
 - **[admin-frontend / subscription-plans]**: 套餐管理支持选择替代套餐后强制删除关联套餐，后端在事务中锁定并迁移订单和用户的 `plan_id`，并为关联字段补充索引；新增套餐复制操作，复制全部配置并将名称追加 `--复制` — by hlm123
   - 方案: [202607292129_plan-force-delete-copy](archive/2026-07/202607292129_plan-force-delete-copy/)
   - 决策: plan-force-delete-copy#D001(后端事务迁移后删除)
+
+## [0.10.2] - 2026-07-15
+
+### 修复
+- **[subscription-protocols]**: 修复离线节点仍进入用户节点分发和客户端自动选择候选的问题；标准分发入口现在统一排除 `STATUS_OFFLINE`，保留两种在线状态，并在节点恢复心跳后自动重新加入，同时补充真实订阅与 ETag 回归测试 — by hlm123
+  - 方案: [202607150043_fix-offline-node-distribution](archive/2026-07/202607150043_fix-offline-node-distribution/)
 
 ## [0.10.1] - 2026-07-12
 
