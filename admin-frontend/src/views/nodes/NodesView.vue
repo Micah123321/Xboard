@@ -47,6 +47,7 @@ import {
   formatNodeRate,
   getNodeGfwMeta,
   getNodeGfwTooltip,
+  getNodeGfwStatisticDetails,
   getNodeAddress,
   getNodeGroupNames,
   getNodeIdLabel,
@@ -1191,7 +1192,7 @@ watch(
                 placement="right-start"
                 trigger="hover"
                 popper-class="node-traffic-popover"
-                :width="360"
+                :width="420"
               >
                 <template #reference>
                   <button class="node-cell__main node-name-trigger" type="button">
@@ -1201,39 +1202,59 @@ watch(
                 </template>
                 <div class="node-traffic-card">
                   <header class="node-traffic-card__header">
-                    <span>流量统计</span>
+                    <span>节点详情</span>
                     <strong>{{ row.name }}</strong>
                   </header>
-                  <article
-                    v-for="traffic in getNodeTrafficDetails(row)"
-                    :key="`${row.id}-${traffic.key}`"
-                    class="node-traffic-row"
-                  >
-                    <div class="node-traffic-row__summary">
-                      <span>{{ traffic.label }}</span>
-                      <strong>{{ traffic.total }}</strong>
+                  <section class="node-detail-section">
+                    <header class="node-detail-section__header">流量统计</header>
+                    <article
+                      v-for="traffic in getNodeTrafficDetails(row)"
+                      :key="`${row.id}-${traffic.key}`"
+                      class="node-traffic-row"
+                    >
+                      <div class="node-traffic-row__summary">
+                        <span>{{ traffic.label }}</span>
+                        <strong>{{ traffic.total }}</strong>
+                      </div>
+                      <div class="node-traffic-row__split">
+                        <span>上行 {{ traffic.upload }}</span>
+                        <span>下行 {{ traffic.download }}</span>
+                      </div>
+                    </article>
+                    <article
+                      v-if="getNodeTrafficLimitDetail(row).enabled"
+                      class="node-traffic-row node-traffic-row--limit"
+                    >
+                      <div class="node-traffic-row__summary">
+                        <span>月额度</span>
+                        <strong>{{ getNodeTrafficLimitDetail(row).used }} / {{ getNodeTrafficLimitDetail(row).limit }}</strong>
+                      </div>
+                      <div class="node-traffic-limit-bar">
+                        <span :style="{ width: `${getNodeTrafficLimitDetail(row).percent}%` }" />
+                      </div>
+                      <div class="node-traffic-row__split">
+                        <span>{{ getNodeTrafficLimitDetail(row).statusLabel }}</span>
+                        <span>{{ getNodeTrafficLimitDetail(row).nextReset }}</span>
+                      </div>
+                    </article>
+                  </section>
+                  <section class="node-detail-section">
+                    <header class="node-detail-section__header">
+                      <span>节点统计</span>
+                      <small>{{ getNodeGfwMeta(row).label }}</small>
+                    </header>
+                    <div class="node-gfw-stat-grid">
+                      <article
+                        v-for="stat in getNodeGfwStatisticDetails(row)"
+                        :key="`${row.id}-${stat.key}`"
+                        class="node-gfw-stat"
+                      >
+                        <span>{{ stat.label }}</span>
+                        <strong>{{ stat.value }}</strong>
+                        <small v-if="stat.hint">{{ stat.hint }}</small>
+                      </article>
                     </div>
-                    <div class="node-traffic-row__split">
-                      <span>上行 {{ traffic.upload }}</span>
-                      <span>下行 {{ traffic.download }}</span>
-                    </div>
-                  </article>
-                  <article
-                    v-if="getNodeTrafficLimitDetail(row).enabled"
-                    class="node-traffic-row node-traffic-row--limit"
-                  >
-                    <div class="node-traffic-row__summary">
-                      <span>月额度</span>
-                      <strong>{{ getNodeTrafficLimitDetail(row).used }} / {{ getNodeTrafficLimitDetail(row).limit }}</strong>
-                    </div>
-                    <div class="node-traffic-limit-bar">
-                      <span :style="{ width: `${getNodeTrafficLimitDetail(row).percent}%` }" />
-                    </div>
-                    <div class="node-traffic-row__split">
-                      <span>{{ getNodeTrafficLimitDetail(row).statusLabel }}</span>
-                      <span>{{ getNodeTrafficLimitDetail(row).nextReset }}</span>
-                    </div>
-                  </article>
+                  </section>
                 </div>
               </ElPopover>
               <div class="node-cell__sub">
@@ -1761,6 +1782,32 @@ watch(
   line-height: 1.25;
 }
 
+:global(.node-detail-section) {
+  display: grid;
+  gap: 8px;
+}
+
+:global(.node-detail-section__header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px;
+  color: rgba(0, 0, 0, 0.52);
+  font-size: 12px;
+  line-height: 1.33;
+}
+
+:global(.node-detail-section__header small) {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(0, 0, 0, 0.42);
+  font-size: 12px;
+  line-height: 1.33;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 :global(.node-traffic-row) {
   display: grid;
   gap: 8px;
@@ -1797,6 +1844,48 @@ watch(
 
 :global(.node-traffic-row--limit) {
   background: #fff7ed;
+}
+
+:global(.node-gfw-stat-grid) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+:global(.node-gfw-stat) {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #eef7f2;
+}
+
+:global(.node-gfw-stat:first-child) {
+  grid-column: 1 / -1;
+  background: #f5f5f7;
+}
+
+:global(.node-gfw-stat span),
+:global(.node-gfw-stat small) {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(0, 0, 0, 0.56);
+  font-size: 12px;
+  line-height: 1.33;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.node-gfw-stat strong) {
+  min-width: 0;
+  overflow: hidden;
+  color: #0f766e;
+  font-size: 16px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 :global(.node-traffic-limit-bar) {

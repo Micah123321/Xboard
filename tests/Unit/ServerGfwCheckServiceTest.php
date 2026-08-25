@@ -199,6 +199,54 @@ class ServerGfwCheckServiceTest extends TestCase
         $this->assertFalse($fresh->gfw_auto_hidden);
     }
 
+    public function test_decorate_servers_includes_blocked_duration_statistics_and_child_inherits_them(): void
+    {
+        $parent = $this->makeServer(['name' => 'gfw-stat-parent']);
+        $child = $this->makeServer([
+            'name' => 'gfw-stat-child',
+            'parent_id' => $parent->id,
+        ]);
+        $base = now()->subDays(30)->timestamp;
+        $day = 86400;
+
+        foreach ([
+            [ServerGfwCheck::STATUS_NORMAL, 0],
+            [ServerGfwCheck::STATUS_BLOCKED, 1],
+            [ServerGfwCheck::STATUS_BLOCKED, 2],
+            [ServerGfwCheck::STATUS_NORMAL, 4],
+            [ServerGfwCheck::STATUS_BLOCKED, 10],
+            [ServerGfwCheck::STATUS_NORMAL, 11],
+            [ServerGfwCheck::STATUS_BLOCKED, 20],
+            [ServerGfwCheck::STATUS_NORMAL, 22],
+        ] as [$status, $dayOffset]) {
+            ServerGfwCheck::create([
+                'server_id' => $parent->id,
+                'status' => $status,
+                'checked_at' => $base + ($day * $dayOffset),
+            ]);
+        }
+
+        $decorated = app(ServerGfwCheckService::class)->decorateServers(collect([$parent->fresh(), $child->fresh()]));
+        $parentCheck = $decorated->firstWhere('id', $parent->id)->getAttribute('gfw_check');
+        $childCheck = $decorated->firstWhere('id', $child->id)->getAttribute('gfw_check');
+
+        $expected = [
+            'blocked_count' => 3,
+            'average_duration_seconds' => 2 * $day,
+            'last_duration_seconds' => 2 * $day,
+            'max_duration_seconds' => 3 * $day,
+            'min_duration_seconds' => $day,
+            'current_blocked' => false,
+        ];
+
+        $this->assertSame($expected, $parentCheck['statistics']);
+        $this->assertFalse($parentCheck['inherited']);
+        $this->assertSame($parent->id, $parentCheck['source_node_id']);
+        $this->assertSame($expected, $childCheck['statistics']);
+        $this->assertTrue($childCheck['inherited']);
+        $this->assertSame($parent->id, $childCheck['source_node_id']);
+    }
+
     private function makeServer(array $attributes = []): Server
     {
         return Server::create(array_merge([

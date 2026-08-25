@@ -126,11 +126,17 @@ class ServerGfwCheckService
             ->values();
 
         $latestChecks = $this->latestChecksByServerIds($sourceIds);
+        $blockedStatistics = $this->blockedStatisticsByServerIds($sourceIds);
 
-        return $servers->map(function (Server $server) use ($latestChecks) {
+        return $servers->map(function (Server $server) use ($latestChecks, $blockedStatistics) {
             $sourceNodeId = (int) ($server->parent_id ?: $server->id);
             $check = $latestChecks->get($sourceNodeId);
-            $server->setAttribute('gfw_check', $this->formatCheck($check, (bool) $server->parent_id, $sourceNodeId));
+            $server->setAttribute('gfw_check', $this->formatCheck(
+                $check,
+                (bool) $server->parent_id,
+                $sourceNodeId,
+                $blockedStatistics[$sourceNodeId] ?? $this->emptyBlockedStatistics()
+            ));
             return $server;
         });
     }
@@ -298,13 +304,16 @@ class ServerGfwCheckService
         ];
     }
 
-    private function formatCheck(?ServerGfwCheck $check, bool $inherited, int $sourceNodeId): array
+    private function formatCheck(?ServerGfwCheck $check, bool $inherited, int $sourceNodeId, ?array $statistics = null): array
     {
+        $statistics ??= $this->emptyBlockedStatistics();
+
         if (!$check) {
             return [
                 'status' => 'unchecked',
                 'inherited' => $inherited,
                 'source_node_id' => $sourceNodeId,
+                'statistics' => $statistics,
             ];
         }
 
@@ -318,6 +327,7 @@ class ServerGfwCheckService
             'error_message' => $check->error_message,
             'checked_at' => $check->checked_at,
             'updated_at' => optional($check->updated_at)->timestamp,
+            'statistics' => $statistics,
         ];
     }
 
@@ -338,6 +348,111 @@ class ServerGfwCheckService
             ->get()
             ->groupBy('server_id')
             ->map(fn (Collection $items) => $items->first());
+    }
+
+    private function blockedStatisticsByServerIds($sourceIds): array
+    {
+        $ids = collect($sourceIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        $statistics = $ids
+            ->mapWithKeys(fn (int $id) => [$id => $this->emptyBlockedStatistics()])
+            ->all();
+
+        ServerGfwCheck::whereIn('server_id', $ids)
+            ->whereIn('status', ServerGfwCheck::FINAL_STATUSES)
+            ->orderBy('server_id')
+            ->orderBy('id')
+            ->get(['id', 'server_id', 'status', 'checked_at', 'created_at', 'updated_at'])
+            ->groupBy('server_id')
+            ->each(function (Collection $checks, $serverId) use (&$statistics): void {
+                $statistics[(int) $serverId] = $this->buildBlockedStatistics($checks);
+            });
+
+        return $statistics;
+    }
+
+    private function buildBlockedStatistics(Collection $checks): array
+    {
+        $periodDurations = [];
+        $periodStart = null;
+        $currentBlocked = false;
+        $now = now()->timestamp;
+
+        $orderedChecks = $checks
+            ->sortBy(function (ServerGfwCheck $check): string {
+                return str_pad((string) $this->resolveCheckTimestamp($check), 12, '0', STR_PAD_LEFT)
+                    . '-'
+                    . str_pad((string) $check->id, 12, '0', STR_PAD_LEFT);
+            })
+            ->values();
+
+        foreach ($orderedChecks as $check) {
+            $timestamp = $this->resolveCheckTimestamp($check);
+            if ($check->status === ServerGfwCheck::STATUS_BLOCKED) {
+                if ($periodStart === null) {
+                    $periodStart = $timestamp;
+                }
+                continue;
+            }
+
+            if ($periodStart !== null) {
+                $periodDurations[] = max(0, $timestamp - $periodStart);
+                $periodStart = null;
+            }
+        }
+
+        if ($periodStart !== null) {
+            $periodDurations[] = max(0, $now - $periodStart);
+            $currentBlocked = true;
+        }
+
+        if (empty($periodDurations)) {
+            return $this->emptyBlockedStatistics();
+        }
+
+        $totalDuration = array_sum($periodDurations);
+        $count = count($periodDurations);
+
+        return [
+            'blocked_count' => $count,
+            'average_duration_seconds' => (int) round($totalDuration / $count),
+            'last_duration_seconds' => (int) end($periodDurations),
+            'max_duration_seconds' => (int) max($periodDurations),
+            'min_duration_seconds' => (int) min($periodDurations),
+            'current_blocked' => $currentBlocked,
+        ];
+    }
+
+    private function emptyBlockedStatistics(): array
+    {
+        return [
+            'blocked_count' => 0,
+            'average_duration_seconds' => null,
+            'last_duration_seconds' => null,
+            'max_duration_seconds' => null,
+            'min_duration_seconds' => null,
+            'current_blocked' => false,
+        ];
+    }
+
+    private function resolveCheckTimestamp(ServerGfwCheck $check): int
+    {
+        $checkedAt = (int) ($check->checked_at ?: 0);
+        if ($checkedAt > 0) {
+            return $checkedAt;
+        }
+
+        return (int) (optional($check->updated_at)->timestamp
+            ?: optional($check->created_at)->timestamp
+            ?: now()->timestamp);
     }
 
     private function syncVisibilityFromStatus(Server $sourceNode, string $status): array

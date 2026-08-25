@@ -7,6 +7,7 @@ use App\Http\Resources\TrafficLogResource;
 use App\Models\CommissionLog;
 use App\Models\Order;
 use App\Models\Server;
+use App\Models\ServerGfwCheck;
 use App\Models\Stat;
 use App\Models\StatServer;
 use App\Models\StatUser;
@@ -15,9 +16,12 @@ use App\Models\User;
 use App\Services\StatisticalService;
 use App\Services\UserOnlineService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class StatController extends Controller
 {
+    private const GFW_RECENT_RECOVERY_WINDOW_SECONDS = 86400;
+
     private $service;
     public function __construct(StatisticalService $service)
     {
@@ -350,6 +354,7 @@ class StatController extends Controller
         $onlineNodes = Server::all()->filter(function ($server) {
             return !!$server->is_online;
         })->count();
+        $nodeGfwStats = $this->buildNodeGfwStats();
 
         // 获取在线设备数和在线用户数
         $onlineDevices = User::where('t', '>=', time() - 600)
@@ -481,6 +486,7 @@ class StatController extends Controller
 
                 // 节点相关
                 'onlineNodes' => $onlineNodes,
+                'nodeGfwStats' => $nodeGfwStats,
 
                 // 流量统计
                 'todayTraffic' => [
@@ -500,6 +506,116 @@ class StatController extends Controller
                 ]
             ]
         ];
+    }
+
+    private function buildNodeGfwStats(): array
+    {
+        $latestCheckIds = ServerGfwCheck::query()
+            ->selectRaw('MAX(id) as id')
+            ->whereIn('status', ServerGfwCheck::FINAL_STATUSES)
+            ->groupBy('server_id');
+
+        $latestRows = ServerGfwCheck::query()
+            ->joinSub($latestCheckIds, 'latest_gfw_checks', function ($join) {
+                $join->on('server_gfw_checks.id', '=', 'latest_gfw_checks.id');
+            })
+            ->join('v2_server', 'server_gfw_checks.server_id', '=', 'v2_server.id')
+            ->where(function ($query) {
+                $query->where('v2_server.gfw_check_enabled', true)
+                    ->orWhereNull('v2_server.gfw_check_enabled');
+            })
+            ->get([
+                'server_gfw_checks.id',
+                'server_gfw_checks.server_id',
+                'server_gfw_checks.status',
+                'server_gfw_checks.checked_at',
+                'server_gfw_checks.updated_at',
+                'v2_server.type',
+            ]);
+
+        $blockedRows = $latestRows
+            ->filter(fn ($row): bool => $row->status === ServerGfwCheck::STATUS_BLOCKED)
+            ->values();
+
+        return [
+            'blockedNodes' => $blockedRows->count(),
+            'recentRecoveredNodes' => $this->countRecentRecoveredGfwNodes($latestRows),
+            'recoveryWindowSeconds' => self::GFW_RECENT_RECOVERY_WINDOW_SECONDS,
+            'blockedProtocolDistribution' => $this->formatBlockedProtocolDistribution($blockedRows),
+        ];
+    }
+
+    private function countRecentRecoveredGfwNodes(Collection $latestRows): int
+    {
+        $since = time() - self::GFW_RECENT_RECOVERY_WINDOW_SECONDS;
+        $candidates = $latestRows
+            ->filter(function ($row) use ($since): bool {
+                return $row->status === ServerGfwCheck::STATUS_NORMAL
+                    && $this->resolveGfwCheckTimestamp($row) >= $since;
+            })
+            ->values();
+
+        if ($candidates->isEmpty()) {
+            return 0;
+        }
+
+        $latestIds = $candidates
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $serverIds = $candidates
+            ->pluck('server_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $previousChecks = ServerGfwCheck::whereIn('server_id', $serverIds)
+            ->whereIn('status', ServerGfwCheck::FINAL_STATUSES)
+            ->whereNotIn('id', $latestIds)
+            ->orderByDesc('id')
+            ->get(['id', 'server_id', 'status'])
+            ->groupBy('server_id')
+            ->map(fn (Collection $checks) => $checks->first());
+
+        return $candidates
+            ->filter(function ($row) use ($previousChecks): bool {
+                $previous = $previousChecks->get((int) $row->server_id);
+                return $previous && $previous->status === ServerGfwCheck::STATUS_BLOCKED;
+            })
+            ->count();
+    }
+
+    private function formatBlockedProtocolDistribution(Collection $blockedRows): array
+    {
+        $total = $blockedRows->count();
+        if ($total <= 0) {
+            return [];
+        }
+
+        return $blockedRows
+            ->groupBy(function ($row): string {
+                return Server::normalizeType((string) ($row->type ?? '')) ?: 'unknown';
+            })
+            ->map(function (Collection $items, string $type) use ($total): array {
+                $count = $items->count();
+                return [
+                    'type' => $type,
+                    'count' => $count,
+                    'percentage' => round($count / $total * 100, 1),
+                ];
+            })
+            ->sortByDesc('count')
+            ->values()
+            ->all();
+    }
+
+    private function resolveGfwCheckTimestamp($check): int
+    {
+        $checkedAt = (int) ($check->checked_at ?: 0);
+        if ($checkedAt > 0) {
+            return $checkedAt;
+        }
+
+        return (int) (optional($check->updated_at)->timestamp ?: 0);
     }
 
     /**

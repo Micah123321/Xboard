@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 import type { LocationQueryRaw } from 'vue-router'
 import {
   Coin,
+  Connection,
   DataAnalysis,
   Discount,
   Download,
@@ -45,6 +46,7 @@ import {
   type TrendMetric,
   type TimePreset,
 } from '@/utils/dashboard'
+import { getNodeTypeLabel } from '@/utils/nodes'
 import { useAppStore } from '@/stores/app'
 import QueueFailedJobsDialog from './QueueFailedJobsDialog.vue'
 
@@ -129,6 +131,12 @@ const dashboardStats = computed<DashboardStats>(() => overview.value ?? {
   onlineDevices: 0,
   ticketPendingTotal: 0,
   onlineNodes: 0,
+  nodeGfwStats: {
+    blockedNodes: 0,
+    recentRecoveredNodes: 0,
+    recoveryWindowSeconds: 86400,
+    blockedProtocolDistribution: [],
+  },
   todayTraffic: { upload: 0, download: 0, total: 0 },
   monthTraffic: { upload: 0, download: 0, total: 0 },
   totalTraffic: { upload: 0, download: 0, total: 0 },
@@ -225,9 +233,21 @@ const metricCards = computed<MetricCard[]>(() => [
   },
 ])
 
+const nodeGfwStats = computed(() => dashboardStats.value.nodeGfwStats)
+const blockedProtocolDistribution = computed(() => nodeGfwStats.value.blockedProtocolDistribution)
+const maxBlockedProtocolCount = computed(() => Math.max(
+  0,
+  ...blockedProtocolDistribution.value.map((item) => item.count),
+))
+const recoveryWindowLabel = computed(() => {
+  const hours = Math.max(1, Math.round(nodeGfwStats.value.recoveryWindowSeconds / 3600))
+  return `${hours}小时`
+})
+
 const heroMeta = computed(() => [
   `在线节点 ${formatCompactNumber(dashboardStats.value.onlineNodes)}`,
-  `在线用户 ${formatCompactNumber(dashboardStats.value.onlineUsers)}`,
+  `正在被墙 ${formatCompactNumber(nodeGfwStats.value.blockedNodes)}`,
+  `最近恢复 ${formatCompactNumber(nodeGfwStats.value.recentRecoveredNodes)}`,
   `总流量 ${formatTraffic(dashboardStats.value.totalTraffic.total)}`,
 ])
 
@@ -519,6 +539,11 @@ function rankBarWidth(index: number): string {
   return `${Math.max(28, 100 - index * 12)}%`
 }
 
+function protocolBarWidth(count: number): string {
+  if (maxBlockedProtocolCount.value <= 0) return '0%'
+  return `${Math.max(8, Math.round((count / maxBlockedProtocolCount.value) * 100))}%`
+}
+
 function rankScrollClass(limit: RankDisplayCount): string {
   return limit === 20 ? 'rank-scroll rank-scroll--extended' : 'rank-scroll'
 }
@@ -618,6 +643,46 @@ onMounted(() => {
           </span>
         </div>
       </component>
+    </section>
+
+    <section class="panel gfw-overview-panel">
+      <header class="panel-header gfw-overview-header">
+        <div>
+          <p class="panel-kicker">GFW</p>
+          <h2>墙检统计</h2>
+          <p class="panel-description">最近 {{ recoveryWindowLabel }} 恢复 {{ formatCompactNumber(nodeGfwStats.recentRecoveredNodes) }} 个节点</p>
+        </div>
+
+        <div class="gfw-summary-strip">
+          <article>
+            <span>正在被墙</span>
+            <strong>{{ formatCompactNumber(nodeGfwStats.blockedNodes) }}</strong>
+          </article>
+          <article>
+            <span>最近恢复</span>
+            <strong>{{ formatCompactNumber(nodeGfwStats.recentRecoveredNodes) }}</strong>
+          </article>
+        </div>
+      </header>
+
+      <div v-if="blockedProtocolDistribution.length" class="gfw-protocol-list">
+        <article
+          v-for="item in blockedProtocolDistribution"
+          :key="item.type"
+          class="gfw-protocol-row"
+        >
+          <div class="gfw-protocol-row__copy">
+            <ElIcon><Connection /></ElIcon>
+            <span>{{ getNodeTypeLabel(item.type) }}</span>
+          </div>
+          <div class="gfw-protocol-row__bar">
+            <span :style="{ width: protocolBarWidth(item.count) }" />
+          </div>
+          <strong>{{ formatCompactNumber(item.count) }}</strong>
+          <em>{{ item.percentage.toFixed(1) }}%</em>
+        </article>
+      </div>
+      <div v-else class="panel-state">暂无正在被墙节点</div>
     </section>
 
     <section class="content-grid">
@@ -1104,7 +1169,8 @@ onMounted(() => {
 
 .metrics-grid,
 .content-grid,
-.rank-grid {
+.rank-grid,
+.gfw-protocol-list {
   display: grid;
   gap: 18px;
 }
@@ -1233,6 +1299,98 @@ onMounted(() => {
 
 .panel {
   padding: 28px;
+}
+
+.gfw-overview-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.gfw-overview-header {
+  margin-bottom: 0;
+}
+
+.gfw-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: min(360px, 100%);
+}
+
+.gfw-summary-strip article {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #f5f5f7;
+}
+
+.gfw-summary-strip span,
+.gfw-protocol-row__copy span,
+.gfw-protocol-row em {
+  color: var(--xboard-text-muted);
+}
+
+.gfw-summary-strip strong {
+  color: #d92d20;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.gfw-protocol-list {
+  gap: 10px;
+}
+
+.gfw-protocol-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(160px, 1.4fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #fbfbfd;
+}
+
+.gfw-protocol-row__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.gfw-protocol-row__copy .el-icon {
+  color: #d92d20;
+}
+
+.gfw-protocol-row__copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gfw-protocol-row__bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.07);
+}
+
+.gfw-protocol-row__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #d92d20;
+}
+
+.gfw-protocol-row strong {
+  color: var(--xboard-text-strong);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gfw-protocol-row em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
 }
 
 .panel-header {
@@ -1618,7 +1776,8 @@ onMounted(() => {
   }
 
   .hero-status,
-  .panel-actions {
+  .panel-actions,
+  .gfw-summary-strip {
     width: 100%;
   }
 
@@ -1641,7 +1800,9 @@ onMounted(() => {
   .rank-grid,
   .status-grid,
   .trend-summary,
-  .snapshot-card {
+  .snapshot-card,
+  .gfw-summary-strip,
+  .gfw-protocol-row {
     grid-template-columns: 1fr;
   }
 

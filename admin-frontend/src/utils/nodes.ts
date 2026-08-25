@@ -1,4 +1,4 @@
-import type { AdminNodeItem, TrafficAmount } from '@/types/api'
+import type { AdminNodeGfwStatistics, AdminNodeItem, TrafficAmount } from '@/types/api'
 
 export type NodeRelationFilter = 'all' | 'parent' | 'child'
 export type NodeGfwFilter = 'all' | 'normal' | 'blocked' | 'partial' | 'failed' | 'unchecked' | 'checking' | 'inherited'
@@ -37,6 +37,13 @@ export interface NodeTrafficLimitDetail {
   statusLabel: string
   tagType: 'success' | 'warning' | 'danger' | 'info'
   nextReset: string
+}
+
+export interface NodeGfwStatisticDetail {
+  key: 'blocked_count' | 'average_duration' | 'last_duration' | 'max_duration' | 'min_duration'
+  label: string
+  value: string
+  hint?: string
 }
 
 type TrafficAmountLike = {
@@ -322,6 +329,81 @@ export function getNodeTrafficLimitDetail(node: AdminNodeItem): NodeTrafficLimit
     tagType,
     nextReset: formatTimestamp(nextResetAt),
   }
+}
+
+export function getNodeGfwStatisticDetails(node: AdminNodeItem): NodeGfwStatisticDetail[] {
+  const statistics = normalizeGfwStatistics(node.gfw_check?.statistics)
+
+  return [
+    {
+      key: 'blocked_count',
+      label: '总共被墙',
+      value: `${statistics.blocked_count} 次`,
+    },
+    {
+      key: 'average_duration',
+      label: '平均时长',
+      value: formatGfwDurationDays(statistics.average_duration_seconds),
+    },
+    {
+      key: 'last_duration',
+      label: '最后一次',
+      value: formatGfwDurationDays(statistics.last_duration_seconds),
+      hint: statistics.current_blocked ? '当前仍被墙' : undefined,
+    },
+    {
+      key: 'max_duration',
+      label: '最长时长',
+      value: formatGfwDurationDays(statistics.max_duration_seconds),
+    },
+    {
+      key: 'min_duration',
+      label: '最短时长',
+      value: formatGfwDurationDays(statistics.min_duration_seconds),
+    },
+  ]
+}
+
+function normalizeGfwStatistics(statistics?: AdminNodeGfwStatistics | null): Required<AdminNodeGfwStatistics> {
+  return {
+    blocked_count: Math.max(0, Math.trunc(Number(statistics?.blocked_count ?? 0)) || 0),
+    average_duration_seconds: normalizeOptionalDurationSeconds(statistics?.average_duration_seconds),
+    last_duration_seconds: normalizeOptionalDurationSeconds(statistics?.last_duration_seconds),
+    max_duration_seconds: normalizeOptionalDurationSeconds(statistics?.max_duration_seconds),
+    min_duration_seconds: normalizeOptionalDurationSeconds(statistics?.min_duration_seconds),
+    current_blocked: Boolean(statistics?.current_blocked),
+  }
+}
+
+function normalizeOptionalDurationSeconds(value?: number | string | null): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  const normalized = Number(value)
+  return Number.isFinite(normalized) && normalized >= 0 ? normalized : null
+}
+
+function formatGfwDurationDays(value?: number | string | null): string {
+  const seconds = normalizeOptionalDurationSeconds(value)
+  if (seconds === null) {
+    return '--'
+  }
+
+  const days = seconds / 86400
+  if (days <= 0) {
+    return '0 天'
+  }
+
+  if (days < 1) {
+    return `${Math.max(days, 0.01).toFixed(2)} 天`
+  }
+
+  if (days < 10) {
+    return `${days.toFixed(1)} 天`
+  }
+
+  return `${Math.round(days)} 天`
 }
 
 function formatTimestamp(value: number): string {

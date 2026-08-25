@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ChatLineRound,
@@ -58,6 +58,7 @@ const sidebarTickets = ref<AdminTicketListItem[]>([])
 const plans = ref<AdminPlanListItem[]>([])
 const activeTicketId = ref<number | null>(null)
 const detail = ref<AdminTicketDetail | null>(null)
+const messageThreadRef = ref<HTMLElement | null>(null)
 const keyword = ref('')
 const replyMessage = ref('')
 const userEditorVisible = ref(false)
@@ -125,12 +126,21 @@ async function loadSidebarTickets() {
   }
 }
 
+async function scrollMessageThreadToBottom() {
+  await nextTick()
+  const thread = messageThreadRef.value
+  if (thread) {
+    thread.scrollTop = thread.scrollHeight
+  }
+}
+
 async function loadDetail(id: number) {
   loadingDetail.value = true
   try {
     const response = await getTicketById(id)
     detail.value = response.data
     activeTicketId.value = id
+    await scrollMessageThreadToBottom()
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '工单详情加载失败')
   } finally {
@@ -552,7 +562,7 @@ watch(
             </div>
           </header>
 
-          <div class="message-thread">
+          <div ref="messageThreadRef" class="message-thread">
             <article
               v-for="message in detail.messages"
               :key="message.id"

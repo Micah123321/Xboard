@@ -23,6 +23,19 @@ export interface TrafficAmount {
   total: number
 }
 
+export interface DashboardGfwProtocolDistributionItem {
+  type: string
+  count: number
+  percentage: number
+}
+
+export interface DashboardNodeGfwStats {
+  blockedNodes: number
+  recentRecoveredNodes: number
+  recoveryWindowSeconds: number
+  blockedProtocolDistribution: DashboardGfwProtocolDistributionItem[]
+}
+
 export interface DashboardStats {
   todayIncome: number
   dayIncomeGrowth: number
@@ -42,6 +55,7 @@ export interface DashboardStats {
   onlineDevices: number
   ticketPendingTotal: number
   onlineNodes: number
+  nodeGfwStats: DashboardNodeGfwStats
   todayTraffic: TrafficAmount
   monthTraffic: TrafficAmount
   totalTraffic: TrafficAmount
@@ -1032,6 +1046,15 @@ export type AdminNodeGfwStatus =
   | 'failed'
   | 'skipped'
 
+export interface AdminNodeGfwStatistics {
+  blocked_count: number
+  average_duration_seconds?: number | null
+  last_duration_seconds?: number | null
+  max_duration_seconds?: number | null
+  min_duration_seconds?: number | null
+  current_blocked?: boolean
+}
+
 export interface AdminNodeGfwCheck {
   id?: number
   status: AdminNodeGfwStatus | string
@@ -1042,6 +1065,7 @@ export interface AdminNodeGfwCheck {
   error_message?: string | null
   checked_at?: number | null
   updated_at?: number | null
+  statistics?: AdminNodeGfwStatistics | null
 }
 
 export interface AdminNodeGfwCheckResult {
