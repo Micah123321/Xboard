@@ -19,6 +19,7 @@ use App\Utils\CacheKey;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class StatController extends Controller
 {
@@ -26,10 +27,11 @@ class StatController extends Controller
     private const TRAFFIC_RANK_CACHE_TTL_SECONDS = 60;
     private const GFW_RECENT_RECOVERY_WINDOW_SECONDS = 86400;
 
-    private $service;
-    public function __construct(StatisticalService $service)
+    private ?StatisticalService $service = null;
+
+    private function statisticalService(): StatisticalService
     {
-        $this->service = $service;
+        return $this->service ??= app(StatisticalService::class);
     }
     public function getOverride(Request $request)
     {
@@ -227,13 +229,13 @@ class StatController extends Controller
     // 获取当日实时流量排行
     public function getServerLastRank()
     {
-        $data = $this->service->getServerRank();
+        $data = $this->statisticalService()->getServerRank();
         return $this->success(data: $data);
     }
     // 获取昨日节点流量排行
     public function getServerYesterdayRank()
     {
-        $data = $this->service->getServerRank('yesterday');
+        $data = $this->statisticalService()->getServerRank('yesterday');
         return $this->success($data);
     }
 
@@ -337,7 +339,7 @@ class StatController extends Controller
     public function getStatRecord(Request $request)
     {
         return [
-            'data' => $this->service->getStatRecord($request->input('type'))
+            'data' => $this->statisticalService()->getStatRecord($request->input('type'))
         ];
     }
 
@@ -350,121 +352,41 @@ class StatController extends Controller
             return $this->buildStats();
         });
     }
-
     private function buildStats(): array
     {
+        $now = time();
+        $todayStart = strtotime('today');
+        $yesterdayStart = strtotime('-1 day', $todayStart);
         $currentMonthStart = strtotime(date('Y-m-01'));
         $lastMonthStart = strtotime('-1 month', $currentMonthStart);
         $twoMonthsAgoStart = strtotime('-2 month', $currentMonthStart);
 
-        // Today's start timestamp
-        $todayStart = strtotime('today');
-        $yesterdayStart = strtotime('-1 day', $todayStart);
-
-        // 获取在线节点数
         $onlineNodes = $this->countOnlineServers();
         $nodeGfwStats = $this->buildNodeGfwStats();
-
-        // 获取在线设备数和在线用户数
-        $onlineDevices = User::where('t', '>=', time() - 600)
-            ->sum('online_count');
-        $onlineUsers = User::where('t', '>=', time() - 600)
+        $userStats = $this->queryDashboardUserStats($now, $currentMonthStart, $lastMonthStart);
+        $orderStats = $this->queryDashboardOrderStats($now, $todayStart, $yesterdayStart, $currentMonthStart, $lastMonthStart, $twoMonthsAgoStart);
+        $commissionStats = $this->queryDashboardCommissionStats($now, $currentMonthStart, $lastMonthStart, $twoMonthsAgoStart);
+        $trafficStats = $this->queryDashboardTrafficStats($now, $todayStart, $currentMonthStart);
+        $ticketPendingTotal = (int) DB::table('v2_ticket')
+            ->where('status', Ticket::STATUS_OPENING)
             ->count();
 
-        // 获取今日流量统计
-        $todayTraffic = StatServer::where('record_at', '>=', $todayStart)
-            ->where('record_at', '<', time())
-            ->selectRaw('SUM(u) as upload, SUM(d) as download, SUM(u + d) as total')
-            ->first();
+        $currentMonthIncome = $orderStats['currentMonthIncome'];
+        $lastMonthIncome = $orderStats['lastMonthIncome'];
+        $twoMonthsAgoIncome = $orderStats['twoMonthsAgoIncome'];
+        $todayIncome = $orderStats['todayIncome'];
+        $yesterdayIncome = $orderStats['yesterdayIncome'];
+        $currentMonthCommissionPayout = $commissionStats['currentMonthCommissionPayout'];
+        $lastMonthCommissionPayout = $commissionStats['lastMonthCommissionPayout'];
+        $twoMonthsAgoCommission = $commissionStats['twoMonthsAgoCommission'];
+        $currentMonthNewUsers = $userStats['currentMonthNewUsers'];
+        $lastMonthNewUsers = $userStats['lastMonthNewUsers'];
 
-        // 获取本月流量统计
-        $monthTraffic = StatServer::where('record_at', '>=', $currentMonthStart)
-            ->where('record_at', '<', time())
-            ->selectRaw('SUM(u) as upload, SUM(d) as download, SUM(u + d) as total')
-            ->first();
-
-        // 获取总流量统计
-        $totalTraffic = StatServer::selectRaw('SUM(u) as upload, SUM(d) as download, SUM(u + d) as total')
-            ->first();
-
-        // Today's income
-        $todayIncome = Order::where('created_at', '>=', $todayStart)
-            ->where('created_at', '<', time())
-            ->whereNotIn('status', [0, 2])
-            ->sum('total_amount');
-
-        // Yesterday's income for day growth calculation
-        $yesterdayIncome = Order::where('created_at', '>=', $yesterdayStart)
-            ->where('created_at', '<', $todayStart)
-            ->whereNotIn('status', [0, 2])
-            ->sum('total_amount');
-
-        // Current month income
-        $currentMonthIncome = Order::where('created_at', '>=', $currentMonthStart)
-            ->where('created_at', '<', time())
-            ->whereNotIn('status', [0, 2])
-            ->sum('total_amount');
-
-        // Last month income
-        $lastMonthIncome = Order::where('created_at', '>=', $lastMonthStart)
-            ->where('created_at', '<', $currentMonthStart)
-            ->whereNotIn('status', [0, 2])
-            ->sum('total_amount');
-
-        // Last month commission payout
-        $lastMonthCommissionPayout = CommissionLog::where('created_at', '>=', $lastMonthStart)
-            ->where('created_at', '<', $currentMonthStart)
-            ->sum('get_amount');
-
-        // Current month commission payout
-        $currentMonthCommissionPayout = CommissionLog::where('created_at', '>=', $currentMonthStart)
-            ->where('created_at', '<', time())
-            ->sum('get_amount');
-
-        // Current month new users
-        $currentMonthNewUsers = User::where('created_at', '>=', $currentMonthStart)
-            ->where('created_at', '<', time())
-            ->count();
-
-        // Total users
-        $totalUsers = User::count();
-
-        // Active users (users with valid subscription)
-        $activeUsers = User::where(function ($query) {
-            $query->where('expired_at', '>=', time())
-                ->orWhere('expired_at', NULL);
-        })->count();
-
-        // Previous month income for growth calculation
-        $twoMonthsAgoIncome = Order::where('created_at', '>=', $twoMonthsAgoStart)
-            ->where('created_at', '<', $lastMonthStart)
-            ->whereNotIn('status', [0, 2])
-            ->sum('total_amount');
-
-        // Previous month commission for growth calculation
-        $twoMonthsAgoCommission = CommissionLog::where('created_at', '>=', $twoMonthsAgoStart)
-            ->where('created_at', '<', $lastMonthStart)
-            ->sum('get_amount');
-
-        // Previous month users for growth calculation
-        $lastMonthNewUsers = User::where('created_at', '>=', $lastMonthStart)
-            ->where('created_at', '<', $currentMonthStart)
-            ->count();
-
-        // Calculate growth rates
         $monthIncomeGrowth = $lastMonthIncome > 0 ? round(($currentMonthIncome - $lastMonthIncome) / $lastMonthIncome * 100, 1) : 0;
         $lastMonthIncomeGrowth = $twoMonthsAgoIncome > 0 ? round(($lastMonthIncome - $twoMonthsAgoIncome) / $twoMonthsAgoIncome * 100, 1) : 0;
         $commissionGrowth = $twoMonthsAgoCommission > 0 ? round(($lastMonthCommissionPayout - $twoMonthsAgoCommission) / $twoMonthsAgoCommission * 100, 1) : 0;
         $userGrowth = $lastMonthNewUsers > 0 ? round(($currentMonthNewUsers - $lastMonthNewUsers) / $lastMonthNewUsers * 100, 1) : 0;
         $dayIncomeGrowth = $yesterdayIncome > 0 ? round(($todayIncome - $yesterdayIncome) / $yesterdayIncome * 100, 1) : 0;
-
-        // 获取待处理工单和佣金数据
-        $ticketPendingTotal = Ticket::where('status', 0)->count();
-        $commissionPendingTotal = Order::where('commission_status', 0)
-            ->where('invite_user_id', '!=', NULL)
-            ->whereIn('status', [Order::STATUS_COMPLETED])
-            ->where('commission_balance', '>', 0)
-            ->count();
 
         return [
             'data' => [
@@ -480,15 +402,15 @@ class StatController extends Controller
                 'currentMonthCommissionPayout' => $currentMonthCommissionPayout,
                 'lastMonthCommissionPayout' => $lastMonthCommissionPayout,
                 'commissionGrowth' => $commissionGrowth,
-                'commissionPendingTotal' => $commissionPendingTotal,
+                'commissionPendingTotal' => $orderStats['commissionPendingTotal'],
 
                 // 用户相关
                 'currentMonthNewUsers' => $currentMonthNewUsers,
-                'totalUsers' => $totalUsers,
-                'activeUsers' => $activeUsers,
+                'totalUsers' => $userStats['totalUsers'],
+                'activeUsers' => $userStats['activeUsers'],
                 'userGrowth' => $userGrowth,
-                'onlineUsers' => $onlineUsers,
-                'onlineDevices' => $onlineDevices,
+                'onlineUsers' => $userStats['onlineUsers'],
+                'onlineDevices' => $userStats['onlineDevices'],
 
                 // 工单相关
                 'ticketPendingTotal' => $ticketPendingTotal,
@@ -498,22 +420,146 @@ class StatController extends Controller
                 'nodeGfwStats' => $nodeGfwStats,
 
                 // 流量统计
-                'todayTraffic' => [
-                    'upload' => $todayTraffic->upload ?? 0,
-                    'download' => $todayTraffic->download ?? 0,
-                    'total' => $todayTraffic->total ?? 0
-                ],
-                'monthTraffic' => [
-                    'upload' => $monthTraffic->upload ?? 0,
-                    'download' => $monthTraffic->download ?? 0,
-                    'total' => $monthTraffic->total ?? 0
-                ],
-                'totalTraffic' => [
-                    'upload' => $totalTraffic->upload ?? 0,
-                    'download' => $totalTraffic->download ?? 0,
-                    'total' => $totalTraffic->total ?? 0
-                ]
+                'todayTraffic' => $trafficStats['todayTraffic'],
+                'monthTraffic' => $trafficStats['monthTraffic'],
+                'totalTraffic' => $trafficStats['totalTraffic'],
             ]
+        ];
+    }
+
+    /**
+     * Dashboard cold requests should be bounded SQL scans, not many ORM round trips.
+     * This keeps the user table to one pass for all counters displayed by the dashboard.
+     */
+    private function queryDashboardUserStats(int $now, int $currentMonthStart, int $lastMonthStart): array
+    {
+        $onlineSince = $now - 600;
+        $row = DB::table('v2_user')
+            ->selectRaw('COUNT(*) as total_users')
+            ->selectRaw('COALESCE(SUM(CASE WHEN expired_at >= ? OR expired_at IS NULL THEN 1 ELSE 0 END), 0) as active_users', [$now])
+            ->selectRaw('COALESCE(SUM(CASE WHEN t >= ? THEN 1 ELSE 0 END), 0) as online_users', [$onlineSince])
+            ->selectRaw('COALESCE(SUM(CASE WHEN t >= ? THEN COALESCE(online_count, 0) ELSE 0 END), 0) as online_devices', [$onlineSince])
+            ->selectRaw('COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END), 0) as current_month_new_users', [$currentMonthStart, $now])
+            ->selectRaw('COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END), 0) as last_month_new_users', [$lastMonthStart, $currentMonthStart])
+            ->first();
+
+        return [
+            'totalUsers' => (int) ($row->total_users ?? 0),
+            'activeUsers' => (int) ($row->active_users ?? 0),
+            'onlineUsers' => (int) ($row->online_users ?? 0),
+            'onlineDevices' => (int) ($row->online_devices ?? 0),
+            'currentMonthNewUsers' => (int) ($row->current_month_new_users ?? 0),
+            'lastMonthNewUsers' => (int) ($row->last_month_new_users ?? 0),
+        ];
+    }
+
+    private function queryDashboardOrderStats(int $now, int $todayStart, int $yesterdayStart, int $currentMonthStart, int $lastMonthStart, int $twoMonthsAgoStart): array
+    {
+        $paidStatusSql = 'status NOT IN (?, ?)';
+        $row = DB::table('v2_order')
+            ->where('created_at', '>=', $twoMonthsAgoStart)
+            ->selectRaw("COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? AND {$paidStatusSql} THEN total_amount ELSE 0 END), 0) as today_income", [
+                $todayStart,
+                $now,
+                Order::STATUS_PENDING,
+                Order::STATUS_CANCELLED,
+            ])
+            ->selectRaw("COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? AND {$paidStatusSql} THEN total_amount ELSE 0 END), 0) as yesterday_income", [
+                $yesterdayStart,
+                $todayStart,
+                Order::STATUS_PENDING,
+                Order::STATUS_CANCELLED,
+            ])
+            ->selectRaw("COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? AND {$paidStatusSql} THEN total_amount ELSE 0 END), 0) as current_month_income", [
+                $currentMonthStart,
+                $now,
+                Order::STATUS_PENDING,
+                Order::STATUS_CANCELLED,
+            ])
+            ->selectRaw("COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? AND {$paidStatusSql} THEN total_amount ELSE 0 END), 0) as last_month_income", [
+                $lastMonthStart,
+                $currentMonthStart,
+                Order::STATUS_PENDING,
+                Order::STATUS_CANCELLED,
+            ])
+            ->selectRaw("COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? AND {$paidStatusSql} THEN total_amount ELSE 0 END), 0) as two_months_ago_income", [
+                $twoMonthsAgoStart,
+                $lastMonthStart,
+                Order::STATUS_PENDING,
+                Order::STATUS_CANCELLED,
+            ])
+            ->first();
+
+        return [
+            'todayIncome' => (int) ($row->today_income ?? 0),
+            'yesterdayIncome' => (int) ($row->yesterday_income ?? 0),
+            'currentMonthIncome' => (int) ($row->current_month_income ?? 0),
+            'lastMonthIncome' => (int) ($row->last_month_income ?? 0),
+            'twoMonthsAgoIncome' => (int) ($row->two_months_ago_income ?? 0),
+            'commissionPendingTotal' => $this->queryCommissionPendingOrderCount(),
+        ];
+    }
+
+    private function queryCommissionPendingOrderCount(): int
+    {
+        return (int) DB::table('v2_order')
+            ->where('commission_status', 0)
+            ->whereNotNull('invite_user_id')
+            ->where('status', Order::STATUS_COMPLETED)
+            ->where('commission_balance', '>', 0)
+            ->count();
+    }
+
+    private function queryDashboardCommissionStats(int $now, int $currentMonthStart, int $lastMonthStart, int $twoMonthsAgoStart): array
+    {
+        $row = DB::table('v2_commission_log')
+            ->where('created_at', '>=', $twoMonthsAgoStart)
+            ->selectRaw('COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN get_amount ELSE 0 END), 0) as current_month_commission', [$currentMonthStart, $now])
+            ->selectRaw('COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN get_amount ELSE 0 END), 0) as last_month_commission', [$lastMonthStart, $currentMonthStart])
+            ->selectRaw('COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN get_amount ELSE 0 END), 0) as two_months_ago_commission', [$twoMonthsAgoStart, $lastMonthStart])
+            ->first();
+
+        return [
+            'currentMonthCommissionPayout' => (int) ($row->current_month_commission ?? 0),
+            'lastMonthCommissionPayout' => (int) ($row->last_month_commission ?? 0),
+            'twoMonthsAgoCommission' => (int) ($row->two_months_ago_commission ?? 0),
+        ];
+    }
+
+    private function queryDashboardTrafficStats(int $now, int $todayStart, int $currentMonthStart): array
+    {
+        $retentionStart = strtotime('-2 month', $now);
+        $row = DB::table('v2_stat_server')
+            ->where('record_type', 'd')
+            ->where('record_at', '>=', $retentionStart)
+            ->where('record_at', '<', $now)
+            ->selectRaw('COALESCE(SUM(CASE WHEN record_at >= ? THEN u ELSE 0 END), 0) as today_upload', [$todayStart])
+            ->selectRaw('COALESCE(SUM(CASE WHEN record_at >= ? THEN d ELSE 0 END), 0) as today_download', [$todayStart])
+            ->selectRaw('COALESCE(SUM(CASE WHEN record_at >= ? THEN u + d ELSE 0 END), 0) as today_total', [$todayStart])
+            ->selectRaw('COALESCE(SUM(CASE WHEN record_at >= ? THEN u ELSE 0 END), 0) as month_upload', [$currentMonthStart])
+            ->selectRaw('COALESCE(SUM(CASE WHEN record_at >= ? THEN d ELSE 0 END), 0) as month_download', [$currentMonthStart])
+            ->selectRaw('COALESCE(SUM(CASE WHEN record_at >= ? THEN u + d ELSE 0 END), 0) as month_total', [$currentMonthStart])
+            ->selectRaw('COALESCE(SUM(u), 0) as total_upload')
+            ->selectRaw('COALESCE(SUM(d), 0) as total_download')
+            ->selectRaw('COALESCE(SUM(u + d), 0) as total')
+            ->first();
+
+        return [
+            'todayTraffic' => [
+                'upload' => (int) ($row->today_upload ?? 0),
+                'download' => (int) ($row->today_download ?? 0),
+                'total' => (int) ($row->today_total ?? 0),
+            ],
+            'monthTraffic' => [
+                'upload' => (int) ($row->month_upload ?? 0),
+                'download' => (int) ($row->month_download ?? 0),
+                'total' => (int) ($row->month_total ?? 0),
+            ],
+            'totalTraffic' => [
+                'upload' => (int) ($row->total_upload ?? 0),
+                'download' => (int) ($row->total_download ?? 0),
+                'total' => (int) ($row->total ?? 0),
+            ],
         ];
     }
 
@@ -587,28 +633,31 @@ class StatController extends Controller
 
     private function buildNodeGfwStats(): array
     {
-        $latestCheckIds = ServerGfwCheck::query()
-            ->selectRaw('MAX(id) as id')
-            ->whereIn('status', ServerGfwCheck::FINAL_STATUSES)
-            ->groupBy('server_id');
+        $latestCheckColumn = function (string $column): callable {
+            return function ($query) use ($column): void {
+                $query->from('server_gfw_checks as c')
+                    ->select("c.{$column}")
+                    ->whereColumn('c.server_id', 'v2_server.id')
+                    ->whereIn('c.status', ServerGfwCheck::FINAL_STATUSES)
+                    ->orderByDesc('c.id')
+                    ->limit(1);
+            };
+        };
 
-        $latestRows = ServerGfwCheck::query()
-            ->joinSub($latestCheckIds, 'latest_gfw_checks', function ($join) {
-                $join->on('server_gfw_checks.id', '=', 'latest_gfw_checks.id');
-            })
-            ->join('v2_server', 'server_gfw_checks.server_id', '=', 'v2_server.id')
-            ->where(function ($query) {
+        $latestRows = DB::table('v2_server')
+            ->where(function ($query): void {
                 $query->where('v2_server.gfw_check_enabled', true)
                     ->orWhereNull('v2_server.gfw_check_enabled');
             })
-            ->get([
-                'server_gfw_checks.id',
-                'server_gfw_checks.server_id',
-                'server_gfw_checks.status',
-                'server_gfw_checks.checked_at',
-                'server_gfw_checks.updated_at',
-                'v2_server.type',
-            ]);
+            ->selectRaw('v2_server.id as server_id')
+            ->selectRaw('v2_server.type')
+            ->selectSub($latestCheckColumn('id'), 'id')
+            ->selectSub($latestCheckColumn('status'), 'status')
+            ->selectSub($latestCheckColumn('checked_at'), 'checked_at')
+            ->selectSub($latestCheckColumn('updated_at'), 'updated_at')
+            ->get()
+            ->filter(fn ($row): bool => in_array($row->status, ServerGfwCheck::FINAL_STATUSES, true))
+            ->values();
 
         $blockedRows = $latestRows
             ->filter(fn ($row): bool => $row->status === ServerGfwCheck::STATUS_BLOCKED)
@@ -692,7 +741,12 @@ class StatController extends Controller
             return $checkedAt;
         }
 
-        return (int) (optional($check->updated_at)->timestamp ?: 0);
+        $updatedAt = $check->updated_at ?? null;
+        if ($updatedAt instanceof \DateTimeInterface) {
+            return $updatedAt->getTimestamp();
+        }
+
+        return (int) ($updatedAt ?: 0);
     }
 
     /**
@@ -773,58 +827,39 @@ class StatController extends Controller
 
     private function buildTrafficRank(string $type, int $startDate, int $endDate, int $previousStartDate, int $previousEndDate, int $limit): array
     {
-        if ($type === 'node') {
-            $currentData = StatServer::selectRaw('server_id as id, SUM(u + d) as value')
-                ->where('record_at', '>=', $startDate)
-                ->where('record_at', '<=', $endDate)
-                ->groupBy('server_id')
-                ->orderByDesc('value')
-                ->limit($limit)
-                ->get();
+        $isNodeRank = $type === 'node';
+        $table = $isNodeRank ? 'v2_stat_server' : 'v2_stat_user';
+        $nameTable = $isNodeRank ? 'v2_server' : 'v2_user';
+        $idColumn = $isNodeRank ? 's.server_id' : 's.user_id';
+        $nameColumn = $isNodeRank ? 'm.name' : 'm.email';
+        $fallbackName = $isNodeRank ? 'Node' : 'User';
+        $currentValueSql = 'COALESCE(SUM(CASE WHEN s.record_at >= ? AND s.record_at <= ? THEN s.u + s.d ELSE 0 END), 0)';
+        $previousValueSql = 'COALESCE(SUM(CASE WHEN s.record_at >= ? AND s.record_at < ? THEN s.u + s.d ELSE 0 END), 0)';
 
-            $previousData = $currentData->isEmpty()
-                ? collect()
-                : StatServer::selectRaw('server_id as id, SUM(u + d) as value')
-                    ->where('record_at', '>=', $previousStartDate)
-                    ->where('record_at', '<', $previousEndDate)
-                    ->whereIn('server_id', $currentData->pluck('id'))
-                    ->groupBy('server_id')
-                    ->get()
-                    ->keyBy('id');
-        } else {
-            $currentData = StatUser::selectRaw('user_id as id, SUM(u + d) as value')
-                ->where('record_at', '>=', $startDate)
-                ->where('record_at', '<=', $endDate)
-                ->groupBy('user_id')
-                ->orderByDesc('value')
-                ->limit($limit)
-                ->get();
-
-            $previousData = $currentData->isEmpty()
-                ? collect()
-                : StatUser::selectRaw('user_id as id, SUM(u + d) as value')
-                    ->where('record_at', '>=', $previousStartDate)
-                    ->where('record_at', '<', $previousEndDate)
-                    ->whereIn('user_id', $currentData->pluck('id'))
-                    ->groupBy('user_id')
-                    ->get()
-                    ->keyBy('id');
-        }
-
-        $ids = $currentData->pluck('id');
-        $names = $type === 'node'
-            ? Server::whereIn('id', $ids)->pluck('name', 'id')
-            : User::whereIn('id', $ids)->pluck('email', 'id');
+        $rows = DB::table("{$table} as s")
+            ->leftJoin("{$nameTable} as m", 'm.id', '=', $idColumn)
+            ->where('s.record_type', 'd')
+            ->where('s.record_at', '>=', min($startDate, $previousStartDate))
+            ->where('s.record_at', '<=', max($endDate, $previousEndDate - 1))
+            ->selectRaw("{$idColumn} as id")
+            ->selectRaw("{$nameColumn} as name")
+            ->selectRaw("{$currentValueSql} as value", [$startDate, $endDate])
+            ->selectRaw("{$previousValueSql} as previous_value", [$previousStartDate, $previousEndDate])
+            ->groupBy($idColumn, $nameColumn)
+            ->havingRaw("{$currentValueSql} > 0", [$startDate, $endDate])
+            ->orderByDesc('value')
+            ->limit($limit)
+            ->get();
 
         $result = [];
-        foreach ($currentData as $data) {
-            $previousValue = isset($previousData[$data->id]) ? (int) $previousData[$data->id]->value : 0;
-            $value = (int) $data->value;
+        foreach ($rows as $row) {
+            $value = (int) ($row->value ?? 0);
+            $previousValue = (int) ($row->previous_value ?? 0);
             $change = $previousValue > 0 ? round(($value - $previousValue) / $previousValue * 100, 1) : 0;
 
             $result[] = [
-                'id' => (string) $data->id,
-                'name' => $names[$data->id] ?? ($type === 'node' ? "Node {$data->id}" : "User {$data->id}"),
+                'id' => (string) $row->id,
+                'name' => $row->name ?: "{$fallbackName} {$row->id}",
                 'value' => $value,
                 'previousValue' => $previousValue,
                 'change' => $change,

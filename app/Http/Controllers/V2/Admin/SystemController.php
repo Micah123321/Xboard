@@ -7,6 +7,7 @@ use App\Models\AdminAuditLog;
 use App\Utils\CacheKey;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Redis;
 use Laravel\Horizon\Contracts\JobRepository;
 use Laravel\Horizon\Contracts\MasterSupervisorRepository;
 use Laravel\Horizon\Contracts\MetricsRepository;
@@ -21,15 +22,24 @@ class SystemController extends Controller
 
     public function getSystemStatus()
     {
-        $data = Cache::remember(CacheKey::get('ADMIN_DASHBOARD_SYSTEM_STATUS'), self::SYSTEM_STATUS_CACHE_TTL_SECONDS, function (): array {
-            return [
-                'schedule' => $this->getScheduleStatus(),
-                'horizon' => $this->getHorizonStatus(),
-                'schedule_last_runtime' => Cache::get(CacheKey::get('SCHEDULE_LAST_CHECK_AT', null)),
-            ];
-        });
+        try {
+            $data = Cache::remember(CacheKey::get('ADMIN_DASHBOARD_SYSTEM_STATUS'), self::SYSTEM_STATUS_CACHE_TTL_SECONDS, function (): array {
+                return $this->buildSystemStatus();
+            });
+        } catch (\Throwable) {
+            $data = $this->buildSystemStatus();
+        }
 
         return $this->success($data);
+    }
+
+    private function buildSystemStatus(): array
+    {
+        return [
+            'schedule' => $this->getScheduleStatus(),
+            'horizon' => $this->getHorizonStatus(),
+            'schedule_last_runtime' => $this->getScheduleLastRuntime(),
+        ];
     }
 
     public function getQueueWorkload(WorkloadRepository $workload)
@@ -39,18 +49,41 @@ class SystemController extends Controller
 
     protected function getScheduleStatus(): bool
     {
-        return (time() - 120) < Cache::get(CacheKey::get('SCHEDULE_LAST_CHECK_AT', null));
+        $lastRuntime = $this->getScheduleLastRuntime();
+
+        return $lastRuntime !== null && (time() - 120) < $lastRuntime;
+    }
+
+    private function getScheduleLastRuntime(): ?int
+    {
+        try {
+            $lastRuntime = Cache::get(CacheKey::get('SCHEDULE_LAST_CHECK_AT', null));
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $lastRuntime ? (int) $lastRuntime : null;
     }
 
     protected function getHorizonStatus(): bool
     {
-        if (!$masters = app(MasterSupervisorRepository::class)->all()) {
+        try {
+            $redis = Redis::connection('horizon');
+            $masters = $redis->zrevrangebyscore('masters', '+inf', time() - 14);
+            if (empty($masters)) {
+                return false;
+            }
+
+            $statuses = $redis->pipeline(function ($pipe) use ($masters): void {
+                foreach ($masters as $master) {
+                    $pipe->hget('master:' . $master, 'status');
+                }
+            });
+
+            return collect($statuses)->contains('running');
+        } catch (\Throwable) {
             return false;
         }
-
-        return collect($masters)->contains(function ($master) {
-            return $master->status === 'paused';
-        }) ? false : true;
     }
 
     public function getQueueStats()
