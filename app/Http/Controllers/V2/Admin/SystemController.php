@@ -17,13 +17,18 @@ use App\Helpers\ResponseEnum;
 
 class SystemController extends Controller
 {
+    private const SYSTEM_STATUS_CACHE_TTL_SECONDS = 10;
+
     public function getSystemStatus()
     {
-        $data = [
-            'schedule' => $this->getScheduleStatus(),
-            'horizon' => $this->getHorizonStatus(),
-            'schedule_last_runtime' => Cache::get(CacheKey::get('SCHEDULE_LAST_CHECK_AT', null)),
-        ];
+        $data = Cache::remember(CacheKey::get('ADMIN_DASHBOARD_SYSTEM_STATUS'), self::SYSTEM_STATUS_CACHE_TTL_SECONDS, function (): array {
+            return [
+                'schedule' => $this->getScheduleStatus(),
+                'horizon' => $this->getHorizonStatus(),
+                'schedule_last_runtime' => Cache::get(CacheKey::get('SCHEDULE_LAST_CHECK_AT', null)),
+            ];
+        });
+
         return $this->success($data);
     }
 

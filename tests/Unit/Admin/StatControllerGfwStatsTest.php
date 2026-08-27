@@ -5,12 +5,21 @@ namespace Tests\Unit\Admin;
 use App\Http\Controllers\V2\Admin\StatController;
 use App\Models\Server;
 use App\Models\ServerGfwCheck;
+use App\Utils\CacheKey;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class StatControllerGfwStatsTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Cache::flush();
+    }
 
     public function test_get_stats_includes_current_gfw_distribution_and_recent_recoveries(): void
     {
@@ -44,6 +53,26 @@ class StatControllerGfwStatsTest extends TestCase
         $this->assertSame(1, $distribution->get(Server::TYPE_VMESS)['count']);
         $this->assertSame(1, $distribution->get(Server::TYPE_TROJAN)['count']);
         $this->assertFalse($distribution->has(Server::TYPE_TUIC));
+    }
+
+    public function test_get_stats_counts_online_nodes_from_batched_runtime_cache(): void
+    {
+        $now = time();
+        $parent = $this->makeServer(['name' => 'online-parent', 'type' => Server::TYPE_VMESS]);
+        $this->makeServer([
+            'name' => 'inherited-online-child',
+            'type' => Server::TYPE_VLESS,
+            'parent_id' => $parent->id,
+        ]);
+        $offline = $this->makeServer(['name' => 'offline-node', 'type' => Server::TYPE_TROJAN]);
+
+        Cache::put(CacheKey::get('SERVER_VMESS_LAST_CHECK_AT', $parent->id), $now, 60);
+        Cache::put(CacheKey::get('SERVER_TROJAN_LAST_CHECK_AT', $offline->id), $now - Server::CHECK_INTERVAL - 1, 60);
+
+        $controller = (new \ReflectionClass(StatController::class))->newInstanceWithoutConstructor();
+        $stats = $controller->getStats()['data'];
+
+        $this->assertSame(2, $stats['onlineNodes']);
     }
 
     private function makeServer(array $attributes = []): Server

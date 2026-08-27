@@ -28,6 +28,7 @@ class CacheKey
         'SERVER_*_LAST_LOAD_AT',       // 节点最后负载提交时间
         'SERVER_*_METRICS',            // 节点指标数据
         'USER_ONLINE_CONN_*_*',        // 用户在线连接数 (特定节点类型_ID)
+        'ADMIN_DASHBOARD_*',           // 管理端仪表盘短缓存
     ];
 
     /**

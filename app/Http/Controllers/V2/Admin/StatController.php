@@ -15,11 +15,15 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Services\StatisticalService;
 use App\Services\UserOnlineService;
+use App\Utils\CacheKey;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 class StatController extends Controller
 {
+    private const DASHBOARD_STATS_CACHE_TTL_SECONDS = 30;
+    private const TRAFFIC_RANK_CACHE_TTL_SECONDS = 60;
     private const GFW_RECENT_RECOVERY_WINDOW_SECONDS = 86400;
 
     private $service;
@@ -342,6 +346,13 @@ class StatController extends Controller
      */
     public function getStats()
     {
+        return Cache::remember(CacheKey::get('ADMIN_DASHBOARD_STATS'), self::DASHBOARD_STATS_CACHE_TTL_SECONDS, function (): array {
+            return $this->buildStats();
+        });
+    }
+
+    private function buildStats(): array
+    {
         $currentMonthStart = strtotime(date('Y-m-01'));
         $lastMonthStart = strtotime('-1 month', $currentMonthStart);
         $twoMonthsAgoStart = strtotime('-2 month', $currentMonthStart);
@@ -351,9 +362,7 @@ class StatController extends Controller
         $yesterdayStart = strtotime('-1 day', $todayStart);
 
         // 获取在线节点数
-        $onlineNodes = Server::all()->filter(function ($server) {
-            return !!$server->is_online;
-        })->count();
+        $onlineNodes = $this->countOnlineServers();
         $nodeGfwStats = $this->buildNodeGfwStats();
 
         // 获取在线设备数和在线用户数
@@ -506,6 +515,74 @@ class StatController extends Controller
                 ]
             ]
         ];
+    }
+
+    private function countOnlineServers(): int
+    {
+        $servers = Server::query()->get(['id', 'type', 'parent_id']);
+        if ($servers->isEmpty()) {
+            return 0;
+        }
+
+        $serversById = $servers->keyBy('id');
+        $keys = [];
+        $ownKeysById = [];
+        $parentKeysById = [];
+
+        foreach ($servers as $server) {
+            $ownKey = $this->serverRuntimeCacheKey((string) $server->type, 'LAST_CHECK_AT', (int) $server->id);
+            $ownKeysById[(int) $server->id] = $ownKey;
+            $keys[] = $ownKey;
+
+            $parentId = (int) ($server->parent_id ?? 0);
+            if ($parentId <= 0) {
+                continue;
+            }
+
+            $parentKeys = [];
+            $parent = $serversById->get($parentId);
+            if ($parent) {
+                $parentKeys[] = $this->serverRuntimeCacheKey((string) $parent->type, 'LAST_CHECK_AT', $parentId);
+            }
+            $parentKeys[] = $this->serverRuntimeCacheKey((string) $server->type, 'LAST_CHECK_AT', $parentId);
+
+            $parentKeysById[(int) $server->id] = array_values(array_unique($parentKeys));
+            array_push($keys, ...$parentKeysById[(int) $server->id]);
+        }
+
+        $cacheValues = Cache::many(array_values(array_unique($keys)));
+        $now = time();
+        $online = 0;
+
+        foreach ($servers as $server) {
+            $serverId = (int) $server->id;
+            if ($this->isOnlineLastCheckAt($cacheValues[$ownKeysById[$serverId]] ?? null, $now)) {
+                $online++;
+                continue;
+            }
+
+            foreach ($parentKeysById[$serverId] ?? [] as $parentKey) {
+                if ($this->isOnlineLastCheckAt($cacheValues[$parentKey] ?? null, $now)) {
+                    $online++;
+                    break;
+                }
+            }
+        }
+
+        return $online;
+    }
+
+    private function serverRuntimeCacheKey(string $type, string $name, int $serverId): string
+    {
+        return CacheKey::get(sprintf('SERVER_%s_%s', strtoupper($type), $name), $serverId);
+    }
+
+    private function isOnlineLastCheckAt(mixed $lastCheckAt, int $now): bool
+    {
+        return $lastCheckAt !== null
+            && $lastCheckAt !== false
+            && $lastCheckAt !== ''
+            && ($now - Server::CHECK_INTERVAL) <= (int) $lastCheckAt;
     }
 
     private function buildNodeGfwStats(): array
@@ -666,67 +743,89 @@ class StatController extends Controller
             'limit' => 'nullable|integer|in:10,20'
         ]);
 
-        $type = $request->input('type');
-        $startDate = $request->input('start_time', strtotime('-7 days'));
-        $endDate = $request->input('end_time', time());
+        $type = (string) $request->input('type');
+        $startDate = (int) $request->input('start_time', strtotime('-7 days'));
+        $endDate = (int) $request->input('end_time', time());
         $limit = (int) $request->input('limit', 10);
         $comparisonWindow = $this->resolveTrafficRankComparisonWindow($startDate, $endDate);
         $previousStartDate = $comparisonWindow['start'];
         $previousEndDate = $comparisonWindow['end'];
+        $cacheKey = CacheKey::get('ADMIN_DASHBOARD_TRAFFIC_RANK', sha1(implode(':', [
+            $type,
+            $startDate,
+            $endDate,
+            $previousStartDate,
+            $previousEndDate,
+            $limit,
+        ])));
 
+        return Cache::remember($cacheKey, self::TRAFFIC_RANK_CACHE_TTL_SECONDS, function () use (
+            $type,
+            $startDate,
+            $endDate,
+            $previousStartDate,
+            $previousEndDate,
+            $limit
+        ): array {
+            return $this->buildTrafficRank($type, $startDate, $endDate, $previousStartDate, $previousEndDate, $limit);
+        });
+    }
+
+    private function buildTrafficRank(string $type, int $startDate, int $endDate, int $previousStartDate, int $previousEndDate, int $limit): array
+    {
         if ($type === 'node') {
-            // Get node traffic data
             $currentData = StatServer::selectRaw('server_id as id, SUM(u + d) as value')
                 ->where('record_at', '>=', $startDate)
                 ->where('record_at', '<=', $endDate)
                 ->groupBy('server_id')
-                ->orderBy('value', 'DESC')
+                ->orderByDesc('value')
                 ->limit($limit)
                 ->get();
 
-            // Get previous period data for comparison
-            $previousData = StatServer::selectRaw('server_id as id, SUM(u + d) as value')
-                ->where('record_at', '>=', $previousStartDate)
-                ->where('record_at', '<', $previousEndDate)
-                ->whereIn('server_id', $currentData->pluck('id'))
-                ->groupBy('server_id')
-                ->get()
-                ->keyBy('id');
-
+            $previousData = $currentData->isEmpty()
+                ? collect()
+                : StatServer::selectRaw('server_id as id, SUM(u + d) as value')
+                    ->where('record_at', '>=', $previousStartDate)
+                    ->where('record_at', '<', $previousEndDate)
+                    ->whereIn('server_id', $currentData->pluck('id'))
+                    ->groupBy('server_id')
+                    ->get()
+                    ->keyBy('id');
         } else {
-            // Get user traffic data
             $currentData = StatUser::selectRaw('user_id as id, SUM(u + d) as value')
                 ->where('record_at', '>=', $startDate)
                 ->where('record_at', '<=', $endDate)
                 ->groupBy('user_id')
-                ->orderBy('value', 'DESC')
+                ->orderByDesc('value')
                 ->limit($limit)
                 ->get();
 
-            // Get previous period data for comparison
-            $previousData = StatUser::selectRaw('user_id as id, SUM(u + d) as value')
-                ->where('record_at', '>=', $previousStartDate)
-                ->where('record_at', '<', $previousEndDate)
-                ->whereIn('user_id', $currentData->pluck('id'))
-                ->groupBy('user_id')
-                ->get()
-                ->keyBy('id');
+            $previousData = $currentData->isEmpty()
+                ? collect()
+                : StatUser::selectRaw('user_id as id, SUM(u + d) as value')
+                    ->where('record_at', '>=', $previousStartDate)
+                    ->where('record_at', '<', $previousEndDate)
+                    ->whereIn('user_id', $currentData->pluck('id'))
+                    ->groupBy('user_id')
+                    ->get()
+                    ->keyBy('id');
         }
 
-        $result = [];
         $ids = $currentData->pluck('id');
         $names = $type === 'node'
             ? Server::whereIn('id', $ids)->pluck('name', 'id')
             : User::whereIn('id', $ids)->pluck('email', 'id');
 
+        $result = [];
         foreach ($currentData as $data) {
-            $previousValue = isset($previousData[$data->id]) ? $previousData[$data->id]->value : 0;
-            $change = $previousValue > 0 ? round(($data->value - $previousValue) / $previousValue * 100, 1) : 0;
+            $previousValue = isset($previousData[$data->id]) ? (int) $previousData[$data->id]->value : 0;
+            $value = (int) $data->value;
+            $change = $previousValue > 0 ? round(($value - $previousValue) / $previousValue * 100, 1) : 0;
 
             $result[] = [
                 'id' => (string) $data->id,
                 'name' => $names[$data->id] ?? ($type === 'node' ? "Node {$data->id}" : "User {$data->id}"),
-                'value' => $data->value,
+                'value' => $value,
                 'previousValue' => $previousValue,
                 'change' => $change,
                 'timestamp' => date('c', $endDate)

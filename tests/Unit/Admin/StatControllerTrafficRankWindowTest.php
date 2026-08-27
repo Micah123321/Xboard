@@ -35,7 +35,7 @@ class StatControllerTrafficRankWindowTest extends TestCase
      */
     private function resolveWindow(int $startDate, int $endDate): array
     {
-        $controller = new StatController();
+        $controller = (new \ReflectionClass(StatController::class))->newInstanceWithoutConstructor();
         $method = new ReflectionMethod(StatController::class, 'resolveTrafficRankComparisonWindow');
         $method->setAccessible(true);
 
