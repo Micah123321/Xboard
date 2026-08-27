@@ -14,6 +14,7 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Services\AuthService;
 use App\Services\NodeSyncService;
+use App\Services\Plugin\HookManager;
 use App\Services\UserService;
 use App\Traits\QueryOperators;
 use App\Utils\Helper;
@@ -36,7 +37,16 @@ class UserController extends Controller
             return $this->fail([400202, '用户不存在']);
         $user->token = Helper::guid();
         $user->uuid = Helper::guid(true);
-        return $this->success($user->save());
+        $result = $user->save();
+
+        if ($result) {
+            HookManager::call('admin.user.secret.reset', [
+                'user' => $user,
+                'request' => $request,
+            ]);
+        }
+
+        return $this->success($result);
     }
 
     // Apply filters and sorts to the query builder.
@@ -243,6 +253,8 @@ class UserController extends Controller
             ->select((new User())->getTable() . '.*')
             ->selectRaw('(u + d) as total_used');
 
+        $userModel = HookManager::filter('admin.user.fetch.query', $userModel, $request);
+
         $this->applyFiltersAndSorts($request, $userModel);
 
         $users = $userModel->orderBy('id', 'desc')
@@ -258,11 +270,12 @@ class UserController extends Controller
     // Transform user fields for API response.
     public static function transformUserData(User $user): array
     {
+        $model = $user;
         $user = $user->toArray();
         $user['balance'] = $user['balance'] / 100;
         $user['commission_balance'] = $user['commission_balance'] / 100;
         $user['subscribe_url'] = Helper::getSubscribeUrl($user['token']);
-        return $user;
+        return HookManager::filter('admin.user.transform', $user, $model);
     }
 
     public function getUserInfoById(Request $request)
@@ -273,6 +286,7 @@ class UserController extends Controller
             'id.required' => '用户ID不能为空'
         ]);
         $user = User::find($request->input('id'))->load('invite_user');
+        $user = HookManager::filter('admin.user.detail', $user, $request);
         return $this->success($user);
     }
 
@@ -404,12 +418,27 @@ class UserController extends Controller
             $params['commission_balance'] = $params['commission_balance'] * 100;
         }
 
+        $params = HookManager::filter('admin.user.update.params', $params, $request, $user);
+
+        HookManager::call('admin.user.update.before', [
+            'user' => $user,
+            'params' => $params,
+            'request' => $request,
+        ]);
+
         try {
             $user->update($params);
         } catch (\Exception $e) {
             Log::error($e);
             return $this->fail([500, '保存失败']);
         }
+
+        HookManager::call('admin.user.update.after', [
+            'user' => $user->refresh(),
+            'params' => $params,
+            'request' => $request,
+        ]);
+
         return $this->success(true);
     }
 
@@ -842,6 +871,11 @@ class UserController extends Controller
             'id.exists' => '用户不存在'
         ]);
         $user = User::find($request->input('id'));
+        HookManager::call('admin.user.destroy.before', [
+            'user' => $user,
+            'request' => $request,
+        ]);
+
         try {
             DB::beginTransaction();
             $user->orders()->delete();
@@ -850,11 +884,17 @@ class UserController extends Controller
             $user->tickets()->delete();
             $user->delete();
             DB::commit();
-            return $this->success(true);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error($e);
             return $this->fail([500, '删除失败']);
         }
+
+        HookManager::call('admin.user.destroy.after', [
+            'user' => $user,
+            'request' => $request,
+        ]);
+
+        return $this->success(true);
     }
 }

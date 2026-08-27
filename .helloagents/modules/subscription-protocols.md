@@ -18,6 +18,9 @@
 - 分发准入复用 `Server::available_status` 的父节点运行缓存回退，因此只由父入口上报的转发子节点仍按有效运行态参与分发，不改用仅自身心跳的状态判断。
 - 用户节点 API 的 ETag 基于过滤后的节点 `cache_key` 列表生成；节点离线或恢复导致成员集合变化时返回新内容，相同可见节点集合可以复用原 ETag。
 - `client.subscribe.servers` 和显式传入 `ClientController::doSubscribe()` 的节点集合属于受信扩展边界，可有意覆盖标准准入结果；核心服务不在插件钩子后重复过滤自定义节点。
+- SingBox 模板的 `selector` / `urltest` 可使用 `include`、`exclude` 和 `fallback` 控制自动加入的节点 tag；过滤表达式仅接受字符串，非法正则只记录警告并使该分组走 fallback 或保持空结果。
+- General VLESS URI fragment 必须用 `rawurlencode`，避免节点名空格被编码为 `+` 后部分客户端解析异常。
+- Shadowrocket TUIC 下发需携带 `congestion_control`，未配置时默认 `cubic`，与后端 TUIC 默认值保持一致。
 
 ## 依赖关系
 

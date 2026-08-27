@@ -30,6 +30,8 @@
 
 #### Docker 环境
 
+以下命令默认使用 split/dev 模板中的 `web` 服务；如果你的 `compose.yaml` 来自 `compose.host.sample.yaml` 或 `compose.1panel.sample.yaml`，请把命令中的 `web` 替换为 `xboard`。
+
 ```bash
 # 1. 停止服务
 docker compose down

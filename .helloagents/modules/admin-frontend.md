@@ -32,6 +32,7 @@
 - 仪表盘指标卡中的“待处理工单 / 待处理佣金 / 总用户”现已支持快捷跳转；可点击卡片会显示明确的入口提示，并保留 hover / focus-visible 反馈
 - 工单页与订单页可读取 dashboard 来源查询参数：工单页支持 `focus=opening|closed|all`，订单页支持 `workbench=pending|commission`，并会显示低干扰入口提示
 - 用户管理页通过真实后端 `user/fetch`、`user/update`、`user/generate`、`user/dumpCSV`、`user/sendMail`、`user/ban`、`user/resetSecret`、`user/destroy` 与 `plan/fetch` 完成数据读写
+- 管理端用户后端接口暴露 `admin.user.fetch.query`、`admin.user.transform`、`admin.user.detail`、`admin.user.update.*`、`admin.user.secret.reset` 和 `admin.user.destroy.*` 插件扩展点；新增 hook 时必须保留用户管理页已有的高级筛选、临时流量、批量邮件和批量封禁语义
 - 新增用户时采用“先 generate，后按邮箱回查并 update”的两段式流程，以兼容后端基础创建接口
 - 用户管理页复制订阅 URL 时优先使用 Clipboard API；当前环境不支持复制或写入被拒绝时，会弹出可选中的只读文本框展示订阅地址，供管理员手动复制
 - 用户管理页可读取 `user_id/user_email` 路由查询并转换为 `{ id: 'id', value: 'eq:{user_id}' }` 精准筛选，筛选摘要显示目标用户并可通过重置筛选清除

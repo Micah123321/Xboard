@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## [0.12.1] - 2026-08-27
+
+### 修复
+- **[upstream-sync / auth / protocols / deploy]**: 选择性吸收 `cedar2025/Xboard` 上游低风险补丁：注册与找回密码邮箱验证码改为 6 位数字 + 缓存缺失拒绝 + `hash_equals`；General VLESS 节点名 fragment 改用 `rawurlencode`；Shadowrocket TUIC 下发补 `congestion_control`；Docker entrypoint 对 Redis 数据目录追加运行时权限修复；aaPanel 旧 compose 升级命令改为 `sh update.sh`，迁移文档补充 `web`/`xboard` 服务名差异说明 — by hlm123
+  - 类型: 快速修改（无方案包）
+  - 文件: app/Http/Requests/Passport/AuthForget.php, app/Services/Auth/LoginService.php, app/Services/Auth/RegisterService.php, app/Protocols/General.php, app/Protocols/Shadowrocket.php, .docker/entrypoint.sh, docs/en/*, tests/Unit/*
+
+### 新功能
+- **[subscription-protocols / admin-plugins]**: SingBox 模板的 `selector` / `urltest` 支持 `include`、`exclude` 与 `fallback` 过滤节点 tag，并对非法正则降级为日志警告；管理端用户查询、详情、转换、更新、重置密钥和删除流程接入 `admin.user.*` 插件 hook/filter，保留本分支已有用户管理增强 — by hlm123
+  - 类型: 快速修改（无方案包）
+  - 文件: app/Protocols/SingBox.php, app/Http/Controllers/V2/Admin/UserController.php, app/Http/Requests/Admin/UserUpdate.php, tests/Unit/*
+
+### 暂缓
+- **[order-payment / admin-assets]**: 未吸收上游 `refund_amount -> surplus_credit` 字段重命名和 `public/assets/admin` gitlink 更新；前者需要后端、数据库、admin-frontend 与构建产物全链路迁移，后者会覆盖本分支管理端构建资产 — by hlm123
+
 ## [0.12.0] - 2026-07-29
 
 ### 新功能

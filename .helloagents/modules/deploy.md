@@ -20,6 +20,8 @@
 - `scripts/deploy.sh` 只负责初始化、拉取镜像和启动服务，不自动执行生产数据库迁移
 - `scripts/update.sh` 执行 `docker compose pull`、`docker compose run -it --rm web php artisan xboard:update`、`docker compose up -d`；非交互终端会自动去掉 `-it`
 - `scripts/status.sh` 输出 compose 状态、scheduler 日志、`schedule:list` 结果和手动墙检测同步命令
+- Docker entrypoint 启动前会对 `/www` 和 Redis 数据目录 `/data` 做运行时 chown；`/data` 权限修复允许失败并继续启动，用于兼容挂载 volume 的 Redis socket/数据目录。
+- 文档中的 Docker 命令必须按 compose 拓扑区分服务名：split/dev 模板使用 `web`，`compose.host.sample.yaml` / `compose.1panel.sample.yaml` 使用 `xboard`。
 
 ## 依赖关系
 
