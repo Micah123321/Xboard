@@ -5,6 +5,7 @@ namespace Tests\Unit\Admin;
 use App\Http\Controllers\V2\Admin\StatController;
 use App\Models\Server;
 use App\Models\ServerGfwCheck;
+use App\Models\Ticket;
 use App\Utils\CacheKey;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -73,6 +74,46 @@ class StatControllerGfwStatsTest extends TestCase
         $stats = $controller->getStats()['data'];
 
         $this->assertSame(2, $stats['onlineNodes']);
+    }
+
+    public function test_get_stats_counts_only_tickets_waiting_for_admin_reply(): void
+    {
+        $now = time();
+        Ticket::create([
+            'user_id' => 1001,
+            'subject' => 'waiting-ticket',
+            'level' => 1,
+            'status' => Ticket::STATUS_OPENING,
+            'reply_status' => Ticket::REPLY_STATUS_WAITING,
+            'last_reply_user_id' => 1001,
+            'created_at' => $now - 300,
+            'updated_at' => $now - 300,
+        ]);
+        Ticket::create([
+            'user_id' => 1002,
+            'subject' => 'admin-replied-ticket',
+            'level' => 1,
+            'status' => Ticket::STATUS_OPENING,
+            'reply_status' => Ticket::REPLY_STATUS_REPLIED,
+            'last_reply_user_id' => 2001,
+            'created_at' => $now - 600,
+            'updated_at' => $now - 600,
+        ]);
+        Ticket::create([
+            'user_id' => 1003,
+            'subject' => 'closed-waiting-ticket',
+            'level' => 1,
+            'status' => Ticket::STATUS_CLOSED,
+            'reply_status' => Ticket::REPLY_STATUS_WAITING,
+            'last_reply_user_id' => 1003,
+            'created_at' => $now - 900,
+            'updated_at' => $now - 900,
+        ]);
+
+        $controller = (new \ReflectionClass(StatController::class))->newInstanceWithoutConstructor();
+        $stats = $controller->getStats()['data'];
+
+        $this->assertSame(1, $stats['ticketPendingTotal']);
     }
 
     private function makeServer(array $attributes = []): Server

@@ -39,7 +39,7 @@ class CheckTicket extends Command
     public function handle()
     {
         Ticket::where('status', 0)
-            ->where('updated_at', '<=', time() - 24 * 3600)
+            ->where('updated_at', '<=', time() - 2 * 24 * 3600)
             ->where('reply_status', Ticket::REPLY_STATUS_REPLIED)
             ->lazyById(200)
             ->each(function ($ticket) {

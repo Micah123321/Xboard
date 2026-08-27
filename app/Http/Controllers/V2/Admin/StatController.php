@@ -72,7 +72,8 @@ class StatController extends Controller
                 'month_register_total' => User::where('created_at', '>=', strtotime(date('Y-m-1')))
                     ->where('created_at', '<', time())
                     ->count(),
-                'ticket_pending_total' => Ticket::where('status', 0)
+                'ticket_pending_total' => Ticket::where('status', Ticket::STATUS_OPENING)
+                    ->where('reply_status', Ticket::REPLY_STATUS_WAITING)
                     ->count(),
                 'commission_pending_total' => Order::where('commission_status', 0)
                     ->where('invite_user_id', '!=', NULL)
@@ -369,6 +370,7 @@ class StatController extends Controller
         $trafficStats = $this->queryDashboardTrafficStats($now, $todayStart, $currentMonthStart);
         $ticketPendingTotal = (int) DB::table('v2_ticket')
             ->where('status', Ticket::STATUS_OPENING)
+            ->where('reply_status', Ticket::REPLY_STATUS_WAITING)
             ->count();
 
         $currentMonthIncome = $orderStats['currentMonthIncome'];
