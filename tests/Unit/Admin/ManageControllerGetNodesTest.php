@@ -217,6 +217,65 @@ class ManageControllerGetNodesTest extends TestCase
         $this->assertSame(150, $data['traffic_stats']['today']['total']);
     }
 
+    public function test_get_nodes_paginated_traffic_stats_use_single_aggregate_query(): void
+    {
+        $server = $this->makeServer([
+            'name' => 'paginated-traffic-node',
+            'host' => '203.0.113.11',
+        ]);
+
+        $timezone = config('app.timezone');
+        $now = Carbon::now($timezone);
+        $todayStart = $now->copy()->startOfDay()->timestamp;
+        $yesterdayStart = $now->copy()->subDay()->startOfDay()->timestamp;
+        $monthStart = $now->copy()->startOfMonth()->timestamp;
+        $oldStart = $now->copy()->subMonthsNoOverflow(2)->startOfMonth()->timestamp;
+
+        foreach ([
+            [$todayStart, 100, 50],
+            [$yesterdayStart, 40, 10],
+            [$oldStart, 8, 2],
+        ] as [$recordAt, $upload, $download]) {
+            StatServer::create([
+                'server_id' => $server->id,
+                'server_type' => $server->type,
+                'record_type' => 'd',
+                'record_at' => $recordAt,
+                'u' => $upload,
+                'd' => $download,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+        }
+
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+
+        $response = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?current=1&page_size=20');
+        $response->assertOk();
+
+        $statQueries = collect(DB::getQueryLog())->filter(
+            fn (array $log) => isset($log['query'])
+                && str_contains((string) $log['query'], 'v2_stat_server')
+        )->count();
+        $this->assertSame(1, $statQueries);
+
+        $data = collect($response->json('data'))->firstWhere('id', $server->id);
+        $this->assertNotNull($data);
+        $this->assertSame(100, $data['traffic_stats']['today']['upload']);
+        $this->assertSame(50, $data['traffic_stats']['today']['download']);
+        $this->assertSame(40, $data['traffic_stats']['yesterday']['upload']);
+        $this->assertSame(10, $data['traffic_stats']['yesterday']['download']);
+
+        $expectedMonthUpload = 100 + ($yesterdayStart >= $monthStart ? 40 : 0);
+        $expectedMonthDownload = 50 + ($yesterdayStart >= $monthStart ? 10 : 0);
+        $this->assertSame($expectedMonthUpload, $data['traffic_stats']['month']['upload']);
+        $this->assertSame($expectedMonthDownload, $data['traffic_stats']['month']['download']);
+        $this->assertSame(148, $data['traffic_stats']['total']['upload']);
+        $this->assertSame(62, $data['traffic_stats']['total']['download']);
+        $this->assertSame(210, $data['traffic_stats']['total']['total']);
+    }
+
     public function test_get_nodes_handles_empty_servers_gracefully(): void
     {
         $response = $this->getJson($this->url('/server/manage/getNodes'));

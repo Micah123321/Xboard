@@ -107,13 +107,15 @@ class ManageController extends Controller
 
         $total = (clone $query)->count();
         $servers = $query
+            ->with('parent')
             ->skip(($current - 1) * $pageSize)
             ->take($pageSize)
-            ->get()
-            ->append([
-                'last_check_at', 'last_push_at', 'online', 'is_online',
-                'available_status', 'cache_key', 'load_status', 'metrics', 'online_conn',
-            ]);
+            ->get();
+
+        $servers->append([
+            'last_check_at', 'last_push_at', 'online', 'is_online',
+            'available_status', 'cache_key', 'load_status', 'metrics', 'online_conn',
+        ]);
 
         // Decorate only the current page nodes
         $trafficStats = $this->buildNodeTrafficStats($servers);
@@ -124,17 +126,12 @@ class ManageController extends Controller
             ? ServerGroup::whereIn('id', $allGroupIds)->get()->keyBy('id')
             : collect();
 
-        $parentIds = $servers->pluck('parent_id')->filter()->unique()->values();
-        $parentMap = $parentIds->isNotEmpty()
-            ? Server::whereIn('id', $parentIds)->get()->keyBy('id')
-            : collect();
-
-        $servers = app(ServerGfwCheckService::class)->decorateServers($servers)->map(function ($item) use ($trafficStats, $trafficLimitSnapshots, $groupMap, $parentMap) {
+        $servers = app(ServerGfwCheckService::class)->decorateServers($servers)->map(function ($item) use ($trafficStats, $trafficLimitSnapshots, $groupMap) {
             $item['groups'] = collect($item['group_ids'] ?? [])
                 ->map(fn ($id) => $groupMap->get($id))
                 ->filter()
                 ->values();
-            $item['parent'] = $parentMap->get($item['parent_id']);
+            $item['parent'] = $item->parent;
             $item['traffic_stats'] = $trafficStats[(int) $item['id']] ?? $this->emptyNodeTrafficStats();
             $item['traffic_limit_snapshot'] = $trafficLimitSnapshots[(int) $item['id']] ?? null;
             return $item;
@@ -176,10 +173,45 @@ class ManageController extends Controller
             return [];
         }
 
-        foreach ($this->resolveNodeTrafficWindows() as $key => $window) {
-            $this->fillTrafficWindow($stats, $key, $window['start'], $window['end']);
+        $windows = $this->resolveNodeTrafficWindows();
+        $query = StatServer::query()
+            ->select('server_id')
+            ->selectRaw('COALESCE(SUM(u), 0) as total_upload')
+            ->selectRaw('COALESCE(SUM(d), 0) as total_download')
+            ->whereIn('server_id', array_keys($stats))
+            ->where('record_type', 'd')
+            ->groupBy('server_id');
+
+        foreach ($windows as $key => $window) {
+            $query
+                ->selectRaw(
+                    "COALESCE(SUM(CASE WHEN record_at >= ? AND record_at < ? THEN u ELSE 0 END), 0) as {$key}_upload",
+                    [$window['start'], $window['end']]
+                )
+                ->selectRaw(
+                    "COALESCE(SUM(CASE WHEN record_at >= ? AND record_at < ? THEN d ELSE 0 END), 0) as {$key}_download",
+                    [$window['start'], $window['end']]
+                );
         }
-        $this->fillTrafficWindow($stats, 'total');
+
+        foreach ($query->get() as $row) {
+            $serverId = (int) $row->server_id;
+            if (!isset($stats[$serverId])) {
+                continue;
+            }
+
+            foreach (array_keys($windows) as $key) {
+                $stats[$serverId][$key] = $this->buildTrafficAmount(
+                    $row->getAttribute("{$key}_upload"),
+                    $row->getAttribute("{$key}_download")
+                );
+            }
+
+            $stats[$serverId]['total'] = $this->buildTrafficAmount(
+                $row->getAttribute('total_upload'),
+                $row->getAttribute('total_download')
+            );
+        }
 
         return $stats;
     }
@@ -212,29 +244,6 @@ class ManageController extends Controller
                 'end' => $reference->copy()->addMonthNoOverflow()->startOfMonth()->timestamp,
             ],
         ];
-    }
-
-    private function fillTrafficWindow(array &$stats, string $key, ?int $startAt = null, ?int $endAt = null): void
-    {
-        $rows = StatServer::query()
-            ->selectRaw('server_id, COALESCE(SUM(u), 0) as upload, COALESCE(SUM(d), 0) as download')
-            ->whereIn('server_id', array_keys($stats))
-            ->where('record_type', 'd')
-            ->when($startAt !== null, function ($query) use ($startAt) {
-                $query->where('record_at', '>=', $startAt);
-            })
-            ->when($endAt !== null, function ($query) use ($endAt) {
-                $query->where('record_at', '<', $endAt);
-            })
-            ->groupBy('server_id')
-            ->get();
-
-        foreach ($rows as $row) {
-            $stats[(int) $row->server_id][$key] = $this->buildTrafficAmount(
-                $row->getAttribute('upload'),
-                $row->getAttribute('download')
-            );
-        }
     }
 
     private function emptyNodeTrafficStats(): array
