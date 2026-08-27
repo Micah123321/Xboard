@@ -6,16 +6,32 @@ use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Models\ServerRoute;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class RouteController extends Controller
 {
     public function fetch(Request $request)
     {
-        $routes = ServerRoute::get();
+        try {
+            $routes = Cache::rememberForever(ServerRoute::FETCH_CACHE_KEY, fn () => $this->fetchRoutes());
+        } catch (\Throwable $e) {
+            Log::warning('Server route fetch cache unavailable: ' . $e->getMessage());
+            $routes = $this->fetchRoutes();
+        }
+
         return [
             'data' => $routes
         ];
+    }
+
+    private function fetchRoutes(): array
+    {
+        return ServerRoute::query()
+            ->select(['id', 'remarks', 'match', 'action', 'action_value', 'created_at', 'updated_at'])
+            ->orderBy('id')
+            ->get()
+            ->toArray();
     }
 
     public function save(Request $request)
