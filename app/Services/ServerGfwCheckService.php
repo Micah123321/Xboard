@@ -6,6 +6,7 @@ use App\Models\Server;
 use App\Models\ServerGfwCheck;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class ServerGfwCheckService
 {
@@ -343,11 +344,21 @@ class ServerGfwCheckService
             return collect();
         }
 
-        return ServerGfwCheck::whereIn('server_id', $ids)
-            ->orderByDesc('id')
+        $latestCheckTable = DB::connection()->getDriverName() === 'mysql'
+            ? DB::raw('server_gfw_checks FORCE INDEX (idx_gfw_server_id_id)')
+            : 'server_gfw_checks';
+        $latestCheckIds = DB::table($latestCheckTable)
+            ->selectRaw('server_id, MAX(id) as id')
+            ->whereIn('server_id', $ids->all())
+            ->groupBy('server_id');
+
+        return ServerGfwCheck::query()
+            ->joinSub($latestCheckIds, 'latest_gfw_checks', function ($join): void {
+                $join->on('server_gfw_checks.id', '=', 'latest_gfw_checks.id');
+            })
+            ->select('server_gfw_checks.*')
             ->get()
-            ->groupBy('server_id')
-            ->map(fn (Collection $items) => $items->first());
+            ->keyBy('server_id');
     }
 
     private function blockedStatisticsByServerIds($sourceIds): array

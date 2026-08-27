@@ -19,10 +19,11 @@ services:
     command: php artisan octane:start --host=0.0.0.0 --port=7001
     environment:
       docker: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     ports:
       - "${WEB_PORT:-7001}:7001"
     volumes: &xboard-volumes
-      - redis-data:/data
       - ./.env:/www/.env
       - ./.docker/.data/:/www/.docker/.data
       - ./storage/logs:/www/storage/logs
@@ -37,6 +38,8 @@ services:
     command: php artisan horizon
     environment:
       docker: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     volumes: *xboard-volumes
 
   scheduler:
@@ -47,6 +50,8 @@ services:
     command: php artisan schedule:work
     environment:
       docker: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     volumes: *xboard-volumes
 
   admin:
@@ -70,6 +75,8 @@ services:
     command: php artisan ws-server start
     environment:
       docker: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     ports:
       - "${WS_PORT:-8076}:8076"
     volumes: *xboard-volumes

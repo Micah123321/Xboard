@@ -38,6 +38,7 @@ class Kernel extends ConsoleKernel
         // reset
         $schedule->command('reset:traffic')->everyMinute()->onOneServer()->withoutOverlapping(10);
         $schedule->command('reset:log')->daily()->onOneServer();
+        $schedule->command('cleanup:server-gfw-checks')->dailyAt('0:40')->onOneServer()->withoutOverlapping(30);
         // send
         $schedule->command('send:remindMail', ['--force'])->dailyAt('11:30')->onOneServer();
         // horizon metrics

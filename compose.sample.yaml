@@ -15,7 +15,6 @@ services:
       dockerfile: Dockerfile.local
     image: xboard-local:latest
     volumes:
-      - ./.docker/.data/redis/:/data/
       - ./.env:/www/.env
       - ./.docker/.data/:/www/.docker/.data
       - ./storage/logs:/www/storage/logs
@@ -23,6 +22,8 @@ services:
       - ./plugins:/www/plugins
     environment:
       - docker=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       - redis
     # network_mode: host
@@ -33,11 +34,14 @@ services:
   horizon:
     image: xboard-local:latest
     volumes:
-      - ./.docker/.data/redis/:/data/
       - ./.env:/www/.env
       - ./.docker/.data/:/www/.docker/.data
       - ./storage/logs:/www/storage/logs
       - ./plugins:/www/plugins
+    environment:
+      - docker=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     restart: on-failure
     # network_mode: host
     command: php artisan horizon
@@ -46,11 +50,14 @@ services:
   scheduler:
     image: xboard-local:latest
     volumes:
-      - ./.docker/.data/redis/:/data/
       - ./.env:/www/.env
       - ./.docker/.data/:/www/.docker/.data
       - ./storage/logs:/www/storage/logs
       - ./plugins:/www/plugins
+    environment:
+      - docker=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     restart: on-failure
     # network_mode: host
     command: php artisan schedule:work
@@ -59,11 +66,14 @@ services:
   ws-server:
     image: xboard-local:latest
     volumes:
-      - ./.docker/.data/redis/:/data/
       - ./.env:/www/.env
       - ./.docker/.data/:/www/.docker/.data
       - ./storage/logs:/www/storage/logs
       - ./plugins:/www/plugins
+    environment:
+      - docker=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     restart: on-failure
     # network_mode: host
     command: php artisan ws-server start

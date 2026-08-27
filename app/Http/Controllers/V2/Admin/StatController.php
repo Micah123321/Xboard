@@ -652,31 +652,52 @@ class StatController extends Controller
 
     private function buildNodeGfwStats(): array
     {
-        $latestCheckColumn = function (string $column): callable {
-            return function ($query) use ($column): void {
-                $query->from('server_gfw_checks as c')
-                    ->select("c.{$column}")
-                    ->whereColumn('c.server_id', 'v2_server.id')
-                    ->whereIn('c.status', ServerGfwCheck::FINAL_STATUSES)
-                    ->orderByDesc('c.id')
-                    ->limit(1);
-            };
-        };
+        if (DB::connection()->getDriverName() === 'mysql') {
+            $finalStatuses = implode(', ', array_map(
+                static fn (string $status): string => DB::getPdo()->quote($status),
+                ServerGfwCheck::FINAL_STATUSES
+            ));
+            $latestCheckIds = DB::raw(sprintf(
+                '(select server_id, MAX(id) as id from server_gfw_checks FORCE INDEX (idx_gfw_server_status_id) where status in (%s) group by server_id) as latest_gfw_checks',
+                $finalStatuses
+            ));
 
-        $latestRows = DB::table('v2_server')
-            ->where(function ($query): void {
-                $query->where('v2_server.gfw_check_enabled', true)
-                    ->orWhereNull('v2_server.gfw_check_enabled');
-            })
-            ->selectRaw('v2_server.id as server_id')
-            ->selectRaw('v2_server.type')
-            ->selectSub($latestCheckColumn('id'), 'id')
-            ->selectSub($latestCheckColumn('status'), 'status')
-            ->selectSub($latestCheckColumn('checked_at'), 'checked_at')
-            ->selectSub($latestCheckColumn('updated_at'), 'updated_at')
-            ->get()
-            ->filter(fn ($row): bool => in_array($row->status, ServerGfwCheck::FINAL_STATUSES, true))
-            ->values();
+            $latestRows = DB::table('server_gfw_checks')
+                ->join($latestCheckIds, 'server_gfw_checks.id', '=', 'latest_gfw_checks.id')
+                ->join('v2_server', 'server_gfw_checks.server_id', '=', 'v2_server.id')
+                ->whereRaw('(v2_server.gfw_check_enabled = 1 or v2_server.gfw_check_enabled is null)')
+                ->get([
+                    'server_gfw_checks.id',
+                    'server_gfw_checks.server_id',
+                    'server_gfw_checks.status',
+                    'server_gfw_checks.checked_at',
+                    'server_gfw_checks.updated_at',
+                    'v2_server.type',
+                ]);
+        } else {
+            $latestCheckIds = DB::table('server_gfw_checks')
+                ->selectRaw('server_id, MAX(id) as id')
+                ->whereIn('status', ServerGfwCheck::FINAL_STATUSES)
+                ->groupBy('server_id');
+
+            $latestRows = DB::table('server_gfw_checks')
+                ->joinSub($latestCheckIds, 'latest_gfw_checks', function ($join): void {
+                    $join->on('server_gfw_checks.id', '=', 'latest_gfw_checks.id');
+                })
+                ->join('v2_server', 'server_gfw_checks.server_id', '=', 'v2_server.id')
+                ->where(function ($query): void {
+                    $query->where('v2_server.gfw_check_enabled', true)
+                        ->orWhereNull('v2_server.gfw_check_enabled');
+                })
+                ->get([
+                    'server_gfw_checks.id',
+                    'server_gfw_checks.server_id',
+                    'server_gfw_checks.status',
+                    'server_gfw_checks.checked_at',
+                    'server_gfw_checks.updated_at',
+                    'v2_server.type',
+                ]);
+        }
 
         $blockedRows = $latestRows
             ->filter(fn ($row): bool => $row->status === ServerGfwCheck::STATUS_BLOCKED)
@@ -704,27 +725,16 @@ class StatController extends Controller
             return 0;
         }
 
-        $latestIds = $candidates
-            ->pluck('id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
-        $serverIds = $candidates
-            ->pluck('server_id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
-
-        $previousChecks = ServerGfwCheck::whereIn('server_id', $serverIds)
-            ->whereIn('status', ServerGfwCheck::FINAL_STATUSES)
-            ->whereNotIn('id', $latestIds)
-            ->orderByDesc('id')
-            ->get(['id', 'server_id', 'status'])
-            ->groupBy('server_id')
-            ->map(fn (Collection $checks) => $checks->first());
-
         return $candidates
-            ->filter(function ($row) use ($previousChecks): bool {
-                $previous = $previousChecks->get((int) $row->server_id);
-                return $previous && $previous->status === ServerGfwCheck::STATUS_BLOCKED;
+            ->filter(function ($row): bool {
+                $previousStatus = DB::table('server_gfw_checks')
+                    ->where('server_id', (int) $row->server_id)
+                    ->where('id', '<', (int) $row->id)
+                    ->whereIn('status', ServerGfwCheck::FINAL_STATUSES)
+                    ->orderByDesc('id')
+                    ->value('status');
+
+                return $previousStatus === ServerGfwCheck::STATUS_BLOCKED;
             })
             ->count();
     }
