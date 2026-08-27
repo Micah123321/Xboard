@@ -528,39 +528,58 @@ class StatController extends Controller
 
     private function queryDashboardTrafficStats(int $now, int $todayStart, int $currentMonthStart): array
     {
-        $retentionStart = strtotime('-2 month', $now);
         $row = DB::table('v2_stat_server')
             ->where('record_type', 'd')
-            ->where('record_at', '>=', $retentionStart)
+            ->where('record_at', '>=', $currentMonthStart)
             ->where('record_at', '<', $now)
             ->selectRaw('COALESCE(SUM(CASE WHEN record_at >= ? THEN u ELSE 0 END), 0) as today_upload', [$todayStart])
             ->selectRaw('COALESCE(SUM(CASE WHEN record_at >= ? THEN d ELSE 0 END), 0) as today_download', [$todayStart])
             ->selectRaw('COALESCE(SUM(CASE WHEN record_at >= ? THEN u + d ELSE 0 END), 0) as today_total', [$todayStart])
-            ->selectRaw('COALESCE(SUM(CASE WHEN record_at >= ? THEN u ELSE 0 END), 0) as month_upload', [$currentMonthStart])
-            ->selectRaw('COALESCE(SUM(CASE WHEN record_at >= ? THEN d ELSE 0 END), 0) as month_download', [$currentMonthStart])
-            ->selectRaw('COALESCE(SUM(CASE WHEN record_at >= ? THEN u + d ELSE 0 END), 0) as month_total', [$currentMonthStart])
-            ->selectRaw('COALESCE(SUM(u), 0) as total_upload')
-            ->selectRaw('COALESCE(SUM(d), 0) as total_download')
-            ->selectRaw('COALESCE(SUM(u + d), 0) as total')
+            ->selectRaw('COALESCE(SUM(u), 0) as month_upload')
+            ->selectRaw('COALESCE(SUM(d), 0) as month_download')
+            ->selectRaw('COALESCE(SUM(u + d), 0) as month_total')
             ->first();
 
+        $todayTraffic = [
+            'upload' => (int) ($row->today_upload ?? 0),
+            'download' => (int) ($row->today_download ?? 0),
+            'total' => (int) ($row->today_total ?? 0),
+        ];
+        $monthTraffic = [
+            'upload' => (int) ($row->month_upload ?? 0),
+            'download' => (int) ($row->month_download ?? 0),
+            'total' => (int) ($row->month_total ?? 0),
+        ];
+        $historicalTotalTraffic = $this->sumDailyTrafficTotal(null, $todayStart);
+
         return [
-            'todayTraffic' => [
-                'upload' => (int) ($row->today_upload ?? 0),
-                'download' => (int) ($row->today_download ?? 0),
-                'total' => (int) ($row->today_total ?? 0),
-            ],
-            'monthTraffic' => [
-                'upload' => (int) ($row->month_upload ?? 0),
-                'download' => (int) ($row->month_download ?? 0),
-                'total' => (int) ($row->month_total ?? 0),
-            ],
+            'todayTraffic' => $todayTraffic,
+            'monthTraffic' => $monthTraffic,
             'totalTraffic' => [
-                'upload' => (int) ($row->total_upload ?? 0),
-                'download' => (int) ($row->total_download ?? 0),
-                'total' => (int) ($row->total ?? 0),
+                // v2_stat keeps only total traffic, not upload/download split. Avoid rebuilding
+                // the split from the large per-node history table during the dashboard request.
+                'upload' => $monthTraffic['upload'],
+                'download' => $monthTraffic['download'],
+                'total' => $historicalTotalTraffic + $todayTraffic['total'],
             ],
         ];
+    }
+
+    private function sumDailyTrafficTotal(?int $startAt, ?int $endAt): int
+    {
+        $query = DB::table('v2_stat')->where('record_type', 'd');
+
+        if ($startAt !== null) {
+            $query->where('record_at', '>=', $startAt);
+        }
+
+        if ($endAt !== null) {
+            $query->where('record_at', '<', $endAt);
+        }
+
+        return (int) $query
+            ->pluck('transfer_used_total')
+            ->sum(fn ($value): int => (int) $value);
     }
 
     private function countOnlineServers(): int
@@ -829,37 +848,53 @@ class StatController extends Controller
     {
         $isNodeRank = $type === 'node';
         $table = $isNodeRank ? 'v2_stat_server' : 'v2_stat_user';
+        $idColumn = $isNodeRank ? 'server_id' : 'user_id';
         $nameTable = $isNodeRank ? 'v2_server' : 'v2_user';
-        $idColumn = $isNodeRank ? 's.server_id' : 's.user_id';
-        $nameColumn = $isNodeRank ? 'm.name' : 'm.email';
+        $nameColumn = $isNodeRank ? 'name' : 'email';
         $fallbackName = $isNodeRank ? 'Node' : 'User';
-        $currentValueSql = 'COALESCE(SUM(CASE WHEN s.record_at >= ? AND s.record_at <= ? THEN s.u + s.d ELSE 0 END), 0)';
-        $previousValueSql = 'COALESCE(SUM(CASE WHEN s.record_at >= ? AND s.record_at < ? THEN s.u + s.d ELSE 0 END), 0)';
 
-        $rows = DB::table("{$table} as s")
-            ->leftJoin("{$nameTable} as m", 'm.id', '=', $idColumn)
-            ->where('s.record_type', 'd')
-            ->where('s.record_at', '>=', min($startDate, $previousStartDate))
-            ->where('s.record_at', '<=', max($endDate, $previousEndDate - 1))
+        $currentData = DB::table($table)
             ->selectRaw("{$idColumn} as id")
-            ->selectRaw("{$nameColumn} as name")
-            ->selectRaw("{$currentValueSql} as value", [$startDate, $endDate])
-            ->selectRaw("{$previousValueSql} as previous_value", [$previousStartDate, $previousEndDate])
-            ->groupBy($idColumn, $nameColumn)
-            ->havingRaw("{$currentValueSql} > 0", [$startDate, $endDate])
+            ->selectRaw('COALESCE(SUM(u + d), 0) as value')
+            ->where('record_type', 'd')
+            ->where('record_at', '>=', $startDate)
+            ->where('record_at', '<=', $endDate)
+            ->groupBy($idColumn)
             ->orderByDesc('value')
             ->limit($limit)
             ->get();
 
+        if ($currentData->isEmpty()) {
+            return [
+                'timestamp' => date('c'),
+                'data' => [],
+            ];
+        }
+
+        $ids = $currentData->pluck('id')->map(fn ($id): int => (int) $id)->all();
+        $previousData = DB::table($table)
+            ->selectRaw("{$idColumn} as id")
+            ->selectRaw('COALESCE(SUM(u + d), 0) as value')
+            ->where('record_type', 'd')
+            ->whereIn($idColumn, $ids)
+            ->where('record_at', '>=', $previousStartDate)
+            ->where('record_at', '<', $previousEndDate)
+            ->groupBy($idColumn)
+            ->get()
+            ->keyBy('id');
+        $names = DB::table($nameTable)
+            ->whereIn('id', $ids)
+            ->pluck($nameColumn, 'id');
+
         $result = [];
-        foreach ($rows as $row) {
-            $value = (int) ($row->value ?? 0);
-            $previousValue = (int) ($row->previous_value ?? 0);
+        foreach ($currentData as $data) {
+            $previousValue = isset($previousData[$data->id]) ? (int) $previousData[$data->id]->value : 0;
+            $value = (int) $data->value;
             $change = $previousValue > 0 ? round(($value - $previousValue) / $previousValue * 100, 1) : 0;
 
             $result[] = [
-                'id' => (string) $row->id,
-                'name' => $row->name ?: "{$fallbackName} {$row->id}",
+                'id' => (string) $data->id,
+                'name' => $names[$data->id] ?? "{$fallbackName} {$data->id}",
                 'value' => $value,
                 'previousValue' => $previousValue,
                 'change' => $change,
