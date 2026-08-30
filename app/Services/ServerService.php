@@ -67,6 +67,21 @@ class ServerService
             ->filter(fn (Server $server) => $server->available_status !== Server::STATUS_OFFLINE)
             ->values();
 
+        $trafficLimitService = app(ServerTrafficLimitService::class);
+        $servers = $servers
+            ->filter(function (Server $server) use ($trafficLimitService) {
+                if (!(bool) $server->traffic_limit_enabled || (int) $server->transfer_enable <= 0) {
+                    return true;
+                }
+
+                if ($server->traffic_limit_status === Server::TRAFFIC_LIMIT_STATUS_SUSPENDED) {
+                    return false;
+                }
+
+                return !($trafficLimitService->buildTrafficLimitSnapshot($server)['suspended'] ?? false);
+            })
+            ->values();
+
         $servers = collect($servers)->map(function ($server) use ($user) {
             // 判断动态端口
             if (str_contains($server->port, '-')) {

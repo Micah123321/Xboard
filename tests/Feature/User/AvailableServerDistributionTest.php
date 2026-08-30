@@ -73,6 +73,46 @@ class AvailableServerDistributionTest extends TestCase
         $this->assertStringContainsString('online-subscription-node', $subscription);
     }
 
+    public function test_subscription_excludes_traffic_limited_nodes(): void
+    {
+        $user = $this->makeUser();
+        $limited = $this->makeServer('traffic-limited-subscription-node', 1, Server::TYPE_SOCKS, [
+            'traffic_limit_enabled' => true,
+            'transfer_enable' => 1024,
+            'traffic_limit_reset_day' => 1,
+            'traffic_limit_reset_time' => '00:00',
+            'traffic_limit_timezone' => 'UTC',
+            'u' => 0,
+            'd' => 0,
+        ]);
+        $online = $this->makeServer('online-subscription-node', 2, Server::TYPE_SOCKS);
+        $this->putRuntimeCache($limited, 'LAST_CHECK_AT', time());
+        $this->putRuntimeCache($online, 'LAST_CHECK_AT', time());
+        $this->putMetricsCache($limited, [
+            'traffic_limit' => [
+                'enabled' => true,
+                'limit' => 1024,
+                'used' => 1024,
+                'suspended' => true,
+                'last_reset_at' => 1,
+                'next_reset_at' => time() + 3600,
+                'suspended_at' => time(),
+                'status' => Server::TRAFFIC_LIMIT_STATUS_SUSPENDED,
+            ],
+        ]);
+
+        $response = $this->get('/api/v1/client/subscribe?' . http_build_query([
+            'token' => $user->token,
+            'flag' => 'general',
+        ]));
+
+        $response->assertOk();
+        $subscription = base64_decode($response->getContent(), true);
+        $this->assertNotFalse($subscription);
+        $this->assertStringNotContainsString('traffic-limited-subscription-node', $subscription);
+        $this->assertStringContainsString('online-subscription-node', $subscription);
+    }
+
     public function test_fetch_updates_members_and_etag_when_node_goes_offline_and_recovers(): void
     {
         $user = $this->makeUser();
@@ -126,9 +166,9 @@ class AvailableServerDistributionTest extends TestCase
         ]);
     }
 
-    private function makeServer(string $name, int $sort, string $type = Server::TYPE_VMESS): Server
+    private function makeServer(string $name, int $sort, string $type = Server::TYPE_VMESS, array $attributes = []): Server
     {
-        return Server::create([
+        return Server::create(array_merge([
             'name' => $name,
             'type' => $type,
             'host' => '127.0.0.1',
@@ -139,7 +179,7 @@ class AvailableServerDistributionTest extends TestCase
             'show' => true,
             'sort' => $sort,
             'enabled' => true,
-        ]);
+        ], $attributes));
     }
 
     private function putRuntimeCache(Server $server, string $name, int $value): void
@@ -150,6 +190,11 @@ class AvailableServerDistributionTest extends TestCase
     private function forgetRuntimeCache(Server $server, string $name): void
     {
         Cache::forget($this->runtimeCacheKey($server, $name));
+    }
+
+    private function putMetricsCache(Server $server, array $metrics): void
+    {
+        Cache::put($this->runtimeCacheKey($server, 'METRICS'), $metrics, 3600);
     }
 
     private function runtimeCacheKey(Server $server, string $name): string
