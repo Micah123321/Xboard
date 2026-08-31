@@ -27,6 +27,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property boolean $auto_online 是否根据在线状态自动同步显示
  * @property boolean $auto_online_cooldown_enabled 是否启用自动上线重连冷却
  * @property boolean $gfw_check_enabled 是否自动检测墙状态并同步显示
+ * @property boolean $tcp_check_enabled 是否检测子节点 TCP 端口连通性
  * @property boolean $gfw_auto_hidden 是否由墙状态自动隐藏
  * @property int|null $gfw_auto_action_at 最近墙状态自动显隐时间
  * @property boolean $parent_auto_hidden 是否由父节点自动状态联动隐藏
@@ -149,6 +150,7 @@ class Server extends Model
         'auto_online' => 'boolean',
         'auto_online_cooldown_enabled' => 'boolean',
         'gfw_check_enabled' => 'boolean',
+        'tcp_check_enabled' => 'boolean',
         'gfw_auto_hidden' => 'boolean',
         'gfw_auto_action_at' => 'integer',
         'parent_auto_hidden' => 'boolean',
@@ -544,6 +546,10 @@ class Server extends Model
     private function shouldUseParentRuntimeCache(): bool
     {
         if ((int) ($this->parent_id ?? 0) <= 0) {
+            return false;
+        }
+
+        if ((bool) ($this->tcp_check_enabled ?? false)) {
             return false;
         }
 

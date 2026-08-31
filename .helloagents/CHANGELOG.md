@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.12.4] - 2026-08-31
+
+### 新功能
+- **[node-auto-online / admin-frontend]**: 子节点新增 `tcp_check_enabled` TCP 端口检测开关；开启后 `sync:server-tcp-checks` 每分钟检测子节点 `host:server_port` 连通性，成功写入子节点自身心跳，失败清理自身心跳 / 推送缓存并触发自动上线隐藏，避免转发入口未接入 mi-node 上报时错误继承父节点在线状态 — by HelloAGENTS
+  - 方案: [202608310920_child-tcp-port-check](plan/202608310920_child-tcp-port-check/)
+  - 文件: app/Services/ServerTcpCheckService.php, app/Console/Commands/SyncServerTcpChecks.php, app/Models/Server.php, app/Console/Kernel.php, app/Http/Controllers/V2/Admin/Server/ManageController.php, app/Http/Requests/Admin/ServerSave.php, admin-frontend/src/*, database/migrations/*, tests/Unit/ServerTcpCheckServiceTest.php
+
 ## [0.12.3] - 2026-08-31
 
 ### 修复

@@ -163,6 +163,15 @@ watch(
 )
 
 watch(
+  () => form.parentId,
+  (value) => {
+    if (!value) {
+      form.tcpCheckEnabled = false
+    }
+  },
+)
+
+watch(
   () => form.tlsMode,
   (value) => {
     if (value !== 2) {
@@ -368,6 +377,13 @@ watch(
                     <span>{{ form.parentId ? '子节点不独立检测，只控制是否随父节点自动隐藏或恢复。' : '开启后后台会自动检测并在疑似被墙时隐藏。' }}</span>
                   </div>
                   <ElSwitch v-model="form.gfwCheckEnabled" />
+                </label>
+                <label v-if="form.parentId" class="switch-card">
+                  <div>
+                    <strong>TCP 端口检测</strong>
+                    <span>检测子节点地址与服务端口，失败时自动上线会隐藏该子节点。</span>
+                  </div>
+                  <ElSwitch v-model="form.tcpCheckEnabled" />
                 </label>
                 <label class="switch-card">
                   <div>

@@ -35,6 +35,7 @@ export interface NodeFormModel {
   port: string
   serverPort: string
   parentId: number | null
+  tcpCheckEnabled: boolean
   show: boolean
   autoOnline: boolean
   autoOnlineCooldownEnabled: boolean
@@ -253,6 +254,7 @@ export function createEmptyNodeForm(): NodeFormModel {
     port: '',
     serverPort: '',
     parentId: null,
+    tcpCheckEnabled: false,
     show: true,
     autoOnline: false,
     autoOnlineCooldownEnabled: false,

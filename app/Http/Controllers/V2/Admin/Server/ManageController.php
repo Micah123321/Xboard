@@ -13,6 +13,7 @@ use App\Services\ServerGfwCheckService;
 use App\Services\ServerParentVisibilityService;
 use App\Services\ServerReconnectCooldownService;
 use App\Services\ServerService;
+use App\Services\ServerTcpCheckService;
 use App\Services\ServerTrafficLimitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -156,7 +157,7 @@ class ManageController extends Controller
     {
         return $this->success(
             Server::orderBy('sort', 'ASC')
-                ->get(['id', 'name', 'type', 'host', 'port', 'server_port', 'parent_id', 'group_ids', 'route_ids', 'show', 'sort', 'auto_online', 'gfw_check_enabled', 'enabled', 'rate', 'machine_id'])
+                ->get(['id', 'name', 'type', 'host', 'port', 'server_port', 'parent_id', 'group_ids', 'route_ids', 'show', 'sort', 'auto_online', 'gfw_check_enabled', 'tcp_check_enabled', 'enabled', 'rate', 'machine_id'])
                 ->toArray()
         );
     }
@@ -286,6 +287,15 @@ class ManageController extends Controller
         }
     }
 
+    private function normalizeTcpCheck(array &$params, int $fallbackParentId = 0): void
+    {
+        $parentId = array_key_exists('parent_id', $params)
+            ? (int) ($params['parent_id'] ?? 0)
+            : $fallbackParentId;
+
+        $params['tcp_check_enabled'] = $parentId > 0 && (bool) ($params['tcp_check_enabled'] ?? false);
+    }
+
     private function resetReconnectCooldownIfDisabled(Server $server): void
     {
         if (!(bool) $server->auto_online || !(bool) $server->auto_online_cooldown_enabled) {
@@ -328,6 +338,7 @@ class ManageController extends Controller
             }
             try {
                 $this->normalizeAutoOnlineCooldown($params, (bool) $server->auto_online);
+                $this->normalizeTcpCheck($params, (int) ($server->parent_id ?? 0));
                 if (array_key_exists('show', $params)) {
                     $params['gfw_auto_hidden'] = false;
                     $params['gfw_auto_action_at'] = null;
@@ -337,7 +348,11 @@ class ManageController extends Controller
                 $server->update($params);
                 $this->resetReconnectCooldownIfDisabled($server);
                 app(ServerTrafficLimitService::class)->refreshSchedule($server->refresh());
-                $this->syncAutoOnlineIfEnabled($server);
+                if ((bool) $server->tcp_check_enabled) {
+                    app(ServerTcpCheckService::class)->syncServer($server);
+                } else {
+                    $this->syncAutoOnlineIfEnabled($server);
+                }
                 return $this->success(true);
             } catch (\Exception $e) {
                 Log::error($e);
@@ -347,9 +362,14 @@ class ManageController extends Controller
 
         try {
             $this->normalizeAutoOnlineCooldown($params);
+            $this->normalizeTcpCheck($params);
             $server = Server::create($params);
             app(ServerTrafficLimitService::class)->refreshSchedule($server->refresh());
-            $this->syncAutoOnlineIfEnabled($server);
+            if ((bool) $server->tcp_check_enabled) {
+                app(ServerTcpCheckService::class)->syncServer($server);
+            } else {
+                $this->syncAutoOnlineIfEnabled($server);
+            }
             return $this->success(true);
         } catch (\Exception $e) {
             Log::error($e);
@@ -365,6 +385,7 @@ class ManageController extends Controller
             'auto_online' => 'nullable|boolean',
             'auto_online_cooldown_enabled' => 'nullable|boolean',
             'gfw_check_enabled' => 'nullable|boolean',
+            'tcp_check_enabled' => 'nullable|boolean',
             'machine_id' => 'nullable|integer',
             'enabled' => 'nullable|boolean',
         ]);
@@ -392,6 +413,9 @@ class ManageController extends Controller
         if (array_key_exists('gfw_check_enabled', $params)) {
             $server->gfw_check_enabled = (bool) $params['gfw_check_enabled'];
         }
+        if (array_key_exists('tcp_check_enabled', $params)) {
+            $server->tcp_check_enabled = (int) ($server->parent_id ?? 0) > 0 && (bool) $params['tcp_check_enabled'];
+        }
         if (array_key_exists('machine_id', $params)) {
             $server->machine_id = $params['machine_id'] ?: null;
         }
@@ -404,7 +428,11 @@ class ManageController extends Controller
         }
 
         $this->resetReconnectCooldownIfDisabled($server);
-        $this->syncAutoOnlineIfEnabled($server);
+        if ((bool) $server->tcp_check_enabled) {
+            app(ServerTcpCheckService::class)->syncServer($server);
+        } else {
+            $this->syncAutoOnlineIfEnabled($server);
+        }
 
         return $this->success(true);
     }

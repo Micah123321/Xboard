@@ -1001,6 +1001,7 @@ export interface AdminNodeItem {
   auto_online?: boolean
   auto_online_cooldown_enabled?: boolean
   gfw_check_enabled?: boolean
+  tcp_check_enabled?: boolean
   gfw_auto_hidden?: boolean
   gfw_auto_action_at?: number | null
   traffic_limit_enabled?: boolean
@@ -1089,6 +1090,7 @@ export interface AdminNodeUpdatePayload {
   auto_online?: boolean
   auto_online_cooldown_enabled?: boolean
   gfw_check_enabled?: boolean
+  tcp_check_enabled?: boolean
   enabled?: boolean
   machine_id?: number | null
 }
@@ -1124,6 +1126,7 @@ export interface AdminNodeSavePayload {
   auto_online?: boolean
   auto_online_cooldown_enabled?: boolean
   gfw_check_enabled?: boolean
+  tcp_check_enabled?: boolean
   transfer_enable?: number | null
   traffic_limit_enabled?: boolean
   traffic_limit_reset_day?: number | null

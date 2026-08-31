@@ -45,6 +45,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('horizon:snapshot')->everyFiveMinutes()->onOneServer();
         // cleanup stale online_count (GC for Redis TTL expiration)
         $schedule->command('cleanup:online-status')->everyFiveMinutes()->onOneServer();
+        $schedule->command('sync:server-tcp-checks')->everyMinute()->onOneServer()->withoutOverlapping(5);
         $schedule->command('sync:server-auto-online')->everyFiveMinutes()->onOneServer()->withoutOverlapping(5);
         $schedule->command('sync:server-gfw-checks')->everyThirtyMinutes()->onOneServer()->withoutOverlapping(30);
         $schedule->command('sync:server-traffic-limits')->everyMinute()->onOneServer()->withoutOverlapping(10);
