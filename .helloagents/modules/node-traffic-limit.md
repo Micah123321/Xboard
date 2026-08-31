@@ -17,6 +17,7 @@
 - 当前账期没有统计行时回退共享范围内 `v2_server.u + v2_server.d`；同范围任一节点有当前有效的 mi-node runtime metrics 时，快照会取 metrics `used` 的最大值并保留同限额下的 `suspended` 运行态
 - `ServerTrafficLimitService::buildNodeConfig()` 下发给 mi-node 的 `traffic_limit.current_used` 使用共享账期口径，不再只使用当前单节点的 `u+d`
 - `ServerTrafficLimitService::buildSnapshotsForServers()` 为管理端节点列表批量生成 `traffic_limit_snapshot`，避免前端自行按 IP 猜测共享规则
+- `ServerService::getAvailableServers()` 会在标准订阅、用户节点 API 和 App 配置下发前排除已限额节点：启用限额且 `traffic_limit_status=suspended`，或 `ServerTrafficLimitService::buildTrafficLimitSnapshot()` 完整快照显示 `suspended=true` 时不下发；限额重置或恢复正常后由下一次请求重新加入
 - 管理端保存节点后调用 `ServerTrafficLimitService::refreshSchedule()` 计算 `traffic_limit_next_reset_at`，并通过 `NodeSyncService::notifyConfigUpdated()` 通知节点更新配置
 - 手动重置和定时重置统一走 `ServerTrafficLimitService::resetServer()`：清空当前节点 `u/d`，恢复 `traffic_limit_status=normal`，记录 `traffic_limit_last_reset_at`，计算下一次重置时间，并触发 `notifyFullSync()`；该接口不批量重置同共享范围的其他节点
 - `sync:server-traffic-limits` 每分钟扫描到期且启用限额的节点，只处理 `traffic_limit_next_reset_at <= now()` 的记录，不影响未启用限额的节点

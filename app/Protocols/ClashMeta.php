@@ -803,6 +803,11 @@ class ClashMeta extends AbstractProtocol
             $array['port-range'] = $server['ports'];
         }
 
+        $trafficPattern = trim((string) data_get($protocol_settings, 'traffic_pattern', ''));
+        if ($trafficPattern !== '') {
+            $array['traffic-pattern'] = $trafficPattern;
+        }
+
         return $array;
     }
 

@@ -2,12 +2,28 @@
 
 namespace Tests\Unit\Protocols;
 
+use App\Protocols\ClashMeta;
 use App\Protocols\General;
 use App\Protocols\Shadowrocket;
 use PHPUnit\Framework\TestCase;
 
 class UpstreamProtocolFixesTest extends TestCase
 {
+    public function test_clash_meta_mieru_includes_traffic_pattern(): void
+    {
+        $proxy = ClashMeta::buildMieru('secret', [
+            'name' => 'Mieru Node',
+            'host' => 'mieru.example.com',
+            'port' => 2999,
+            'protocol_settings' => [
+                'transport' => 'TCP',
+                'traffic_pattern' => 'GgQIARAK',
+            ],
+        ]);
+
+        $this->assertSame('GgQIARAK', $proxy['traffic-pattern']);
+    }
+
     public function test_general_vless_fragment_uses_raw_url_encoding(): void
     {
         $uri = General::buildVless('00000000-0000-0000-0000-000000000001', [

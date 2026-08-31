@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { generateMieruTrafficPattern as createMieruTrafficPattern } from '@/utils/mieruTrafficPattern'
 import {
   getNodeProtocolHint,
   NODE_ALPN_OPTIONS,
@@ -36,10 +37,7 @@ const showRealitySection = computed(() => shouldShowRealitySettings(props.form.t
 const currentProtocolHint = computed(() => getNodeProtocolHint(props.form.type))
 
 function generateMieruTrafficPattern() {
-  const bytes = new Uint8Array(7)
-  crypto.getRandomValues(bytes)
-  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')
-  props.form.mieruTrafficPattern = btoa(binary)
+  props.form.mieruTrafficPattern = createMieruTrafficPattern()
 }
 </script>
 

@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## [0.12.3] - 2026-08-31
+
+### 修复
+- **[admin-frontend / subscription-protocols]**: 修复 Mieru 节点编辑表单的 `Traffic Pattern` 随机生成逻辑，由随机裸字节 Base64 改为官方 appctl `TrafficPattern.seed` protobuf Base64；ClashMeta Mieru 导出同步写入非空 `traffic-pattern`，避免管理端保存后订阅配置丢失该字段 — by HelloAGENTS
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/utils/mieruTrafficPattern.ts, admin-frontend/src/views/nodes/NodeEditorProtocolSection.vue, app/Protocols/ClashMeta.php, tests/Unit/Protocols/UpstreamProtocolFixesTest.php
+
+## [0.12.2] - 2026-08-30
+
+### 修复
+- **[subscription-protocols / node-traffic-limit]**: 标准节点分发入口新增流量限额准入过滤，启用限额且 `traffic_limit_status=suspended` 或完整快照 `suspended=true` 的节点不再进入订阅、用户节点 API 和 App 配置下发结果；补充已限额但单节点 `u+d` 未超额的真实订阅回归测试 — by HelloAGENTS
+  - 方案: [202608301856_exclude-limited-subscription-nodes](plan/202608301856_exclude-limited-subscription-nodes/)
+  - 文件: app/Services/ServerService.php, tests/Feature/User/AvailableServerDistributionTest.php
+
 ## [0.12.1] - 2026-08-27
 
 ### 修复

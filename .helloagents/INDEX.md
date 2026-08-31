@@ -3,7 +3,7 @@
 ```yaml
 kb_version: 2
 project: Xboard-new
-updated_at: 2026-06-14
+updated_at: 2026-08-30
 active_package:
 ```
 
