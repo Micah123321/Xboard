@@ -58,6 +58,7 @@
   - `server/manage/checkGfw`
   - `server/manage/resetTraffic`
   - `server/manage/batchResetTraffic`
+- 管理端节点编辑器的 AnyTLS 表单支持一键随机化：Padding Scheme 会生成非默认多行方案，SNI 输入会从自有域名池 `xqqqx.com` / `023467.xyz` / `015679.xyz` / `488448.xyz` / `qqqz.de` / `003939.xyz` / `515666.xyz` / `535888.xyz` 随机填充
 - 节点月流量限额由 Xboard 保存和编排：`v2_server.transfer_enable` 作为月额度，`traffic_limit_*` 字段记录启用、重置日/时间/时区和节点端运行状态；`ServerTrafficLimitService` 负责下发 `traffic_limit`、手动/定时重置、metrics 状态回写和通知 mi-node；父节点限额状态不再改写子节点显隐
 - 节点自动上线由 `ServerAutoOnlineService` 统一编排；节点可开启 `auto_online_cooldown_enabled` 重连冷却，在 1 小时内在线 / 离线切换超过 10 次后隐藏 6 小时，冷却期内自动上线不会重新显示该节点；子节点运行缓存优先按自身读取，缺失或过期时回退父节点运行缓存，兼容父入口上报的转发节点；自动上线写入 `show` 时使用 `available_status` 判断有效运行状态，因此只由父入口上报的转发子节点不会被定时同步误隐藏
 - 管理端套餐管理现已接入:

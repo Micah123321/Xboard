@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.12.6] - 2026-09-01
+
+### 新功能
+- **[admin-frontend]**: 节点编辑器新增 AnyTLS 随机化辅助；SNI 输入可从自有域名池随机填充，Padding Scheme 可一键生成非默认多行方案，保留原字段自定义编辑能力 — by HelloAGENTS
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/utils/nodeEditorRandomizers.ts, admin-frontend/src/views/nodes/NodeEditorProtocolSection.vue, admin-frontend/scripts/check-node-editor-randomizers.mjs, public/assets/admin (构建产物刷新)
+
 ## [0.12.5] - 2026-09-01
 
 ### 修复

@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { MagicStick, RefreshRight } from '@element-plus/icons-vue'
 import { generateMieruTrafficPattern as createMieruTrafficPattern } from '@/utils/mieruTrafficPattern'
+import {
+  generateRandomAnytlsPaddingScheme,
+  generateRandomAnytlsSni,
+} from '@/utils/nodeEditorRandomizers'
 import {
   getNodeProtocolHint,
   NODE_ALPN_OPTIONS,
@@ -39,6 +44,14 @@ const currentProtocolHint = computed(() => getNodeProtocolHint(props.form.type))
 function generateMieruTrafficPattern() {
   props.form.mieruTrafficPattern = createMieruTrafficPattern()
 }
+
+function fillRandomTlsServerName() {
+  props.form.tlsServerName = generateRandomAnytlsSni()
+}
+
+function fillRandomAnytlsPaddingScheme() {
+  props.form.anytlsPaddingSchemeText = generateRandomAnytlsPaddingScheme()
+}
 </script>
 
 <template>
@@ -66,7 +79,11 @@ function generateMieruTrafficPattern() {
       </ElFormItem>
 
       <ElFormItem v-if="showTlsSection" label="服务器名称（SNI）">
-        <ElInput v-model="props.form.tlsServerName" placeholder="example.com" />
+        <ElInput v-model="props.form.tlsServerName" clearable placeholder="example.com">
+          <template #append>
+            <ElButton :icon="RefreshRight" @click="fillRandomTlsServerName">随机域名</ElButton>
+          </template>
+        </ElInput>
       </ElFormItem>
 
       <ElFormItem v-if="showTlsSection || ['hysteria', 'tuic', 'anytls'].includes(props.form.type)" label="允许不安全连接">
@@ -432,6 +449,13 @@ function generateMieruTrafficPattern() {
 
       <template v-else-if="props.form.type === 'anytls'">
         <ElFormItem label="Padding Scheme" class="form-grid--full">
+          <div class="switch-row">
+            <div>
+              <strong>随机填充</strong>
+              <span>点击后会写入一组非默认的多行 Padding Scheme。</span>
+            </div>
+            <ElButton :icon="MagicStick" @click="fillRandomAnytlsPaddingScheme">随机生成</ElButton>
+          </div>
           <ElInput
             v-model="props.form.anytlsPaddingSchemeText"
             type="textarea"

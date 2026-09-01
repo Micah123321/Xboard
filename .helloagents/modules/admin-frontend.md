@@ -47,6 +47,7 @@
 - 节点新增 / 编辑采用统一中央大弹窗，支持 `Shadowsocks / VMess / Trojan / Hysteria / VLess / TUIC / SOCKS / Naive / HTTP / Mieru / AnyTLS` 11 种协议的首版动态配置表单
 - 节点新增 / 编辑 / 批量修改保存 `group_ids / route_ids` 时统一向后端提交字符串 ID，后端 `Server::whereGroupId()` 同时兼容历史字符串与数字 JSON 值，避免权限组保存后订阅侧无法命中节点
 - TUIC 表单默认以 V5 / V4 版本选择、`h3 / h2 / http/1.1` ALPN 选项和 `native / quic` UDP Relay Mode 对齐后端协议模板；AnyTLS Padding Scheme 默认值与 `Server` 模型完整模板保持一致
+- 节点编辑器的 AnyTLS 表单新增随机化辅助操作：Padding Scheme 支持一键生成非默认多行方案，SNI 输入支持从自有域名池 `xqqqx.com` / `023467.xyz` / `015679.xyz` / `488448.xyz` / `qqqz.de` / `003939.xyz` / `515666.xyz` / `535888.xyz` 随机填充
 - Mieru 表单的 `Traffic Pattern` 字段支持一键随机生成官方 appctl `TrafficPattern.seed` protobuf Base64 字符串，同时保留自定义输入能力；禁止回退为随机裸字节 Base64，否则 mihomo / mieru 可能无法解析
 - 节点排序采用本地草稿 + 上移 / 下移模式，保存时向 `server/manage/sort` 提交 `{ id, order }[]` 顺序 payload
 - 节点列表通过 `server/manage/getNodesPaginated` 做服务端分页；在线 / 离线、显隐、父/子节点、墙状态筛选和业务列表头三态字段排序必须先作用于全量候选节点，再返回当前页，避免 page size 改变筛选结果；默认态继续使用后端 `sort` 顺序，批量修改 / 批量删除仅作用于已勾选节点，其中批量修改可统一更新 `host / group_ids / rate / auto_online`
