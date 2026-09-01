@@ -16,6 +16,11 @@ lines.slice(1).forEach((line, index) => {
 })
 
 assert.ok(lines[3]?.includes(',c,'))
-assert.ok(ANYTLS_RANDOM_SNI_DOMAINS.includes(generateRandomAnytlsSni()))
+const sni = generateRandomAnytlsSni()
+const [prefix, ...domainParts] = sni.split('.')
+const domain = domainParts.join('.')
+
+assert.match(prefix ?? '', /^[a-z]{3,4}\d{2,3}$/)
+assert.ok(ANYTLS_RANDOM_SNI_DOMAINS.includes(domain))
 
 console.log('nodeEditorRandomizers self-check passed')

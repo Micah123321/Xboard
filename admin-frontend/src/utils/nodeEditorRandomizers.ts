@@ -35,7 +35,18 @@ export function generateRandomAnytlsPaddingScheme(): string {
 }
 
 export function generateRandomAnytlsSni(): string {
-  return pickRandomItem(ANYTLS_RANDOM_SNI_DOMAINS)
+  const letterCount = randomInt(3, 4)
+  const digitCount = randomInt(2, 3)
+  const prefix = randomCharacters(letterCount, 'abcdefghijklmnopqrstuvwxyz') + randomCharacters(digitCount, '0123456789')
+  return prefix + '.' + pickRandomItem(ANYTLS_RANDOM_SNI_DOMAINS)
+}
+
+function randomCharacters(length: number, alphabet: string): string {
+  let value = ''
+  for (let index = 0; index < length; index += 1) {
+    value += alphabet[randomInt(0, alphabet.length - 1)] ?? alphabet[0]
+  }
+  return value
 }
 
 function buildRange(startMin: number, startMax: number, endMin: number, endMax: number): string {

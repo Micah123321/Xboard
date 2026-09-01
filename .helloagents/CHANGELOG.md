@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.12.7] - 2026-09-01
+
+### 修复
+- **[admin-frontend]**: 修正 AnyTLS 随机 SNI 生成结果；现在会在白名单根域名前追加由 3～4 个小写英文字母和 2～3 个数字组成的随机二级域名标签，例如 `abcz23.488448.xyz` — by HelloAGENTS
+  - 类型: 快速修改（无方案包）
+  - 文件: admin-frontend/src/utils/nodeEditorRandomizers.ts, admin-frontend/scripts/check-node-editor-randomizers.mjs, public/assets/admin (构建产物刷新)
+
 ## [0.12.6] - 2026-09-01
 
 ### 新功能
