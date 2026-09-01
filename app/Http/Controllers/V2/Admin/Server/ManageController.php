@@ -22,6 +22,18 @@ use Illuminate\Support\Facades\Log;
 
 class ManageController extends Controller
 {
+    private const NODE_RUNTIME_FIELDS = [
+        'last_check_at', 'last_push_at', 'online', 'is_online',
+        'available_status', 'cache_key', 'load_status', 'metrics', 'online_conn',
+    ];
+
+    private const NODE_DB_SORT_COLUMNS = [
+        'id' => 'id',
+        'show' => 'show',
+        'autoOnline' => 'auto_online',
+        'name' => 'name',
+    ];
+
     public function getNodes(Request $request)
     {
         $servers = ServerService::getAllServers();
@@ -69,42 +81,46 @@ class ManageController extends Controller
             'keyword' => 'nullable|string|max:100',
             'type' => 'nullable|string|max:20',
             'group_id' => 'nullable|integer',
+            'status' => 'nullable|in:online,offline',
             'visibility' => 'nullable|in:visible,hidden',
             'relation' => 'nullable|in:parent,child',
+            'gfw' => 'nullable|in:normal,blocked,partial,failed,unchecked,checking,inherited',
+            'sort_field' => 'nullable|in:id,show,gfw,autoOnline,name,address,online,rate,groups',
+            'sort_direction' => 'nullable|in:top,bottom',
         ]);
 
         $current = (int) ($params['current'] ?? 1);
         $pageSize = (int) ($params['page_size'] ?? 20);
+        $sortField = $params['sort_field'] ?? null;
+        $sortDirection = $params['sort_direction'] ?? 'top';
 
-        $query = Server::orderBy('sort', 'ASC');
+        $query = Server::query();
+        $this->applyNodeBaseFilters($query, $params);
 
-        // Apply DB-level filters
-        if (!empty($params['keyword'])) {
-            $keyword = $params['keyword'];
-            $query->where(function ($q) use ($keyword) {
-                $q->where('name', 'like', "%{$keyword}%")
-                  ->orWhere('host', 'like', "%{$keyword}%");
-            });
-        }
-        if (!empty($params['type'])) {
-            $query->where('type', $params['type']);
-        }
-        if (!empty($params['group_id'])) {
-            // Reuse the existing scope which handles the JSON string/int type
-            // mismatch in how group_ids are stored (setGroupIdsAttribute stores
-            // them as strings, so JSON_CONTAINS needs both variants).
-            $query->whereGroupId($params['group_id']);
-        }
-        if (!empty($params['visibility'])) {
-            $query->where('show', $params['visibility'] === 'visible' ? 1 : 0);
-        }
-        if (!empty($params['relation'])) {
-            if ($params['relation'] === 'parent') {
-                $query->whereNull('parent_id');
-            } else {
-                $query->whereNotNull('parent_id');
+        if ($this->needsInMemoryNodePagination($params)) {
+            $servers = $query->with('parent')->get();
+            $servers->append(self::NODE_RUNTIME_FIELDS);
+
+            $gfwDecorated = !empty($params['gfw']);
+            if ($gfwDecorated) {
+                $servers = app(ServerGfwCheckService::class)->decorateServers($servers);
             }
+
+            $groupsAttached = $sortField === 'groups';
+            if ($groupsAttached) {
+                $servers = $this->attachNodeGroups($servers);
+            }
+
+            $servers = $this->filterNodeCandidates($servers, $params);
+            $servers = $this->sortNodeCandidates($servers, $sortField, $sortDirection);
+            $total = $servers->count();
+            $servers = $servers->slice(($current - 1) * $pageSize, $pageSize)->values();
+            $servers = $this->decorateNodePage($servers, $gfwDecorated, $groupsAttached);
+
+            return $this->paginatedNodeResponse($servers, $total, $current, $pageSize);
         }
+
+        $this->applyNodeQuerySort($query, $sortField, $sortDirection);
 
         $total = (clone $query)->count();
         $servers = $query
@@ -112,39 +128,9 @@ class ManageController extends Controller
             ->skip(($current - 1) * $pageSize)
             ->take($pageSize)
             ->get();
+        $servers = $this->decorateNodePage($servers);
 
-        $servers->append([
-            'last_check_at', 'last_push_at', 'online', 'is_online',
-            'available_status', 'cache_key', 'load_status', 'metrics', 'online_conn',
-        ]);
-
-        // Decorate only the current page nodes
-        $trafficStats = $this->buildNodeTrafficStats($servers);
-        $trafficLimitSnapshots = app(ServerTrafficLimitService::class)->buildSnapshotsForServers($servers);
-
-        $allGroupIds = $servers->pluck('group_ids')->flatten()->filter()->unique()->values();
-        $groupMap = $allGroupIds->isNotEmpty()
-            ? ServerGroup::whereIn('id', $allGroupIds)->get()->keyBy('id')
-            : collect();
-
-        $servers = app(ServerGfwCheckService::class)->decorateServers($servers)->map(function ($item) use ($trafficStats, $trafficLimitSnapshots, $groupMap) {
-            $item['groups'] = collect($item['group_ids'] ?? [])
-                ->map(fn ($id) => $groupMap->get($id))
-                ->filter()
-                ->values();
-            $item['parent'] = $item->parent;
-            $item['traffic_stats'] = $trafficStats[(int) $item['id']] ?? $this->emptyNodeTrafficStats();
-            $item['traffic_limit_snapshot'] = $trafficLimitSnapshots[(int) $item['id']] ?? null;
-            return $item;
-        });
-
-        return response()->json([
-            'total' => $total,
-            'current_page' => $current,
-            'per_page' => $pageSize,
-            'last_page' => max(1, (int) ceil($total / $pageSize)),
-            'data' => $servers,
-        ]);
+        return $this->paginatedNodeResponse($servers, $total, $current, $pageSize);
     }
 
     /**
@@ -160,6 +146,248 @@ class ManageController extends Controller
                 ->get(['id', 'name', 'type', 'host', 'port', 'server_port', 'parent_id', 'group_ids', 'route_ids', 'show', 'sort', 'auto_online', 'gfw_check_enabled', 'tcp_check_enabled', 'enabled', 'rate', 'machine_id'])
                 ->toArray()
         );
+    }
+
+    private function applyNodeBaseFilters($query, array $params): void
+    {
+        if (!empty($params['keyword'])) {
+            $keyword = trim((string) $params['keyword']);
+            $query->where(function ($q) use ($keyword) {
+                $q->where('name', 'like', "%{$keyword}%")
+                    ->orWhere('host', 'like', "%{$keyword}%")
+                    ->orWhere('type', 'like', "%{$keyword}%")
+                    ->orWhere('port', 'like', "%{$keyword}%")
+                    ->orWhere('server_port', 'like', "%{$keyword}%");
+
+                if (ctype_digit($keyword)) {
+                    $q->orWhere('id', (int) $keyword)
+                        ->orWhere('parent_id', (int) $keyword);
+                }
+            });
+        }
+
+        if (!empty($params['type'])) {
+            $query->where('type', $params['type']);
+        }
+        if (!empty($params['group_id'])) {
+            // Reuse the existing scope which handles the JSON string/int type mismatch.
+            $query->whereGroupId($params['group_id']);
+        }
+        if (!empty($params['visibility'])) {
+            $query->where('show', $params['visibility'] === 'visible' ? 1 : 0);
+        }
+        if (!empty($params['relation'])) {
+            $params['relation'] === 'parent'
+                ? $query->whereNull('parent_id')
+                : $query->whereNotNull('parent_id');
+        }
+    }
+
+    private function needsInMemoryNodePagination(array $params): bool
+    {
+        if (!empty($params['status']) || !empty($params['gfw'])) {
+            return true;
+        }
+
+        return in_array($params['sort_field'] ?? null, ['online', 'groups'], true);
+    }
+
+    private function applyNodeQuerySort($query, ?string $sortField, string $sortDirection): void
+    {
+        $direction = $sortDirection === 'bottom' ? 'asc' : 'desc';
+
+        if (isset(self::NODE_DB_SORT_COLUMNS[$sortField])) {
+            $query->orderBy(self::NODE_DB_SORT_COLUMNS[$sortField], $direction);
+        } elseif ($sortField === 'gfw') {
+            $query->orderByRaw("CASE WHEN gfw_check_enabled = 0 THEN 0 ELSE 1 END {$direction}");
+        } elseif ($sortField === 'address') {
+            $query->orderBy('host', $direction)
+                ->orderByRaw("COALESCE(server_port, port, 0) {$direction}");
+        } elseif ($sortField === 'rate') {
+            $query->orderByRaw("COALESCE(rate, 1) {$direction}");
+        }
+
+        $this->applyNodeDefaultSort($query);
+    }
+
+    private function applyNodeDefaultSort($query): void
+    {
+        $query->orderByRaw('CASE WHEN sort IS NULL THEN 1 ELSE 0 END ASC')
+            ->orderBy('sort', 'ASC')
+            ->orderBy('id', 'ASC');
+    }
+
+    private function filterNodeCandidates($servers, array $params)
+    {
+        return $servers->filter(function (Server $server) use ($params): bool {
+            if (!empty($params['status']) && !$this->matchesNodeStatusFilter($server, $params['status'])) {
+                return false;
+            }
+
+            if (!empty($params['gfw']) && !$this->matchesNodeGfwFilter($server, $params['gfw'])) {
+                return false;
+            }
+
+            return true;
+        })->values();
+    }
+
+    private function matchesNodeStatusFilter(Server $server, string $filter): bool
+    {
+        if ($server->enabled === false) {
+            return false;
+        }
+
+        $availableStatus = (int) $server->available_status;
+        $isOnline = in_array($availableStatus, [Server::STATUS_ONLINE_NO_PUSH, Server::STATUS_ONLINE], true);
+
+        return $filter === 'online' ? $isOnline : !$isOnline;
+    }
+
+    private function matchesNodeGfwFilter(Server $server, string $filter): bool
+    {
+        $check = $server->getAttribute('gfw_check') ?? [];
+        $inherited = (bool) data_get($check, 'inherited', false);
+        if ($filter === 'inherited') {
+            return $inherited;
+        }
+
+        return $this->nodeGfwTone((string) data_get($check, 'status', 'unchecked')) === $filter;
+    }
+
+    private function nodeGfwTone(string $status): string
+    {
+        $normalized = strtolower(trim($status));
+        if (in_array($normalized, ['normal', 'blocked', 'partial', 'failed'], true)) {
+            return $normalized;
+        }
+        if (in_array($normalized, ['pending', 'checking'], true)) {
+            return 'checking';
+        }
+        return 'unchecked';
+    }
+
+    private function sortNodeCandidates($servers, ?string $sortField, string $sortDirection)
+    {
+        if (!$sortField) {
+            return $servers->sort(fn (Server $left, Server $right) => $this->compareNodeDefaultOrder($left, $right))->values();
+        }
+
+        $direction = $sortDirection === 'bottom' ? 1 : -1;
+
+        return $servers->sort(function (Server $left, Server $right) use ($sortField, $direction): int {
+            $result = $this->compareNodeSortValues(
+                $this->nodeSortValue($left, $sortField),
+                $this->nodeSortValue($right, $sortField)
+            );
+
+            return $result !== 0 ? $result * $direction : $this->compareNodeDefaultOrder($left, $right);
+        })->values();
+    }
+
+    private function nodeSortValue(Server $server, string $field): mixed
+    {
+        return match ($field) {
+            'id' => (int) $server->id,
+            'show' => (bool) $server->show,
+            'gfw' => $server->gfw_check_enabled !== false,
+            'autoOnline' => (bool) $server->auto_online,
+            'name' => $server->name,
+            'address' => sprintf('%s:%s', $server->host ?: '', $server->server_port ?? $server->port ?? ''),
+            'online' => (int) ($server->online ?? 0),
+            'rate' => is_numeric($server->rate) ? (float) $server->rate : 1.0,
+            'groups' => collect($server->getAttribute('groups') ?? [])
+                ->map(fn ($group) => data_get($group, 'name'))
+                ->filter()
+                ->implode('、'),
+            default => null,
+        };
+    }
+
+    private function compareNodeSortValues(mixed $left, mixed $right): int
+    {
+        $leftNumber = $this->normalizeNodeSortNumber($left);
+        $rightNumber = $this->normalizeNodeSortNumber($right);
+        if ($leftNumber !== null || $rightNumber !== null) {
+            if ($leftNumber === null) return 1;
+            if ($rightNumber === null) return -1;
+            return $leftNumber <=> $rightNumber;
+        }
+
+        $leftText = strtolower(trim((string) $left));
+        $rightText = strtolower(trim((string) $right));
+        if ($leftText === '' && $rightText !== '') return 1;
+        if ($leftText !== '' && $rightText === '') return -1;
+        return strnatcasecmp($leftText, $rightText);
+    }
+
+    private function normalizeNodeSortNumber(mixed $value): ?float
+    {
+        if (is_bool($value)) {
+            return $value ? 1.0 : 0.0;
+        }
+        if ($value === null || (is_string($value) && trim($value) === '')) {
+            return null;
+        }
+        return is_numeric($value) ? (float) $value : null;
+    }
+
+    private function compareNodeDefaultOrder(Server $left, Server $right): int
+    {
+        $leftSort = $left->sort === null ? PHP_INT_MAX : (int) $left->sort;
+        $rightSort = $right->sort === null ? PHP_INT_MAX : (int) $right->sort;
+        if ($leftSort !== $rightSort) {
+            return $leftSort <=> $rightSort;
+        }
+        return (int) $left->id <=> (int) $right->id;
+    }
+
+    private function attachNodeGroups($servers)
+    {
+        $allGroupIds = $servers->pluck('group_ids')->flatten()->filter()->unique()->values();
+        $groupMap = $allGroupIds->isNotEmpty()
+            ? ServerGroup::whereIn('id', $allGroupIds)->get()->keyBy('id')
+            : collect();
+
+        return $servers->map(function (Server $server) use ($groupMap) {
+            $server['groups'] = collect($server['group_ids'] ?? [])
+                ->map(fn ($id) => $groupMap->get($id))
+                ->filter()
+                ->values();
+            return $server;
+        });
+    }
+
+    private function decorateNodePage($servers, bool $gfwDecorated = false, bool $groupsAttached = false)
+    {
+        $servers->append(self::NODE_RUNTIME_FIELDS);
+        $trafficStats = $this->buildNodeTrafficStats($servers);
+        $trafficLimitSnapshots = app(ServerTrafficLimitService::class)->buildSnapshotsForServers($servers);
+
+        if (!$gfwDecorated) {
+            $servers = app(ServerGfwCheckService::class)->decorateServers($servers);
+        }
+        if (!$groupsAttached) {
+            $servers = $this->attachNodeGroups($servers);
+        }
+
+        return $servers->map(function (Server $server) use ($trafficStats, $trafficLimitSnapshots) {
+            $server['parent'] = $server->parent;
+            $server['traffic_stats'] = $trafficStats[(int) $server['id']] ?? $this->emptyNodeTrafficStats();
+            $server['traffic_limit_snapshot'] = $trafficLimitSnapshots[(int) $server['id']] ?? null;
+            return $server;
+        });
+    }
+
+    private function paginatedNodeResponse($servers, int $total, int $current, int $pageSize)
+    {
+        return response()->json([
+            'total' => $total,
+            'current_page' => $current,
+            'per_page' => $pageSize,
+            'last_page' => max(1, (int) ceil($total / $pageSize)),
+            'data' => $servers,
+        ]);
     }
 
     private function buildNodeTrafficStats($servers): array

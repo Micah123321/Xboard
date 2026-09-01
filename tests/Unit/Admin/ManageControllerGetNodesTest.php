@@ -7,6 +7,7 @@ use App\Models\ServerGroup;
 use App\Models\StatServer;
 use App\Models\User;
 use App\Support\Setting;
+use App\Utils\CacheKey;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -311,6 +312,41 @@ class ManageControllerGetNodesTest extends TestCase
         $this->assertCount(1, $response3->json('data'));
     }
 
+    public function test_get_nodes_paginated_filters_online_status_before_pagination(): void
+    {
+        for ($i = 1; $i <= 24; $i++) {
+            $this->makeServer(['name' => "offline-node-{$i}", 'host' => "10.10.0.{$i}"]);
+        }
+
+        $online = $this->makeServer(['name' => 'online-node-after-first-page', 'host' => '10.10.0.25']);
+        $this->putRuntimeCache($online, 'LAST_CHECK_AT', time());
+        $this->putRuntimeCache($online, 'ONLINE_USER', 7);
+
+        $response = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?current=1&page_size=20&status=online');
+        $response->assertOk();
+
+        $this->assertSame(1, $response->json('total'));
+        $this->assertSame($online->id, $response->json('data.0.id'));
+        $this->assertSame(7, $response->json('data.0.online'));
+    }
+
+    public function test_get_nodes_paginated_sorts_by_online_before_pagination(): void
+    {
+        for ($i = 1; $i <= 24; $i++) {
+            $this->makeServer(['name' => "low-online-node-{$i}", 'host' => "10.20.0.{$i}"]);
+        }
+
+        $mostOnline = $this->makeServer(['name' => 'most-online-node-after-first-page', 'host' => '10.20.0.25']);
+        $this->putRuntimeCache($mostOnline, 'ONLINE_USER', 99);
+
+        $response = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?current=1&page_size=20&sort_field=online&sort_direction=top');
+        $response->assertOk();
+
+        $this->assertSame(25, $response->json('total'));
+        $this->assertSame($mostOnline->id, $response->json('data.0.id'));
+        $this->assertSame(99, $response->json('data.0.online'));
+    }
+
     public function test_get_nodes_paginated_filters_by_keyword(): void
     {
         $this->makeServer(['name' => 'alpha-node', 'host' => '192.168.1.1']);
@@ -457,6 +493,15 @@ class ManageControllerGetNodesTest extends TestCase
         $this->assertArrayNotHasKey('gfw_check', $data[0]);
         $this->assertArrayHasKey('name', $data[0]);
         $this->assertArrayHasKey('host', $data[0]);
+    }
+
+    private function putRuntimeCache(Server $server, string $name, int $value): void
+    {
+        Cache::put(
+            CacheKey::get('SERVER_' . strtoupper((string) $server->type) . '_' . $name, $server->id),
+            $value,
+            3600
+        );
     }
 
     private function makeServer(array $attributes = []): Server

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.12.5] - 2026-09-01
+
+### 修复
+- **[admin-frontend]**: 修复节点管理分页与过滤顺序问题；`getNodesPaginated` 现在会在服务端先按全量候选应用在线 / 离线、墙状态筛选和在线人数等字段排序，再返回当前页，避免默认 `page_size=20` 只筛选当前页导致结果与 `page_size=100` 不一致 — by HelloAGENTS
+  - 类型: 快速修改（无方案包）
+  - 文件: app/Http/Controllers/V2/Admin/Server/ManageController.php, admin-frontend/src/views/nodes/NodesView.vue, admin-frontend/src/api/admin.ts, tests/Unit/Admin/ManageControllerGetNodesTest.php
+
 ## [0.12.4] - 2026-08-31
 
 ### 新功能

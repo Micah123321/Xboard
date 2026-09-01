@@ -43,7 +43,6 @@ import {
   countAutoGfwCheckNodes,
   countAutoOnlineNodes,
   countVisibleNodes,
-  filterNodes,
   formatNodeRate,
   getNodeGfwMeta,
   getNodeGfwTooltip,
@@ -74,60 +73,21 @@ interface NodeSortState {
   direction: NodeSortDirection
 }
 
-type NodeSortValue = string | number | boolean | null
-
 interface NodeSortableColumn {
   field: NodeSortField
   label: string
-  value: (node: AdminNodeItem) => NodeSortValue
 }
 
 const NODE_SORTABLE_COLUMNS: Record<NodeSortField, NodeSortableColumn> = {
-  id: {
-    field: 'id',
-    label: '节点ID',
-    value: (node) => node.id,
-  },
-  show: {
-    field: 'show',
-    label: '显隐',
-    value: (node) => Boolean(node.show),
-  },
-  gfw: {
-    field: 'gfw',
-    label: '墙检测',
-    value: (node) => node.gfw_check_enabled !== false,
-  },
-  autoOnline: {
-    field: 'autoOnline',
-    label: '自动上线',
-    value: (node) => Boolean(node.auto_online),
-  },
-  name: {
-    field: 'name',
-    label: '节点',
-    value: (node) => node.name,
-  },
-  address: {
-    field: 'address',
-    label: '地址',
-    value: (node) => `${node.host || ''}:${node.server_port ?? node.port ?? ''}`,
-  },
-  online: {
-    field: 'online',
-    label: '在线人数',
-    value: (node) => Number(node.online ?? 0),
-  },
-  rate: {
-    field: 'rate',
-    label: '倍率',
-    value: (node) => Number(node.rate ?? 1),
-  },
-  groups: {
-    field: 'groups',
-    label: '权限组',
-    value: (node) => getNodeGroupNames(node).join('、'),
-  },
+  id: { field: 'id', label: '节点ID' },
+  show: { field: 'show', label: '显隐' },
+  gfw: { field: 'gfw', label: '墙检测' },
+  autoOnline: { field: 'autoOnline', label: '自动上线' },
+  name: { field: 'name', label: '节点' },
+  address: { field: 'address', label: '地址' },
+  online: { field: 'online', label: '在线人数' },
+  rate: { field: 'rate', label: '倍率' },
+  groups: { field: 'groups', label: '权限组' },
 }
 
 const route = useRoute()
@@ -169,16 +129,7 @@ let autoCheckCountdownTimer: number | undefined
 
 const GFW_AUTO_CHECK_INTERVAL_MINUTES = 30
 
-const displayNodes = computed(() => applyNodeFieldSort(filterNodes(
-  nodes.value,
-  keyword.value,
-  typeFilter.value,
-  groupFilter.value,
-  statusFilter.value,
-  visibilityFilter.value,
-  relationFilter.value,
-  gfwFilter.value,
-)))
+const displayNodes = computed(() => nodes.value)
 
 const selectedNodes = computed(() => nodes.value.filter((node) => selectedNodeIds.value.includes(node.id)))
 const typeOptions = computed(() => buildNodeTypeOptions(allNodes.value))
@@ -322,59 +273,6 @@ function formatClockTime(timestamp: number): string {
   })
 }
 
-function normalizeSortText(value: unknown): string {
-  return String(value ?? '').trim().toLocaleLowerCase('zh-CN')
-}
-
-function normalizeSortNumber(value: unknown): number | null {
-  if (typeof value === 'string' && value.trim() === '') {
-    return null
-  }
-
-  const normalized = Number(value)
-  return Number.isFinite(normalized) ? normalized : null
-}
-
-function compareSortValues(leftValue: NodeSortValue, rightValue: NodeSortValue): number {
-  const leftNumber = typeof leftValue === 'boolean' ? Number(leftValue) : normalizeSortNumber(leftValue)
-  const rightNumber = typeof rightValue === 'boolean' ? Number(rightValue) : normalizeSortNumber(rightValue)
-  if (leftNumber !== null || rightNumber !== null) {
-    if (leftNumber === null) return 1
-    if (rightNumber === null) return -1
-    return leftNumber - rightNumber
-  }
-
-  const leftText = normalizeSortText(leftValue)
-  const rightText = normalizeSortText(rightValue)
-  if (!leftText && rightText) return 1
-  if (leftText && !rightText) return -1
-  return leftText.localeCompare(rightText, 'zh-CN', {
-    numeric: true,
-    sensitivity: 'base',
-  })
-}
-
-function compareDefaultOrder(left: AdminNodeItem, right: AdminNodeItem): number {
-  const [leftDefault] = sortNodesByOrder([left, right])
-  return leftDefault.id === left.id ? -1 : 1
-}
-
-function applyNodeFieldSort(items: AdminNodeItem[]): AdminNodeItem[] {
-  const currentSort = nodeSortState.value
-  if (!currentSort) {
-    return sortNodesByOrder(items)
-  }
-
-  const column = NODE_SORTABLE_COLUMNS[currentSort.field]
-  const direction = currentSort.direction === 'top' ? -1 : 1
-  return [...items].sort((left, right) => {
-    const result = compareSortValues(column.value(left), column.value(right))
-    if (result !== 0) {
-      return result * direction
-    }
-    return compareDefaultOrder(left, right)
-  })
-}
 
 function getSortLabel(field: NodeSortField): NodeSortLabel {
   if (nodeSortState.value?.field !== field) {
@@ -399,7 +297,6 @@ function toggleNodeSort(field: NodeSortField) {
   const currentSort = nodeSortState.value
   if (currentSort?.field !== field) {
     nodeSortState.value = { field, direction: 'top' }
-    currentPage.value = 1
     return
   }
 
@@ -408,7 +305,6 @@ function toggleNodeSort(field: NodeSortField) {
   } else {
     nodeSortState.value = null
   }
-  currentPage.value = 1
 }
 
 function openCreateEditor() {
@@ -482,8 +378,14 @@ async function loadNodeBoard(reloadAllNodes = false) {
     if (keyword.value) paginationParams.keyword = keyword.value
     if (typeFilter.value !== 'all') paginationParams.type = typeFilter.value
     if (groupFilter.value !== 'all') paginationParams.group_id = groupFilter.value
+    if (statusFilter.value !== 'all') paginationParams.status = statusFilter.value
     if (visibilityFilter.value !== 'all') paginationParams.visibility = visibilityFilter.value
     if (relationFilter.value !== 'all') paginationParams.relation = relationFilter.value
+    if (gfwFilter.value !== 'all') paginationParams.gfw = gfwFilter.value
+    if (nodeSortState.value) {
+      paginationParams.sort_field = nodeSortState.value.field
+      paginationParams.sort_direction = nodeSortState.value.direction
+    }
 
     const tasks: Array<Promise<unknown>> = [
       fetchNodesPaginated(paginationParams),
@@ -501,7 +403,7 @@ async function loadNodeBoard(reloadAllNodes = false) {
     const offset = hasAllNodes && tasks.length === 4 ? 1 : 0
     const paginatedResult = results[offset] as AdminNodePaginationResult
 
-    nodes.value = sortNodesByOrder(paginatedResult.data ?? [])
+    nodes.value = paginatedResult.data ?? []
     totalCount.value = paginatedResult.total ?? 0
     groups.value = (results[offset + 1] as ApiResponse<AdminServerGroupItem[]>)?.data ?? []
     routes.value = (results[offset + 2] as ApiResponse<AdminNodeRouteItem[]>)?.data ?? []
@@ -881,20 +783,15 @@ watch(
   },
 )
 
-// Server-side filters trigger a reload with the new filter applied.
+// Server-side filters and sort trigger a reload with the new scope applied before pagination.
 // Reset to page 1; if already on page 1 the currentPage watcher won't fire,
 // so reload explicitly.
-watch([keyword, typeFilter, groupFilter, visibilityFilter, relationFilter], () => {
+watch([keyword, typeFilter, groupFilter, statusFilter, visibilityFilter, relationFilter, gfwFilter, nodeSortState], () => {
   if (currentPage.value === 1) {
     void loadNodeBoard()
   } else {
     currentPage.value = 1
   }
-})
-
-// Client-side-only filters (applied locally on the current page)
-watch([statusFilter, gfwFilter], () => {
-  currentPage.value = 1
 })
 
 // Pagination: page change or page-size change triggers a server reload.

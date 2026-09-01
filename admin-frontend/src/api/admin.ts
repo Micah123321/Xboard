@@ -522,8 +522,12 @@ export function fetchNodesPaginated(params: {
   keyword?: string
   type?: string
   group_id?: string
+  status?: 'online' | 'offline'
   visibility?: string
   relation?: string
+  gfw?: 'normal' | 'blocked' | 'partial' | 'failed' | 'unchecked' | 'checking' | 'inherited'
+  sort_field?: 'id' | 'show' | 'gfw' | 'autoOnline' | 'name' | 'address' | 'online' | 'rate' | 'groups'
+  sort_direction?: 'top' | 'bottom'
 } = {}): Promise<AdminNodePaginationResult> {
   return adminClient
     .get<AdminNodePaginationResult>('/server/manage/getNodesPaginated', { params })
