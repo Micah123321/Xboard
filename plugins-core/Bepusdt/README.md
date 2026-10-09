@@ -4,7 +4,9 @@
 
 ## 安装与配置
 
-1. 部署本目录及本次 Guest PaymentController 回调适配。在管理后台插件管理中安装并启用 BEpusdt（插件代码 `bepusdt`）。使用常驻 PHP/Octane 进程时按现有部署流程重载。
+1. BEpusdt 随镜像作为内置插件分发，目录为 `plugins-core/Bepusdt`。需要构建并发布包含本目录及 Guest PaymentController 回调适配的新镜像，再更新运行容器使用该镜像，插件管理中才可见；仅拉取源码或重启旧镜像不足以更新插件。生产 Compose 将宿主机 `./plugins` 挂载至 `/www/plugins`，本插件位于 `/www/plugins-core/Bepusdt`，不受该挂载遮蔽。
+
+   安装/更新流程调用 `installDefaultPlugins()` 时，会自动安装并启用数据库中尚无记录的核心插件；已有记录保持原状态，包括已禁用状态。仅替换镜像不等同于已执行该流程：请在插件管理确认 BEpusdt（插件代码 `bepusdt`）的安装、启用状态，必要时手动安装或启用。`xboard:update` 同时执行数据库迁移，不应仅为查看插件而运行。使用常驻 PHP/Octane 进程时按现有部署流程重载。
 2. 在支付配置中新增支付方式，选择 `BEpusdt`，填入 API 根地址、API Token、法币、支付币种及付款返回地址，并启用该支付方式。
 3. API 地址示例为 `https://pay.example.com`，不要附加 `/api/v1/order/create-order`。Token 使用 BEpusdt 的 API Token。HTTPS 始终校验证书；证书问题应修复证书链或服务器 CA 配置。连接超时 10 秒、请求超时 30 秒，不自动重试或跟随 HTTP 重定向。
 4. 法币默认 `CNY`，支持 `CNY/USD/EUR/GBP/JPY`，应与本站订单计价币种一致；插件不做换汇。支付币种默认 `USDT`，支持 `USDT,USDC`，留空不限制，`-ETH,-BNB` 表示排除。

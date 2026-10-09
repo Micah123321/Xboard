@@ -26,6 +26,8 @@ use PHPUnit\Framework\TestCase;
 use Plugin\Bepusdt\Plugin;
 use Psr\Log\NullLogger;
 
+require_once __DIR__ . '/../../plugins-core/Bepusdt/Plugin.php';
+
 class BepusdtPaymentTest extends TestCase
 {
     private Container $previousContainer;
