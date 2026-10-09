@@ -54,6 +54,20 @@ test('preview is read-only and pagination and manual resolution match contract',
  assert.deepEqual(captured.data, { state: 'rolled_back', reason: 'verified', agent_stopped: true })
  assert.equal(captured.url, '/server/update/tasks/task/resolve')
 })
+test('discovery contract supports plain and wrapped pages, filters, cancellation and 404', async () => {
+ const item = { node_id: 7, node_name: 'node', machine_id: null, installation_id: '12345678-1234-4234-8234-123456789abc', version: 'dev-abcdef1234567', os: 'linux', arch: 'amd64', last_seen_at: '2026-01-01T00:00:00Z' }
+ const page = { items: [item], page: 2, page_size: 10, total: 21 }
+ const controller = new AbortController()
+ for (const data of [page, { data: page }]) {
+  response = { status: 200, data }
+  assert.deepEqual(await api.updates.discoveries(2, { node_id: 7, machine_id: 9, page_size: 10 }, controller.signal), page)
+  assert.equal(captured.method, 'GET'); assert.equal(captured.url, '/server/update/discoveries')
+  assert.deepEqual(captured.params, { page: 2, page_size: 10, node_id: 7, machine_id: 9 }); assert.equal(captured.signal, controller.signal)
+ }
+ response = { status: 404, data: {} }
+ await assert.rejects(api.updates.discoveries(1, {}), error => error instanceof api.UpdateError && error.status === 404)
+ response = { status: 200, data: { data: {} } }
+})
 test('network failure retry keeps the same submission key', async () => {
  const keys = api.createIdempotencyKeys(); const body = { scope: { kind: 'machine', machine_id: 12 } }
  failNetwork = true

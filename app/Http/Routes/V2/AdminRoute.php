@@ -32,7 +32,7 @@ class AdminRoute
         ], function ($router) {
             $router->group(['prefix' => 'server/update'], function ($route) {
                 $controller = \App\Http\Controllers\V2\Admin\NodeUpdateController::class;
-                foreach (['settings', 'releases', 'installations', 'batches', 'batches/{id}', 'batches/{id}/tasks', 'tasks/{id}/events', 'coverage'] as $uri) {
+                foreach (['settings', 'releases', 'installations', 'discoveries', 'batches', 'batches/{id}', 'batches/{id}/tasks', 'tasks/{id}/events', 'coverage'] as $uri) {
                     $route->get($uri, [$controller, 'handle']);
                 }
                 foreach (['settings', 'installations/{id}/policy'] as $uri) {

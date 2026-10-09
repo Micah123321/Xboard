@@ -83,6 +83,8 @@ class ServerController extends Controller
             ServerService::updateMetrics($node, $metrics);
         }
 
+        (new \App\Services\NodeUpdate\NodeDiscoveryService())->report($node, $request->input('update_inventory'));
+
         return response()->json(['data' => true]);
     }
 

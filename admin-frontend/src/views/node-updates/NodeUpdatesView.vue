@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { updates, UpdateError, createIdempotencyKeys } from '@/api/nodeUpdates'
-import type { Settings, Release, ReleaseInput, Installation, Policy, Batch, BatchInput, Task, TaskState, UpdateEvent, Page, Preview, Enrollment, Coverage, Scope } from '@/types/nodeUpdates'
+import type { Settings, Release, ReleaseInput, Installation, Policy, Batch, BatchInput, Task, TaskState, UpdateEvent, Page, Preview, Enrollment, Coverage, Scope, Discovery, DiscoveryFilters } from '@/types/nodeUpdates'
 import { batchLabels, taskLabels, reasonLabel, positiveIds } from './model'
 import ReleaseEditor from './ReleaseEditor.vue'
 import UpdatePager from './UpdatePager.vue'
@@ -16,11 +16,14 @@ const settings = ref<Settings>()
 const settingsDraft = ref<Settings>()
 const settingsDialog = ref(false)
 const releases = ref(emptyPage<Release>())
+const discoveries = ref(emptyPage<Discovery>())
+const discoveryError = ref('')
+const discoveryFilters = ref<DiscoveryFilters>({})
 const installations = ref(emptyPage<Installation>())
 const batches = ref(emptyPage<Batch>())
 const tasks = ref(emptyPage<Task>())
 const events = ref(emptyPage<UpdateEvent>())
-const pages = reactive({ releases: 1, installations: 1, batches: 1, tasks: 1, events: 1 })
+const pages = reactive({ discoveries: 1, releases: 1, installations: 1, batches: 1, tasks: 1, events: 1 })
 const filters = reactive({ kind: 'machine_id', id: '', capability_status: '' })
 const appliedFilters = ref<object>({})
 const taskState = ref<TaskState | ''>('')
@@ -65,6 +68,18 @@ async function refresh() {
  const signal = controller.signal
  loading.value = true
  try {
+  if (tab.value === 'installations') {
+   try {
+    const result = await updates.discoveries(pages.discoveries, discoveryFilters.value, signal)
+    if (token !== generation || signal.aborted) return
+    discoveries.value = result; discoveryError.value = ''
+   } catch (failure) {
+    if (token !== generation || signal.aborted) return
+    discoveryError.value = failure instanceof UpdateError && failure.status === 404
+     ? '自动发现接口暂未部署，稍后将自动重试；已有数据保留。'
+     : '自动发现刷新失败，已有数据保留，稍后将自动重试。'
+   }
+  }
   const nextSettings = await updates.settings(signal)
   if (token !== generation) return
   settings.value = nextSettings
@@ -148,7 +163,8 @@ function applyFilters() {
   const ids = filters.id.trim() ? positiveIds(filters.id) : []
   if (ids.length > 1) throw new Error('筛选只接受一个 ID')
   appliedFilters.value = { ...(ids.length ? { [filters.kind]: ids[0] } : {}), ...(filters.capability_status ? { capability_status: filters.capability_status } : {}) }
-  pages.installations = 1; void refresh()
+  discoveryFilters.value = ids.length ? { [filters.kind]: ids[0] } : {}
+  pages.installations = 1; pages.discoveries = 1; void refresh()
  } catch (failure) { report(failure) }
 }
 function toggleSelection(item: Installation, checked: unknown) {
@@ -216,13 +232,30 @@ onBeforeUnmount(() => { disposed = true; stopRefresh(); ticket.value = undefined
 
 <template>
  <div class="node-updates">
-  <div class="toolbar"><div><h2>节点更新</h2><p>以实际安装为升级单元，仅支持 Linux amd64 / arm64 的 systemd 宿主。</p></div><el-button :loading="loading" @click="refresh">刷新</el-button></div>
+  <div class="toolbar"><div><h2>节点更新</h2><p>升级后通过业务 HTTP 上报自动发现；托管远程升级仅支持 Linux amd64 / arm64 的 systemd 宿主。</p></div><el-button :loading="loading" @click="refresh">刷新</el-button></div>
   <el-alert title="更新会重启同一安装的全部绑定，包括其他面板的绑定。Docker 请更新镜像；OpenRC 请手工更新。" type="warning" show-icon :closable="false" />
   <el-alert v-if="error" :title="error" type="error" :closable="false" />
   <el-card shadow="never"><div class="toolbar"><span>全局自动更新：<el-tag :type="settings?.enabled ? 'success' : 'info'">{{ settings ? (settings.enabled ? '已启用' : '已关闭') : '尚未读取' }}</el-tag> 并发上限 {{ settings?.max_concurrency ?? '—' }} / 修订 {{ settings?.revision ?? '—' }}</span><el-button :disabled="!settings || busy" @click="settingsDraft = settings && { ...settings }; settingsDialog = true">修改全局设置</el-button></div><p>全局与安装策略均启用且目标版本明确才允许更新。缩容、关闭或撤销不会中断已开始安装的本地事务。</p></el-card>
   <el-tabs v-model="tab">
    <el-tab-pane label="安装实例与批次预览" name="installations">
     <div class="toolbar"><el-select v-model="filters.kind" aria-label="筛选范围"><el-option label="机器 ID" value="machine_id" /><el-option label="节点 ID" value="node_id" /></el-select><el-input v-model="filters.id" placeholder="可选 ID" /><el-select v-model="filters.capability_status" placeholder="能力状态" clearable><el-option label="支持" value="supported" /><el-option label="不支持" value="unsupported" /></el-select><el-button @click="applyFilters">查询</el-button><el-button @click="ticketOpen = true">生成登记票据</el-button></div>
+    <el-card shadow="never">
+     <h3>自动发现的节点</h3>
+     <p>升级后自动出现，无需登记票据；远程升级需单独启用托管</p>
+     <p>节点 / 机器 ID 筛选同时适用；能力状态仅筛选下方受管实例。已发现仅表示收到业务 HTTP 上报，不代表已获远程升级授权。</p>
+     <el-alert v-if="discoveryError" :title="discoveryError" type="info" :closable="false" show-icon />
+     <el-table :data="discoveries.items" :row-key="(row: Discovery) => row.node_id + ':' + row.installation_id" empty-text="暂无自动发现的节点，等待升级后的业务上报">
+      <el-table-column label="状态" width="90"><template #default><el-tag type="info">已发现</el-tag></template></el-table-column>
+      <el-table-column label="节点 / ID" min-width="180"><template #default="{ row }">{{ row.node_name }}<p>节点 ID：{{ row.node_id }}</p></template></el-table-column>
+      <el-table-column label="机器 ID" width="110"><template #default="{ row }">{{ row.machine_id ?? '—' }}</template></el-table-column>
+      <el-table-column prop="installation_id" label="安装 ID" min-width="280" />
+      <el-table-column label="版本" min-width="220"><template #default="{ row }"><code>{{ row.version }}</code></template></el-table-column>
+      <el-table-column label="系统 / 架构" min-width="150"><template #default="{ row }">{{ row.os }} / {{ row.arch }}</template></el-table-column>
+      <el-table-column prop="last_seen_at" label="最近上报时间（UTC）" min-width="230" />
+     </el-table>
+     <UpdatePager :page="pages.discoveries" :total="discoveries.total" @change="pageChange('discoveries', $event)" />
+    </el-card>
+    <h3>受管安装实例</h3>
     <el-table :data="installations.items" row-key="id">
      <el-table-column label="选择" width="65"><template #default="{ row }"><el-checkbox :model-value="selected.includes(row.id)" :disabled="!selectable(row) || busy" :aria-label="'选择安装 ' + row.id" @change="toggleSelection(row, $event)" /></template></el-table-column>
      <el-table-column label="安装 / 绑定范围" min-width="240"><template #default="{ row }"><code>{{ row.id }}</code><p>{{ row.scope.kind === 'machine' ? '机器 ' + row.scope.machine_id : '节点 ' + row.scope.node_ids.join(', ') }}</p><el-tag v-if="row.revoked_at" type="danger">登记已撤销</el-tag></template></el-table-column>
@@ -236,7 +269,7 @@ onBeforeUnmount(() => { disposed = true; stopRefresh(); ticket.value = undefined
    </el-tab-pane>
    <el-tab-pane label="固定版本发行" name="releases"><el-button type="primary" :disabled="busy" @click="releaseOpen = true">发布版本</el-button><el-table :data="releases.items"><el-table-column type="expand"><template #default="{ row }"><el-table :data="row.artifacts"><el-table-column prop="arch" label="架构" /><el-table-column prop="component" label="组件" /><el-table-column prop="https_url" label="HTTPS URL" min-width="240" /><el-table-column prop="sha256" label="SHA256" min-width="280" /><el-table-column prop="size_bytes" label="字节数" /></el-table></template></el-table-column><el-table-column prop="version" label="版本" /><el-table-column prop="id" label="发行 ID" min-width="260" /><el-table-column prop="min_agent_protocol" label="最低协议" /><el-table-column prop="published_at" label="发布时间" min-width="180" /><el-table-column label="状态"><template #default="{ row }">{{ row.revoked_at ? '已撤销' : '已发布' }}</template></el-table-column><el-table-column label="操作"><template #default="{ row }"><el-button link type="danger" :disabled="!!row.revoked_at || busy" @click="confirmAction('撤销发行将阻止尚未开始的安装，已安装中的事务继续。', () => mutate('revokeRelease:' + row.id, {}, key => updates.revokeRelease(row.id, key)))">撤销</el-button></template></el-table-column></el-table><UpdatePager :page="pages.releases" :total="releases.total" @change="pageChange('releases', $event)" /></el-tab-pane>
    <el-tab-pane label="更新批次" name="batches"><el-table :data="batches.items"><el-table-column prop="id" label="批次 ID" min-width="260" /><el-table-column prop="release_id" label="发行 ID" min-width="260" /><el-table-column label="状态" min-width="200"><template #default="{ row }">{{ batchLabels[row.state as keyof typeof batchLabels] }}</template></el-table-column><el-table-column label="失败 / 不确定" width="150"><template #default="{ row }">{{ row.counts.failed + row.counts.rolled_back + row.counts.rollback_failed }} / {{ row.counts.uncertain }}</template></el-table-column><el-table-column label="操作" width="245"><template #default="{ row }"><el-button link @click="openBatch(row)">任务详情</el-button><el-button v-if="row.state === 'running'" link :disabled="busy" @click="batchAction(row, 'pause')">暂停</el-button><el-button v-if="row.state === 'paused'" link :disabled="busy || row.counts.uncertain > 0" @click="batchAction(row, 'resume')">恢复</el-button><el-button v-if="['running', 'paused'].includes(row.state)" link type="danger" :disabled="busy" @click="batchAction(row, 'cancel')">取消</el-button></template></el-table-column></el-table><UpdatePager :page="pages.batches" :total="batches.total" @change="pageChange('batches', $event)" /></el-tab-pane>
-   <el-tab-pane label="旧节点覆盖查询" name="coverage"><el-form inline @submit.prevent="checkCoverage"><el-form-item label="查询范围"><el-select v-model="coverageKind"><el-option value="node_id" label="节点 ID" /><el-option value="machine_id" label="机器 ID" /></el-select></el-form-item><el-form-item label="ID"><el-input v-model="coverageId" /></el-form-item><el-button native-type="submit" :loading="busy">查询登记覆盖</el-button></el-form><template v-if="coverage"><el-alert :title="coverage.status === 'bootstrap_required' ? '需手动升级一次并启用更新agent' : '已有登记，请在安装实例中核对能力与版本'" :type="coverage.status === 'bootstrap_required' ? 'warning' : 'success'" :closable="false" /><p>未登记不代表任何已知版本，页面不提供远程一键引导。</p><p v-for="id in coverage.installation_ids" :key="id">安装：{{ id }}</p></template></el-tab-pane>
+   <el-tab-pane label="托管覆盖查询" name="coverage"><el-form inline @submit.prevent="checkCoverage"><el-form-item label="查询范围"><el-select v-model="coverageKind"><el-option value="node_id" label="节点 ID" /><el-option value="machine_id" label="机器 ID" /></el-select></el-form-item><el-form-item label="ID"><el-input v-model="coverageId" /></el-form-item><el-button native-type="submit" :loading="busy">查询登记覆盖</el-button></el-form><template v-if="coverage"><el-alert :title="coverage.status === 'bootstrap_required' ? '尚未登记托管；远程升级需单独启用更新 agent' : '已有托管登记，请在受管安装实例中核对能力与策略'" :type="coverage.status === 'bootstrap_required' ? 'warning' : 'success'" :closable="false" /><p>自动发现与托管登记独立：升级后业务上报即可在安装实例页显示，无需登记票据；登记票据用于单独启用托管，自动发现不授予远程升级权限。</p><p v-for="id in coverage.installation_ids" :key="id">安装：{{ id }}</p></template></el-tab-pane>
   </el-tabs>
   <el-dialog v-model="settingsDialog" title="全局更新设置" width="480px"><el-form v-if="settingsDraft" label-position="top" :disabled="busy"><el-form-item label="启用自动更新"><el-switch v-model="settingsDraft.enabled" /></el-form-item><el-form-item label="最大并发"><el-input-number v-model="settingsDraft.max_concurrency" :min="1" :max="100" :precision="0" /></el-form-item><el-button type="primary" :loading="busy" @click="saveSettings">保存修订 {{ settingsDraft.revision }}</el-button></el-form></el-dialog>
   <el-dialog v-model="releaseOpen" title="发布不可变固定版本" width="min(760px, 95vw)" destroy-on-close><ReleaseEditor :busy="busy" @publish="publish" /></el-dialog>

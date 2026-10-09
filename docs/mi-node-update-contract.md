@@ -8,6 +8,12 @@ Go cmd/xbctl/main.go:398–531 已实现双二进制下载、备份、替换、�
 
 保留 xbctl upgrade [--version VERSION]、既有流量修复及部署准备。新协议不改流量 report。首版自动升级只支持 Linux amd64/arm64 + systemd 宿主；OpenRC/其他 init 保留手工路径；Docker 明确 unsupported，不替换镜像内二进制。本次只写本文。
 
+## 自动发现（独立于托管权限）
+
+新版 mi-node 启动后，通过既有 `/api/v2/server/report` 认证通道附带 `update_inventory={installation_id,version,os,arch}`，兼容原 HTTP/HTTPS 面板绑定。版本允许构建提交 SHA。服务端只依据认证所得 node_info 关联节点，机器归属来自现有节点记录；元数据不得扩大权限。独立发现表按 node_id 更新最后上报信息，管理接口 `/server/update/discoveries` 分页返回。它不创建托管安装、不签发凭据、不启用策略、不下发二进制操作。元数据无效或尚未迁移时，忽略发现信息，保持原流量ACK。
+
+发现 installation_id 在本机单独持久化，只用于识别同一安装的多个逻辑节点；不与托管凭据身份自动合并。
+
 ## 2. 安装身份与鉴权
 
 installation_id 是本机初始化生成并持久化的 UUIDv4，代表共享二进制、配置及服务的一套实际安装，不是逻辑 instance/node/machine ID。同进程多节点、多面板只设一个 agent。当前固定安装布局只支持一个升级单元；多个服务共享 binary realpath 时标记 shared_binary_layout，首版不自动升级。克隆机器重新生成 ID 和凭据。

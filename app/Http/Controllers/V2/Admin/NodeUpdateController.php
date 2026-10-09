@@ -23,6 +23,9 @@ class NodeUpdateController
             }
             $path=substr($r->path(),strpos($r->path(),'/server/update/')+15);
             $data=$r->method()==='GET' ? $r->query->all() : json_decode($r->getContent(), true, 512, JSON_THROW_ON_ERROR);
+            if ($r->method() === 'GET' && $path === 'discoveries') {
+                return new JsonResponse(['data' => (new \App\Services\NodeUpdate\NodeDiscoveryService())->listing($data)]);
+            }
             return new JsonResponse(['data'=>$this->service->admin((int)$admin->id,$r->method(),$path,$data,$r->header('Idempotency-Key'))]);
         } catch (NodeUpdateException $e) { return $e->render($r); }
     }

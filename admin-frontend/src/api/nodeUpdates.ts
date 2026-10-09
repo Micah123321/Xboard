@@ -1,5 +1,5 @@
 import { adminClient } from './client'
-import type { Page, Settings, Policy, Release, ReleaseInput, Installation, Batch, BatchInput, Task, TaskState, UpdateEvent, Preview, Scope, Enrollment, Coverage } from '@/types/nodeUpdates'
+import type { Page, Settings, Policy, Release, ReleaseInput, Installation, Batch, BatchInput, Task, TaskState, UpdateEvent, Preview, Scope, Enrollment, Coverage, Discovery, DiscoveryFilters } from '@/types/nodeUpdates'
 
 export class UpdateError extends Error {
  code: string
@@ -19,9 +19,10 @@ async function request<T>(method: string, path: string, data?: unknown, key?: st
   const error = response.data?.error
   throw new UpdateError(error?.code || 'request_failed', error?.message || '节点更新请求失败', error?.retryable === true, response.status, error?.excluded || response.data?.excluded || [])
  }
- return response.data.data as T
+ return (path === '/discoveries' ? response.data.data ?? response.data : response.data.data) as T
 }
 export const updates = {
+ discoveries: (page: number, filters: DiscoveryFilters, signal?: AbortSignal) => request<Page<Discovery>>('GET', '/discoveries', undefined, undefined, { page, page_size: 20, ...filters }, signal),
  settings: (signal?: AbortSignal) => request<Settings>('GET', '/settings', undefined, undefined, undefined, signal),
  saveSettings: (data: Settings, key: string) => request<Settings>('PATCH', '/settings', data, key),
  releases: (page: number, signal?: AbortSignal) => request<Page<Release>>('GET', '/releases', undefined, undefined, { page, page_size: 20 }, signal),
