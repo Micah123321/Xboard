@@ -13,6 +13,20 @@ class Setting extends Model
         'value' => 'string',
     ];
 
+    protected static function booted(): void
+    {
+        $revoke = function (self $setting): void {
+            if ($setting->name === 'server_token' && \Illuminate\Support\Facades\Schema::hasTable('v2_node_update_settings')) {
+                app(\App\Services\NodeUpdate\NodeUpdateService::class)->revokeCredentials('legacy');
+            }
+        };
+        static::updating(function (self $setting) use ($revoke): void {
+            if ($setting->isDirty('value')) $revoke($setting);
+        });
+        static::creating($revoke);
+        static::deleting($revoke);
+    }
+
     /**
      * 获取实际内容值
      */

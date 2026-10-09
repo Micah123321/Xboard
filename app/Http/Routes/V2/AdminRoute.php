@@ -30,6 +30,19 @@ class AdminRoute
             'prefix' => admin_setting('secure_path', admin_setting('frontend_admin_path', hash('crc32b', config('app.key')))),
             'middleware' => ['admin', 'log'],
         ], function ($router) {
+            $router->group(['prefix' => 'server/update'], function ($route) {
+                $controller = \App\Http\Controllers\V2\Admin\NodeUpdateController::class;
+                foreach (['settings', 'releases', 'installations', 'batches', 'batches/{id}', 'batches/{id}/tasks', 'tasks/{id}/events', 'coverage'] as $uri) {
+                    $route->get($uri, [$controller, 'handle']);
+                }
+                foreach (['settings', 'installations/{id}/policy'] as $uri) {
+                    $route->patch($uri, [$controller, 'handle']);
+                }
+                foreach (['releases', 'releases/{id}/revoke', 'enrollments', 'installations/{id}/revoke', 'batches/preview', 'batches', 'batches/{id}/pause', 'batches/{id}/resume', 'batches/{id}/cancel', 'tasks/{id}/resolve'] as $uri) {
+                    $route->post($uri, [$controller, 'handle']);
+                }
+            });
+
             // Config
             $router->group([
                 'prefix' => 'config'

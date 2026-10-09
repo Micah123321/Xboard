@@ -78,8 +78,9 @@ class StatisticalService
             ->where('created_at', '<', $endAt)
             ->whereNotNull('invite_user_id')
             ->count();
-        $data['transfer_used_total'] = StatServer::where('created_at', '>=', $startAt)
-            ->where('created_at', '<', $endAt)
+        $data['transfer_used_total'] = StatServer::where('record_type', 'd')
+            ->where('record_at', '>=', $startAt)
+            ->where('record_at', '<', $endAt)
             ->select(DB::raw('SUM(u) + SUM(d) as total'))
             ->value('total') ?? 0;
         return $data;
@@ -263,22 +264,22 @@ class StatisticalService
 
     public static function getServerRank(...$times)
     {
-        $startAt = 0;
-        $endAt = Carbon::tomorrow()->endOfDay()->timestamp;
+        $startAt = Carbon::today()->timestamp;
+        $endAt = Carbon::tomorrow()->timestamp;
 
         if (count($times) == 1) {
             switch ($times[0]) {
                 case 'today':
                     $startAt = Carbon::today()->startOfDay()->timestamp;
-                    $endAt = Carbon::today()->endOfDay()->timestamp;
+                    $endAt = Carbon::tomorrow()->startOfDay()->timestamp;
                     break;
                 case 'yesterday':
                     $startAt = Carbon::yesterday()->startOfDay()->timestamp;
-                    $endAt = Carbon::yesterday()->endOfDay()->timestamp;
+                    $endAt = Carbon::today()->startOfDay()->timestamp;
                     break;
                 case 'last_week':
                     $startAt = Carbon::now()->subWeek()->startOfWeek()->timestamp;
-                    $endAt = Carbon::now()->endOfDay()->timestamp;
+                    $endAt = Carbon::tomorrow()->startOfDay()->timestamp;
                     break;
             }
         } else if (count($times) == 2) {
@@ -286,16 +287,13 @@ class StatisticalService
             $endAt = $times[1];
         }
 
-        $statistics = Server::whereHas(
-            'stats',
-            function ($query) use ($startAt, $endAt) {
-                $query->where('record_at', '>=', $startAt)
-                    ->where('record_at', '<', $endAt)
-                    ->where('record_type', 'd');
-            }
-        )
-            ->withSum('stats as u', 'u') // 预加载 u 的总和
-            ->withSum('stats as d', 'd') // 预加载 d 的总和
+        $withinWindow = fn ($query) => $query->where('record_at', '>=', $startAt)
+            ->where('record_at', '<', $endAt)
+            ->where('record_type', 'd');
+
+        $statistics = Server::whereHas('stats', $withinWindow)
+            ->withSum(['stats as u' => $withinWindow], 'u')
+            ->withSum(['stats as d' => $withinWindow], 'd')
             ->get()
             ->map(function ($item) {
                 return [

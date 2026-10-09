@@ -38,12 +38,12 @@ class GiftCardRedemptionService
 
         $remainingTraffic = $user->getRemainingTraffic();
 
-        $options[] = [
+        array_unshift($options, [
             'mode' => self::REDEMPTION_MODE_TRAFFIC,
             'label' => '追加流量',
             'description' => '切换至礼品卡套餐，保留当前账户的剩余流量并追加到新套餐中。',
             'transfer_enable' => $remainingTraffic,
-        ];
+        ]);
 
         return $options;
     }
@@ -53,7 +53,9 @@ class GiftCardRedemptionService
      */
     public function resolveMode(?string $mode, GiftCardTemplate $template, User $user): string
     {
-        $mode ??= self::REDEMPTION_MODE_PLAN;
+        $mode ??= $template->type === GiftCardTemplate::TYPE_PLAN && $user->isActive()
+            ? self::REDEMPTION_MODE_TRAFFIC
+            : self::REDEMPTION_MODE_PLAN;
 
         if (!in_array($mode, [self::REDEMPTION_MODE_PLAN, self::REDEMPTION_MODE_TRAFFIC], true)) {
             throw new ApiException('无效的礼品卡兑换方式');

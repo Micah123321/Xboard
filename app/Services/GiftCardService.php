@@ -225,7 +225,8 @@ class GiftCardService
         if (isset($rewards['plan_id']) && $this->redemptionMode === self::REDEMPTION_MODE_TRAFFIC) {
             $plan = Plan::find($rewards['plan_id']);
             if ($plan) {
-                $trafficBytes = $this->redemptionTrafficBytes ?? 0;
+                // 已用量继续保留在 u/d 中，总额度需补回该部分，避免再次扣减。
+                $trafficBytes = ($this->redemptionTrafficBytes ?? 0) + $this->user->getTotalUsedTraffic();
                 $userService->assignPlan(
                     $this->user,
                     $plan,

@@ -22,6 +22,7 @@ class StatServerJob implements ShouldQueue
     protected array $server;
     protected string $protocol;
     protected string $recordType;
+    protected ?int $receivedAt = null;
 
     public $tries = 3;
     public $timeout = 60;
@@ -38,20 +39,21 @@ class StatServerJob implements ShouldQueue
     /**
      * Create a new job instance.
      */
-    public function __construct(array $server, array $data, $protocol, string $recordType = 'd')
+    public function __construct(array $server, array $data, $protocol, string $recordType = 'd', ?int $receivedAt = null)
     {
         $this->onQueue('stat');
         $this->data = $data;
         $this->server = $server;
         $this->protocol = $protocol;
         $this->recordType = $recordType;
+        $this->receivedAt = $receivedAt ?? time();
+        TrafficBillingJob::recordAt($this->receivedAt, $recordType);
     }
 
     public function handle(): void
     {
-        $recordAt = $this->recordType === 'm'
-            ? strtotime(date('Y-m-01'))
-            : strtotime(date('Y-m-d'));
+        $recordAt = TrafficBillingJob::recordAt($this->receivedAt ?? time(), $this->recordType);
+        $this->data = TrafficBillingJob::normalize($this->data);
 
         $u = $d = 0;
         foreach ($this->data as $traffic) {
@@ -60,8 +62,10 @@ class StatServerJob implements ShouldQueue
         }
 
         try {
-            $this->processServerStat($u, $d, $recordAt);
-            $this->updateServerTraffic($u, $d);
+            DB::transaction(function () use ($u, $d, $recordAt): void {
+                $this->processServerStat($u, $d, $recordAt);
+                $this->updateServerTraffic($u, $d);
+            }, 3);
         } catch (\Exception $e) {
             Log::error('StatServerJob failed for server ' . $this->server['id'] . ': ' . $e->getMessage());
             throw $e;
@@ -80,7 +84,7 @@ class StatServerJob implements ShouldQueue
 
     protected function processServerStat(int $u, int $d, int $recordAt): void
     {
-        $driver = config('database.default');
+        $driver = DB::connection()->getDriverName();
         if ($driver === 'sqlite') {
             $this->processServerStatForSqlite($u, $d, $recordAt);
         } elseif ($driver === 'pgsql') {

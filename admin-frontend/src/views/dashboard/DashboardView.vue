@@ -97,7 +97,7 @@ const trendMetricOptions = [
 ] as const
 
 const rankPresetOptions = [
-  { label: '24h', value: '1d' },
+  { label: '今日', value: '1d' },
   { label: '7天', value: '7d' },
   { label: '30天', value: '30d' },
 ] as const
@@ -217,7 +217,7 @@ const metricCards = computed<MetricCard[]>(() => [
   },
   {
     key: 'monthUpload',
-    label: '月上传',
+    label: '节点月上传（原始）',
     value: formatTraffic(dashboardStats.value.monthTraffic.upload),
     detail: `今日 ${formatTraffic(dashboardStats.value.todayTraffic.upload)}`,
     tone: 'soft',
@@ -225,9 +225,9 @@ const metricCards = computed<MetricCard[]>(() => [
   },
   {
     key: 'monthDownload',
-    label: '月下载',
+    label: '节点月下载（原始）',
     value: formatTraffic(dashboardStats.value.monthTraffic.download),
-    detail: `总计 ${formatTraffic(dashboardStats.value.totalTraffic.download)}`,
+    detail: `历史累计 ${formatTraffic(dashboardStats.value.totalTraffic.download)}`,
     tone: 'soft',
     icon: Download,
   },
@@ -248,7 +248,7 @@ const heroMeta = computed(() => [
   `在线节点 ${formatCompactNumber(dashboardStats.value.onlineNodes)}`,
   `正在被墙 ${formatCompactNumber(nodeGfwStats.value.blockedNodes)}`,
   `最近恢复 ${formatCompactNumber(nodeGfwStats.value.recentRecoveredNodes)}`,
-  `总流量 ${formatTraffic(dashboardStats.value.totalTraffic.total)}`,
+  `节点累计原始流量 ${formatTraffic(dashboardStats.value.totalTraffic.total)}`,
 ])
 
 const heroSummary = computed(() => [
@@ -440,13 +440,11 @@ const systemRows = computed(() => [
 async function loadOverviewPanels() {
   systemLoading.value = true
   try {
-    const [statsResponse, systemResponse, queueResponse] = await Promise.all([
-      getDashboardStats(),
+    const [systemResponse, queueResponse] = await Promise.all([
       getSystemStatus(),
       getQueueStats(),
     ])
 
-    overview.value = statsResponse.data
     systemStatus.value = systemResponse.data
     queueStats.value = queueResponse.data
   } finally {
@@ -457,7 +455,7 @@ async function loadOverviewPanels() {
 async function loadTrend() {
   trendLoading.value = true
   try {
-    const range = getDateRangeFromPreset(trendPreset.value)
+    const range = getDateRangeFromPreset(trendPreset.value, overview.value?.timezone)
     const response = await getOrderTrend({
       startDate: range.startDate,
       endDate: range.endDate,
@@ -473,18 +471,18 @@ async function loadTrend() {
 async function loadRankings() {
   rankLoading.value = true
   try {
-    const range = getDateRangeFromPreset(rankPreset.value)
+    const range = getDateRangeFromPreset(rankPreset.value, overview.value?.timezone)
     const [nodeResponse, userResponse] = await Promise.all([
       getTrafficRank({
         type: 'node',
-        startTime: range.startTime,
-        endTime: range.endTime,
+        startDate: range.startDate,
+        endDate: range.endDate,
         limit: nodeRankLimit.value,
       }),
       getTrafficRank({
         type: 'user',
-        startTime: range.startTime,
-        endTime: range.endTime,
+        startDate: range.startDate,
+        endDate: range.endDate,
         limit: userRankLimit.value,
       }),
     ])
@@ -499,10 +497,13 @@ async function loadRankings() {
 async function refreshDashboard(options: { silentSuccess?: boolean } = {}) {
   booting.value = true
   try {
+    const datesReady = getDashboardStats().then((response) => {
+      overview.value = response.data
+    })
     const results = await Promise.allSettled([
       loadOverviewPanels(),
-      loadTrend(),
-      loadRankings(),
+      datesReady.then(loadTrend),
+      datesReady.then(loadRankings),
     ])
 
     if (results.some((item) => item.status === 'rejected')) {
@@ -838,7 +839,7 @@ onMounted(() => {
         <header class="panel-header">
           <div>
             <p class="panel-kicker">Traffic</p>
-            <h2>节点流量排行</h2>
+            <h2>节点流量排行（原始流量）</h2>
           </div>
 
           <div class="panel-actions">
@@ -926,7 +927,7 @@ onMounted(() => {
         <header class="panel-header">
           <div>
             <p class="panel-kicker">Users</p>
-            <h2>用户流量排行</h2>
+            <h2>用户流量排行（已计费流量）</h2>
           </div>
 
           <div class="panel-actions">

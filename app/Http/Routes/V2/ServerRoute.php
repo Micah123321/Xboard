@@ -13,6 +13,18 @@ class ServerRoute
     public function map(Registrar $router)
     {
         $router->group([
+            'prefix' => 'server/update',
+            'middleware' => \App\Http\Middleware\NodeUpdateAgent::class,
+        ], function ($route) {
+            $controller = \App\Http\Controllers\V2\Server\NodeUpdateController::class;
+            $route->post('enroll', [$controller, 'enroll']);
+            $route->post('poll', [$controller, 'poll']);
+            foreach (['claim', 'heartbeat', 'events'] as $action) {
+                $route->post('tasks/{task_id}/'.$action, [$controller, $action]);
+            }
+        });
+
+        $router->group([
             'prefix' => 'server',
             'middleware' => 'server.v2'
         ], function ($route) {

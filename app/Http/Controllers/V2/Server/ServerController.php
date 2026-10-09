@@ -45,13 +45,22 @@ class ServerController extends Controller
      */
     public function report(Request $request): JsonResponse
     {
+        $receivedAt = time();
+        $request->validate([
+            'report_id' => 'sometimes|required|string|max:128',
+            'traffic' => 'sometimes|array',
+        ]);
         $node = $request->attributes->get('node_info');
 
         ServerService::touchNode($node);
 
         $traffic = $request->input('traffic');
         if (is_array($traffic) && !empty($traffic)) {
-            ServerService::processTraffic($node, $traffic);
+            try {
+                ServerService::processTraffic($node, $traffic, $request->input('report_id'), $receivedAt);
+            } catch (\InvalidArgumentException $e) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['traffic' => $e->getMessage()]);
+            }
         }
 
         $alive = $request->input('alive');

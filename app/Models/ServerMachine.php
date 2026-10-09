@@ -37,6 +37,19 @@ class ServerMachine extends Model
 
     protected $hidden = ['token'];
 
+    protected static function booted(): void
+    {
+        $revoke = function (self $machine): void {
+            if (\Illuminate\Support\Facades\Schema::hasTable('v2_node_update_settings')) {
+                app(\App\Services\NodeUpdate\NodeUpdateService::class)->revokeCredentials('machine', (int) $machine->id);
+            }
+        };
+        static::updating(function (self $machine) use ($revoke): void {
+            if ($machine->isDirty('token') || ($machine->isDirty('is_active') && !$machine->is_active)) $revoke($machine);
+        });
+        static::deleting($revoke);
+    }
+
     public function servers(): HasMany
     {
         return $this->hasMany(Server::class, 'machine_id');

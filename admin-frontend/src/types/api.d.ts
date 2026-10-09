@@ -37,6 +37,7 @@ export interface DashboardNodeGfwStats {
 }
 
 export interface DashboardStats {
+  timezone?: string
   todayIncome: number
   dayIncomeGrowth: number
   currentMonthIncome: number

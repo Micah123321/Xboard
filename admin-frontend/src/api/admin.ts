@@ -111,14 +111,18 @@ export function getOrderTrend(params: {
 
 export function getTrafficRank(params: {
   type: 'node' | 'user'
-  startTime: number
-  endTime: number
+  startDate?: string
+  endDate?: string
+  startTime?: number
+  endTime?: number
   limit?: 10 | 20
 }): Promise<TrafficRankResponse> {
   return adminClient
     .get<TrafficRankResponse>('/stat/getTrafficRank', {
       params: {
         type: params.type,
+        start_date: params.startDate,
+        end_date: params.endDate,
         start_time: params.startTime,
         end_time: params.endTime,
         limit: params.limit,

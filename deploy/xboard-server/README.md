@@ -12,6 +12,14 @@
 
 模板默认不包含 MySQL。数据库继续使用宿主机、面板或云数据库中的外部 MySQL。
 
+## 生产 Compose
+
+`compose.production.yaml` 对应用户端、管理端和后端共用 Compose 网络的部署方式，两端默认通过 `http://web:7001` 访问后端。将它作为服务器项目目录内的 Compose 文件使用，或使用 `docker compose --project-directory /root/Xboard-new -f /root/Xboard-new/compose.production.yaml`；相对卷路径必须仍指向现有数据目录，项目名称也应沿用旧值以复用 `redis-data`。
+
+用户端使用 `USER_PORT`（默认 7003），管理端使用 `ADMIN_PORT`（默认 7002），不要让两者共用 `ADMIN_PORT`。`compose.test.yaml` 保留已有经宿主机代理的测试拓扑。生产模板为 Horizon 保留 90 秒退出时间。
+
+面板 PHP 代码包含在镜像中；仅上传源码不会更新运行容器。应构建包含本地修复的镜像，使用明确版本标签或 digest，并记录旧镜像以便回滚。发布前备份数据库，先执行新增迁移，再替换 HTTP、队列、调度和 WebSocket 进程。不要把浮动 `new` 标签已更新等同于这次本地修改已发布。
+
 ## 首次部署
 
 服务器需要已安装 Docker，并支持 `docker compose` 命令。

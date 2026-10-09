@@ -20,6 +20,7 @@ class StatUserJob implements ShouldQueue
     protected array $server;
     protected string $protocol;
     protected string $recordType;
+    protected ?int $receivedAt = null;
 
     public $tries = 3;
     public $timeout = 60;
@@ -36,34 +37,37 @@ class StatUserJob implements ShouldQueue
     /**
      * Create a new job instance.
      */
-    public function __construct(array $server, array $data, string $protocol, string $recordType = 'd')
+    public function __construct(array $server, array $data, string $protocol, string $recordType = 'd', ?int $receivedAt = null)
     {
         $this->onQueue('stat');
         $this->data = $data;
         $this->server = $server;
         $this->protocol = $protocol;
         $this->recordType = $recordType;
+        $this->receivedAt = $receivedAt ?? time();
+        TrafficBillingJob::recordAt($this->receivedAt, $recordType);
     }
 
     public function handle(): void
     {
-        $recordAt = $this->recordType === 'm'
-            ? strtotime(date('Y-m-01'))
-            : strtotime(date('Y-m-d'));
+        $recordAt = TrafficBillingJob::recordAt($this->receivedAt ?? time(), $this->recordType);
+        $this->data = TrafficBillingJob::normalize($this->data);
 
-        foreach ($this->data as $uid => $v) {
-            try {
-                $this->processUserStat($uid, $v, $recordAt);
-            } catch (\Exception $e) {
-                Log::error('StatUserJob failed for user ' . $uid . ': ' . $e->getMessage());
-                throw $e;
+        DB::transaction(function () use ($recordAt): void {
+            foreach ($this->data as $uid => $v) {
+                try {
+                    $this->processUserStat($uid, $v, $recordAt);
+                } catch (\Exception $e) {
+                    Log::error('StatUserJob failed for user ' . $uid . ': ' . $e->getMessage());
+                    throw $e;
+                }
             }
-        }
+        }, 3);
     }
 
     protected function processUserStat(int $uid, array $v, int $recordAt): void
     {
-        $driver = config('database.default');
+        $driver = DB::connection()->getDriverName();
         if ($driver === 'sqlite') {
             $this->processUserStatForSqlite($uid, $v, $recordAt);
         } elseif ($driver === 'pgsql') {
@@ -90,8 +94,8 @@ class StatUserJob implements ShouldQueue
 
             if ($existingRecord) {
                 $existingRecord->update([
-                    'u' => $existingRecord->u + intval($v[0] * $this->server['rate']),
-                    'd' => $existingRecord->d + intval($v[1] * $this->server['rate']),
+                    'u' => $existingRecord->u + TrafficBillingJob::bill($v[0], $this->server['rate']),
+                    'd' => $existingRecord->d + TrafficBillingJob::bill($v[1], $this->server['rate']),
                     'updated_at' => time(),
                 ]);
             } else {
@@ -102,8 +106,8 @@ class StatUserJob implements ShouldQueue
                     'server_type' => $serverType,
                     'record_at' => $recordAt,
                     'record_type' => $this->recordType,
-                    'u' => intval($v[0] * $this->server['rate']),
-                    'd' => intval($v[1] * $this->server['rate']),
+                    'u' => TrafficBillingJob::bill($v[0], $this->server['rate']),
+                    'd' => TrafficBillingJob::bill($v[1], $this->server['rate']),
                     'created_at' => time(),
                     'updated_at' => time(),
                 ]);
@@ -124,8 +128,8 @@ class StatUserJob implements ShouldQueue
                 'server_type' => $serverType,
                 'record_at' => $recordAt,
                 'record_type' => $this->recordType,
-                'u' => intval($v[0] * $this->server['rate']),
-                'd' => intval($v[1] * $this->server['rate']),
+                'u' => TrafficBillingJob::bill($v[0], $this->server['rate']),
+                'd' => TrafficBillingJob::bill($v[1], $this->server['rate']),
                 'created_at' => time(),
                 'updated_at' => time(),
             ],
@@ -145,8 +149,8 @@ class StatUserJob implements ShouldQueue
     {
         $table = (new StatUser())->getTable();
         $now = time();
-        $u = ($v[0] * $this->server['rate']);
-        $d = ($v[1] * $this->server['rate']);
+        $u = TrafficBillingJob::bill($v[0], $this->server['rate']);
+        $d = TrafficBillingJob::bill($v[1], $this->server['rate']);
         $serverId = $this->getServerId();
         $serverType = $this->getServerType();
 

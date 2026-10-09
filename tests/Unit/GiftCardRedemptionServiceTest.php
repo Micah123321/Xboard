@@ -10,16 +10,34 @@ use PHPUnit\Framework\TestCase;
 
 class GiftCardRedemptionServiceTest extends TestCase
 {
-    public function test_plan_mode_is_the_default_for_a_plan_card(): void
+    public function test_traffic_mode_is_the_default_for_an_active_plan_user(): void
     {
         $service = new GiftCardRedemptionService();
         $template = $this->makeTemplate(GiftCardTemplate::TYPE_PLAN);
         $user = $this->makeUser(true);
 
         self::assertSame(
-            GiftCardRedemptionService::REDEMPTION_MODE_PLAN,
+            GiftCardRedemptionService::REDEMPTION_MODE_TRAFFIC,
             $service->resolveMode(null, $template, $user),
         );
+    }
+
+    public function test_plan_mode_remains_the_default_for_an_inactive_user(): void
+    {
+        $service = new GiftCardRedemptionService();
+        self::assertSame('plan', $service->resolveMode(null, $this->makeTemplate(GiftCardTemplate::TYPE_PLAN), $this->makeUser(false)));
+    }
+
+    public function test_explicit_plan_mode_is_preserved(): void
+    {
+        $service = new GiftCardRedemptionService();
+        self::assertSame('plan', $service->resolveMode('plan', $this->makeTemplate(GiftCardTemplate::TYPE_PLAN), $this->makeUser(true)));
+    }
+
+    public function test_non_plan_cards_keep_their_default_mode(): void
+    {
+        $service = new GiftCardRedemptionService();
+        self::assertSame('plan', $service->resolveMode(null, $this->makeTemplate(GiftCardTemplate::TYPE_GENERAL), $this->makeUser(true)));
     }
 
     public function test_traffic_mode_requires_an_active_plan_user(): void

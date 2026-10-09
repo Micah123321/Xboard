@@ -25,15 +25,9 @@ class TrafficLogResource extends JsonResource
             $serverName = "Node #{$serverId}";
         }
 
-        $deviceIps = data_get($this->resource, 'device_ips', []);
-        if (!is_array($deviceIps)) {
-            $deviceIps = [];
-        }
-
-        $deviceName = data_get($this->resource, 'device_name');
-        if (!$deviceName) {
-            $deviceName = $deviceIps[0] ?? 'Unknown';
-        }
+        // Live online devices are not evidence of historical traffic ownership.
+        $deviceIps = [];
+        $deviceName = 'Unknown';
 
         $data = [
             'id' => data_get($this->resource, 'id'),
@@ -41,6 +35,9 @@ class TrafficLogResource extends JsonResource
             'u' => (int) data_get($this->resource, 'u', 0),
             'record_at' => (int) data_get($this->resource, 'record_at', 0),
             'display_at' => $displayAt,
+            'stat_timezone' => config('app.timezone', 'UTC'),
+            'traffic_is_billed' => true,
+            'device_attribution' => 'unavailable',
             'record_type' => data_get($this->resource, 'record_type'),
             'server_rate' => (float) data_get($this->resource, 'server_rate', 1),
             'server_id' => $serverId > 0 ? $serverId : null,
@@ -50,7 +47,7 @@ class TrafficLogResource extends JsonResource
             'node_key' => $serverId > 0 && $serverType !== '' ? "{$serverType}{$serverId}" : null,
             'device_name' => $deviceName,
             'device_ips' => $deviceIps,
-            'device_count' => (int) data_get($this->resource, 'device_count', count($deviceIps)),
+            'device_count' => 0,
             'created_at' => data_get($this->resource, 'created_at'),
             'updated_at' => data_get($this->resource, 'updated_at'),
         ];

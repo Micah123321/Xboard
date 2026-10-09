@@ -11,7 +11,8 @@ class RequestLog
 
     public function handle($request, Closure $next)
     {
-        if ($request->method() !== 'POST') {
+        $nodeUpdate = $request->is('api/v2/*/server/update/*');
+        if ($request->method() !== 'POST' && !($nodeUpdate && $request->method() === 'PATCH')) {
             return $next($request);
         }
 
@@ -24,13 +25,16 @@ class RequestLog
             }
 
             $action = $this->resolveAction($request->path());
-            $data = collect($request->all())->except(self::SENSITIVE_KEYS)->toArray();
+            // Update writes have a transactional, validated audit in node_update_requests.
+            $data = $nodeUpdate
+                ? ['status' => $response->getStatusCode()]
+                : collect($request->all())->except(self::SENSITIVE_KEYS)->toArray();
 
             AdminAuditLog::insert([
                 'admin_id' => $admin->id,
                 'action' => $action,
                 'method' => $request->method(),
-                'uri' => $request->getRequestUri(),
+                'uri' => $nodeUpdate ? $request->path() : $request->getRequestUri(),
                 'request_data' => json_encode($data, JSON_UNESCAPED_UNICODE),
                 'ip' => $request->getClientIp(),
                 'created_at' => time(),

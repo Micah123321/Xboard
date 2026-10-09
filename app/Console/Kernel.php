@@ -28,6 +28,7 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule): void
     {
         Cache::put(CacheKey::get('SCHEDULE_LAST_CHECK_AT', null), time());
+        $schedule->command('node-update:maintain')->everyThirtySeconds()->onOneServer()->withoutOverlapping(1);
         // v2board
         $schedule->command('xboard:statistics')->dailyAt('0:10')->onOneServer();
         // check

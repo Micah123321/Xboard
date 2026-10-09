@@ -53,6 +53,7 @@ const nodeManagementItems: MenuItem[] = [
   { index: '/nodes', title: '节点管理', icon: Connection },
   { index: '/node-groups', title: '权限组管理', icon: Lock },
   { index: '/node-routes', title: '路由管理', icon: Share },
+  { index: '/node-updates', title: '节点更新', icon: Box },
 ]
 
 const managementItems: MenuItem[] = [

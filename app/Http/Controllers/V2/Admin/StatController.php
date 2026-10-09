@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\StatisticalService;
 use App\Services\UserOnlineService;
 use App\Utils\CacheKey;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -25,6 +26,7 @@ class StatController extends Controller
 {
     private const DASHBOARD_STATS_CACHE_TTL_SECONDS = 30;
     private const TRAFFIC_RANK_CACHE_TTL_SECONDS = 60;
+    private const HISTORICAL_TRAFFIC_CACHE_TTL_SECONDS = 300;
     private const GFW_RECENT_RECOVERY_WINDOW_SECONDS = 86400;
 
     private ?StatisticalService $service = null;
@@ -421,6 +423,7 @@ class StatController extends Controller
                 'onlineNodes' => $onlineNodes,
                 'nodeGfwStats' => $nodeGfwStats,
 
+                'timezone' => config('app.timezone', 'UTC'),
                 // 流量统计
                 'todayTraffic' => $trafficStats['todayTraffic'],
                 'monthTraffic' => $trafficStats['monthTraffic'],
@@ -552,36 +555,29 @@ class StatController extends Controller
             'download' => (int) ($row->month_download ?? 0),
             'total' => (int) ($row->month_total ?? 0),
         ];
-        $historicalTotalTraffic = $this->sumDailyTrafficTotal(null, $todayStart);
+        // Cache the expensive historical scan independently; today's live buckets stay fresh.
+        // All three totals use raw node traffic, never billed user traffic from v2_stat.
+        $historical = Cache::remember(
+            'admin_dashboard_raw_traffic_v1:' . $todayStart,
+            self::HISTORICAL_TRAFFIC_CACHE_TTL_SECONDS,
+            static function () use ($todayStart): array {
+                $row = DB::table('v2_stat_server')
+                    ->where('record_type', 'd')
+                    ->where('record_at', '<', $todayStart)
+                    ->selectRaw('COALESCE(SUM(u), 0) as upload, COALESCE(SUM(d), 0) as download')
+                    ->first();
+
+                return ['upload' => (int) $row->upload, 'download' => (int) $row->download];
+            }
+        );
+        $upload = $historical['upload'] + $todayTraffic['upload'];
+        $download = $historical['download'] + $todayTraffic['download'];
 
         return [
             'todayTraffic' => $todayTraffic,
             'monthTraffic' => $monthTraffic,
-            'totalTraffic' => [
-                // v2_stat keeps only total traffic, not upload/download split. Avoid rebuilding
-                // the split from the large per-node history table during the dashboard request.
-                'upload' => $monthTraffic['upload'],
-                'download' => $monthTraffic['download'],
-                'total' => $historicalTotalTraffic + $todayTraffic['total'],
-            ],
+            'totalTraffic' => ['upload' => $upload, 'download' => $download, 'total' => $upload + $download],
         ];
-    }
-
-    private function sumDailyTrafficTotal(?int $startAt, ?int $endAt): int
-    {
-        $query = DB::table('v2_stat')->where('record_type', 'd');
-
-        if ($startAt !== null) {
-            $query->where('record_at', '>=', $startAt);
-        }
-
-        if ($endAt !== null) {
-            $query->where('record_at', '<', $endAt);
-        }
-
-        return (int) $query
-            ->pluck('transfer_used_total')
-            ->sum(fn ($value): int => (int) $value);
     }
 
     private function countOnlineServers(): int
@@ -780,37 +776,37 @@ class StatController extends Controller
         return (int) ($updatedAt ?: 0);
     }
 
-    /**
-     * Resolve the comparison window used by traffic rank change calculation.
-     *
-     * Daily traffic statistics are stored with `record_at` pinned to the start
-     * of the day. For the dashboard `24h` preset, comparing by "same span in
-     * seconds" would shift the previous window to `00:00:01`, which skips the
-     * whole yesterday row and makes change percentages fall back to `0`.
-     *
-     * To keep the requested minimal scope, only the single-day preset is
-     * aligned to the exact previous calendar day; longer ranges keep the
-     * existing equal-span comparison behavior.
-     *
-     * @param int $startDate
-     * @param int $endDate
-     * @return array{start: int, end: int}
-     */
+    /** Both windows contain complete calendar days in the configured timezone. */
     protected function resolveTrafficRankComparisonWindow(int $startDate, int $endDate): array
     {
-        $currentWindowDays = (int) floor(max(0, $endDate - $startDate) / 86400) + 1;
+        $timezone = config('app.timezone', 'UTC');
+        $start = CarbonImmutable::createFromTimestamp($startDate, $timezone)->startOfDay();
+        $end = CarbonImmutable::createFromTimestamp($endDate, $timezone);
+        $days = (int) $start->diffInDays($end);
 
-        if ($currentWindowDays === 1) {
-            return [
-                'start' => $startDate - 86400,
-                'end' => $startDate,
-            ];
+        return ['start' => $start->subDays($days)->timestamp, 'end' => $start->timestamp];
+    }
+
+    /** Date strings are inclusive; legacy timestamps select their containing calendar days. */
+    protected function resolveTrafficRankWindow(Request $request): array
+    {
+        $timezone = config('app.timezone', 'UTC');
+        $today = CarbonImmutable::now($timezone)->startOfDay();
+        $start = $request->filled('start_date')
+            ? CarbonImmutable::parse($request->input('start_date'), $timezone)->startOfDay()
+            : ($request->filled('start_time')
+                ? CarbonImmutable::createFromTimestamp((int) $request->input('start_time'), $timezone)->startOfDay()
+                : $today->subDays(6));
+        $end = $request->filled('end_date')
+            ? CarbonImmutable::parse($request->input('end_date'), $timezone)->startOfDay()
+            : ($request->filled('end_time')
+                ? CarbonImmutable::createFromTimestamp((int) $request->input('end_time'), $timezone)->startOfDay()
+                : $today);
+        if ($end->lessThan($start)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['end_date' => 'End date must not precede start date.']);
         }
 
-        return [
-            'start' => $startDate - ($endDate - $startDate),
-            'end' => $startDate,
-        ];
+        return ['start' => $start->timestamp, 'end' => $end->addDay()->timestamp];
     }
 
     /**
@@ -823,14 +819,17 @@ class StatController extends Controller
     {
         $request->validate([
             'type' => 'required|in:node,user',
+            'start_date' => 'nullable|date_format:Y-m-d',
+            'end_date' => 'nullable|date_format:Y-m-d',
             'start_time' => 'nullable|integer|min:1000000000|max:9999999999',
             'end_time' => 'nullable|integer|min:1000000000|max:9999999999',
             'limit' => 'nullable|integer|in:10,20'
         ]);
 
         $type = (string) $request->input('type');
-        $startDate = (int) $request->input('start_time', strtotime('-7 days'));
-        $endDate = (int) $request->input('end_time', time());
+        $window = $this->resolveTrafficRankWindow($request);
+        $startDate = $window['start'];
+        $endDate = $window['end'];
         $limit = (int) $request->input('limit', 10);
         $comparisonWindow = $this->resolveTrafficRankComparisonWindow($startDate, $endDate);
         $previousStartDate = $comparisonWindow['start'];
@@ -870,7 +869,7 @@ class StatController extends Controller
             ->selectRaw('COALESCE(SUM(u + d), 0) as value')
             ->where('record_type', 'd')
             ->where('record_at', '>=', $startDate)
-            ->where('record_at', '<=', $endDate)
+            ->where('record_at', '<', $endDate)
             ->groupBy($idColumn)
             ->orderByDesc('value')
             ->limit($limit)

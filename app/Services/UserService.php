@@ -2,9 +2,7 @@
 
 namespace App\Services;
 
-use App\Jobs\StatServerJob;
-use App\Jobs\StatUserJob;
-use App\Jobs\TrafficFetchJob;
+use App\Jobs\TrafficBillingJob;
 use App\Models\Order;
 use App\Models\Plan;
 use App\Models\Server;
@@ -146,21 +144,28 @@ class UserService
         return true;
     }
 
-    public function trafficFetch(Server $server, string $protocol, array $data)
+    public function trafficFetch(Server $server, string $protocol, array $data, ?string $reportId = null, ?int $receivedAt = null)
     {
-        $server->rate = $server->getCurrentRate();
+        $receivedAt ??= time();
+        $payloadHash = TrafficBillingJob::fingerprint($data);
+        $nodeId = $server->id;
+        $clock = \Illuminate\Support\Carbon::createFromTimestamp($receivedAt, config('app.timezone', 'UTC'))->format('H:i');
+        $rate = $server->rate;
+        if ($server->rate_time_enable) {
+            foreach ($server->rate_time_ranges ?? [] as $range) {
+                if ($clock >= $range['start'] && $clock <= $range['end']) {
+                    $rate = $range['rate'];
+                    break;
+                }
+            }
+        }
         $server = $server->toArray();
-
+        $server['rate'] = $rate;
         list($server, $protocol, $data) = HookManager::filter('traffic.process.before', [$server, $protocol, $data]);
-        // Compatible with legacy hook
+        // Compatible with legacy hook.
         list($server, $protocol, $data) = HookManager::filter('traffic.before_process', [$server, $protocol, $data]);
-
-        $timestamp = strtotime(date('Y-m-d'));
-        collect($data)->chunk(1000)->each(function ($chunk) use ($timestamp, $server, $protocol) {
-            TrafficFetchJob::dispatch($server, $chunk->toArray(), $protocol, $timestamp);
-            StatUserJob::dispatch($server, $chunk->toArray(), $protocol, 'd');
-            StatServerJob::dispatch($server, $chunk->toArray(), $protocol, 'd');
-        });
+        $server['id'] = $nodeId;
+        TrafficBillingJob::dispatch($server, $data, $protocol, $receivedAt, $reportId, $payloadHash);
     }
 
     /**

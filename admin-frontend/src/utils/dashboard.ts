@@ -9,8 +9,6 @@ export type TimePreset = '1d' | '7d' | '30d' | '90d'
 export interface DateRangePreset {
   startDate: string
   endDate: string
-  startTime: number
-  endTime: number
 }
 
 export interface ChartLabelPoint {
@@ -44,34 +42,26 @@ const PADDING_X = 24
 const PADDING_TOP = 18
 const PADDING_BOTTOM = 34
 
-function formatDateToken(date: Date): string {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-')
-}
-
 function toNumber(value: unknown): number {
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric : 0
 }
 
-export function getDateRangeFromPreset(preset: TimePreset): DateRangePreset {
+export function getDateRangeFromPreset(
+  preset: TimePreset,
+  timeZone?: string,
+  now = new Date(),
+): DateRangePreset {
   const days = { '1d': 1, '7d': 7, '30d': 30, '90d': 90 }[preset]
-  const end = new Date()
-  end.setHours(23, 59, 59, 999)
-
-  const start = new Date(end)
-  start.setDate(start.getDate() - (days - 1))
-  start.setHours(0, 0, 0, 0)
-
-  return {
-    startDate: formatDateToken(start),
-    endDate: formatDateToken(end),
-    startTime: Math.floor(start.getTime() / 1000),
-    endTime: Math.floor(end.getTime() / 1000),
-  }
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now)
+  const token = (type: string) => parts.find((part) => part.type === type)!.value
+  const endDate = [token('year'), token('month'), token('day')].join('-')
+  // UTC is only used for calendar arithmetic; the API receives date strings.
+  const start = new Date(endDate + 'T00:00:00Z')
+  start.setUTCDate(start.getUTCDate() - (days - 1))
+  return { startDate: start.toISOString().slice(0, 10), endDate }
 }
 
 export function formatCurrency(value: number): string {

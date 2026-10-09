@@ -36,6 +36,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '节点管理', kicker: 'Nodes' },
       },
       {
+        path: 'node-updates',
+        name: 'NodeUpdates',
+        component: () => import('@/views/node-updates/NodeUpdatesView.vue'),
+        meta: { title: '节点更新', kicker: 'Node Updates' },
+      },
+      {
         path: 'node-groups',
         name: 'NodeGroups',
         component: () => import('@/views/nodes/NodeGroupsView.vue'),
