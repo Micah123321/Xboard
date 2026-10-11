@@ -40,6 +40,7 @@ export interface SystemConfigFieldSchema {
   min?: number
   max?: number
   step?: number
+  integer?: boolean
   defaultValue?: SystemConfigFieldValue
   nullable?: boolean
   multiple?: boolean
@@ -206,6 +207,8 @@ export const systemConfigSections: SystemConfigSectionSchema[] = [
       { key: 'server_token', label: '通讯密钥', type: 'password', nullable: true, helper: '长度至少 16 位。' },
       { key: 'server_pull_interval', label: '拉取间隔（秒）', type: 'number', min: 1, step: 1, valueType: 'number', defaultValue: 60 },
       { key: 'server_push_interval', label: '推送间隔（秒）', type: 'number', min: 1, step: 1, valueType: 'number', defaultValue: 60 },
+      { key: 'server_bandwidth_check_interval', label: '带宽检测间隔（秒）', type: 'number', min: 60, max: 86400, step: 1, integer: true, valueType: 'number', defaultValue: 3600, helper: '节点向主控面板测速的间隔，范围 60–86400 秒；同机共享测速，仅影响开启带宽检测的节点。' },
+      { key: 'server_bandwidth_check_threshold_mbps', label: '带宽不足阈值（Mbps）', type: 'number', min: 0.1, max: 100, step: 0.1, valueType: 'number', defaultValue: 8, helper: '范围 0.1–100 Mbps；8 Mbps ≈ 1 MB/s。低于阈值且连续确认后，自动停用开启带宽检测的节点。' },
       { key: 'device_limit_mode', label: '设备数统计模式', type: 'select', valueType: 'number', options: deviceLimitOptions, defaultValue: 0 },
       { key: 'server_ws_enable', label: '启用节点 WebSocket', type: 'switch', defaultValue: true },
       { key: 'server_ws_url', label: '节点 WebSocket URL', type: 'url', fullWidth: true, nullable: true, placeholder: 'wss://example.com/ws' },
@@ -381,6 +384,21 @@ export function serializeSystemConfigForm(form: SystemConfigFormState): Record<s
     })
     return payload
   }, {})
+}
+
+export function validateBandwidthCheckConfig(form: SystemConfigFormState): string | null {
+  const fields = systemConfigSections.find((section) => section.key === 'server')?.fields ?? []
+  for (const field of fields.filter((item) => item.key.startsWith('server_bandwidth_check_'))) {
+    const rawValue = form[field.key]
+    const value = Number(rawValue)
+    if (rawValue === null || rawValue === '' || !Number.isFinite(value)
+      || (field.min !== undefined && value < field.min)
+      || (field.max !== undefined && value > field.max)
+      || (field.integer && !Number.isInteger(value))) {
+      return `${field.label}需为 ${field.min}–${field.max} 范围内的${field.integer ? '整数' : '数值'}`
+    }
+  }
+  return null
 }
 
 export function getSystemConfigFieldOptions(

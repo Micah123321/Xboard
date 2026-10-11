@@ -12,6 +12,7 @@ import {
   normalizeSystemConfigMappings,
   serializeSystemConfigForm,
   systemConfigSections,
+  validateBandwidthCheckConfig,
   type SystemConfigFieldSchema,
   type SystemConfigFieldValue,
   type SystemConfigSectionKey,
@@ -152,6 +153,11 @@ function jumpToSection(key: SystemConfigSectionKey) {
 
 async function handleSave() {
   if (saving.value) return
+  const validationMessage = validateBandwidthCheckConfig(form)
+  if (validationMessage) {
+    ElMessage.warning(validationMessage)
+    return
+  }
   saving.value = true
 
   try {
@@ -338,6 +344,7 @@ onMounted(() => {
                     :min="field.min"
                     :max="field.max"
                     :step="field.step ?? 1"
+                    :precision="field.integer ? 0 : undefined"
                     controls-position="right"
                     class="field-number"
                     @update:model-value="updateField(field.key, $event ?? (field.nullable ? null : field.defaultValue ?? 0))"

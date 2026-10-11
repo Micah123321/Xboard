@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { saveNode } from '@/api/admin'
+import { getNodeVisibilityDisabledReason } from '@/utils/nodes'
 import type { AdminNodeItem, AdminNodeRouteItem, AdminNodeType, AdminServerGroupItem } from '@/types/api'
 import NodeEditorProtocolSection from './NodeEditorProtocolSection.vue'
 import {
@@ -43,6 +44,13 @@ const dialogDescription = computed(() => props.mode === 'create'
   : '调整节点基础配置、协议细节与排序前置参数。')
 const currentProtocolLabel = computed(() => getNodeProtocolLabel(form.type))
 const parentNodeOptions = computed(() => props.allNodes.filter((item) => item.id !== props.node?.id))
+const showDisabledReason = computed(() => getNodeVisibilityDisabledReason({
+  auto_online: form.autoOnline,
+  gfw_check_enabled: form.gfwCheckEnabled,
+  gfw_auto_hidden: props.node?.gfw_auto_hidden,
+  bandwidth_check_enabled: form.bandwidthCheckEnabled,
+  bandwidth_health: props.node?.bandwidth_health,
+}))
 
 const rules = computed<FormRules<NodeFormModel>>(() => ({
   type: [{ required: true, message: '请选择协议类型', trigger: 'change' }],
@@ -353,9 +361,9 @@ watch(
                 <label class="switch-card">
                   <div>
                     <strong>前台显示</strong>
-                    <span>{{ form.autoOnline ? '已由自动上线托管，后台会按在线状态同步。' : '开启后节点会出现在可展示列表中。' }}</span>
+                    <span>{{ showDisabledReason || '开启后节点会出现在可展示列表中。' }}</span>
                   </div>
-                  <ElSwitch v-model="form.show" :disabled="form.autoOnline" />
+                  <ElSwitch v-model="form.show" :disabled="Boolean(showDisabledReason)" />
                 </label>
                 <label class="switch-card">
                   <div>
@@ -384,6 +392,13 @@ watch(
                     <span>检测子节点地址与服务端口，失败时自动上线会隐藏该子节点。</span>
                   </div>
                   <ElSwitch v-model="form.tcpCheckEnabled" />
+                </label>
+                <label class="switch-card">
+                  <div>
+                    <strong>带宽检测</strong>
+                    <span>节点向主控面板测速，低于全局阈值时判定带宽不足，连续确认后自动停用；关闭此选项解除该节点的带宽阻断。同机共享测速，仅影响开启选项的节点。</span>
+                  </div>
+                  <ElSwitch v-model="form.bandwidthCheckEnabled" />
                 </label>
                 <label class="switch-card">
                   <div>

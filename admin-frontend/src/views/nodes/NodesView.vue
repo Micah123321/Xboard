@@ -51,6 +51,8 @@ import {
   getNodeGroupNames,
   getNodeIdLabel,
   getNodeStatusMeta,
+  getNodeBandwidthDetail,
+  getNodeVisibilityDisabledReason,
   getNodeTrafficLimitDetail,
   getNodeTrafficDetails,
   getNodeTypeLabel,
@@ -465,6 +467,7 @@ async function handleBatchSubmit(payload: NodeBatchEditPayload) {
     rate: payload.rate,
     group_ids: payload.group_ids,
     auto_online: payload.auto_online,
+    bandwidth_check_enabled: payload.bandwidth_check_enabled,
     gfw_check_enabled: payload.gfw_check_enabled,
   }
 
@@ -1012,17 +1015,19 @@ watch(
             />
           </template>
           <template #default="{ row }">
-            <div
-              class="switch-shell"
-              :style="{ '--node-switch-color': row.parent_id ? '#7c5cff' : '#22c55e' }"
-            >
-              <ElSwitch
-                :model-value="Boolean(row.show)"
-                :loading="isSwitching(row.id)"
-                :disabled="Boolean(row.auto_online) || (Boolean(row.gfw_auto_hidden) && row.gfw_check_enabled !== false)"
-                @change="(value) => handleToggleShow(row, Boolean(value))"
-              />
-            </div>
+            <ElTooltip :content="getNodeVisibilityDisabledReason(row)" :disabled="!getNodeVisibilityDisabledReason(row)" placement="top">
+              <div
+                class="switch-shell"
+                :style="{ '--node-switch-color': row.parent_id ? '#7c5cff' : '#22c55e' }"
+              >
+                <ElSwitch
+                  :model-value="Boolean(row.show)"
+                  :loading="isSwitching(row.id)"
+                  :disabled="Boolean(getNodeVisibilityDisabledReason(row))"
+                  @change="(value) => handleToggleShow(row, Boolean(value))"
+                />
+              </div>
+            </ElTooltip>
           </template>
         </ElTableColumn>
 
@@ -1103,6 +1108,27 @@ watch(
                     <strong>{{ row.name }}</strong>
                   </header>
                   <section class="node-detail-section">
+                    <header class="node-detail-section__header">
+                      <span>带宽检测</span>
+                      <small>{{ getNodeBandwidthDetail(row).label }}</small>
+                    </header>
+                    <article class="node-traffic-row">
+                      <div class="node-traffic-row__summary">
+                        <span>节点 → 主控面板</span>
+                        <strong>{{ getNodeBandwidthDetail(row).speed }}</strong>
+                      </div>
+                      <div class="node-traffic-row__split">
+                        <span>检测时间</span>
+                        <span>{{ getNodeBandwidthDetail(row).checkedAt }}</span>
+                      </div>
+                      <div v-if="getNodeBandwidthDetail(row).enabled" class="node-traffic-row__split">
+                        <span>连续低速 {{ getNodeBandwidthDetail(row).lowCount }} 次</span>
+                        <span>连续成功 {{ getNodeBandwidthDetail(row).successCount }} 次</span>
+                      </div>
+                      <p v-if="getNodeBandwidthDetail(row).error">测速异常：{{ getNodeBandwidthDetail(row).error }}</p>
+                    </article>
+                  </section>
+                  <section class="node-detail-section">
                     <header class="node-detail-section__header">流量统计</header>
                     <article
                       v-for="traffic in getNodeTrafficDetails(row)"
@@ -1158,6 +1184,11 @@ watch(
                 <ElTag round effect="plain" :type="getNodeStatusMeta(row).tagType">
                   {{ getNodeStatusMeta(row).label }}
                 </ElTag>
+                <ElTooltip v-if="getNodeBandwidthDetail(row).enabled" :content="`检测时间：${getNodeBandwidthDetail(row).checkedAt}`" placement="top">
+                  <ElTag round effect="plain" :type="getNodeBandwidthDetail(row).tagType">
+                    {{ getNodeBandwidthDetail(row).label }} · {{ getNodeBandwidthDetail(row).speed }}
+                  </ElTag>
+                </ElTooltip>
                 <ElTag
                   v-if="getNodeTrafficLimitDetail(row).enabled"
                   round

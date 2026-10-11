@@ -13,6 +13,18 @@ export interface NodeStatusMeta {
 
 type NodeStatusClass = NodeStatusMeta['dotClass']
 
+export interface NodeBandwidthDetail {
+  enabled: boolean
+  suspended: boolean
+  label: string
+  tagType: NodeStatusMeta['tagType']
+  speed: string
+  checkedAt: string
+  error: string | null
+  lowCount: number
+  successCount: number
+}
+
 export interface NodeGfwMeta {
   label: string
   searchText: string
@@ -145,6 +157,46 @@ export function getNodeStatusMeta(node: AdminNodeItem): NodeStatusMeta {
     dotClass: 'offline',
     tagType: 'danger',
   }
+}
+
+export function getNodeBandwidthDetail(node: Pick<AdminNodeItem, 'bandwidth_check_enabled' | 'bandwidth_health'>): NodeBandwidthDetail {
+  const enabled = node.bandwidth_check_enabled === true
+  const health = node.bandwidth_health
+  const suspended = enabled && (health?.suspended === true || health?.status === 'suspended')
+  const error = health?.error || null
+  const mbps = health?.mbps
+  const checkedAt = health?.checked_at
+  const checkedDate = typeof checkedAt === 'number' && checkedAt > 0 ? new Date(checkedAt * 1000) : null
+  let label = enabled ? '带宽待检测' : '带宽检测已关闭'
+  let tagType: NodeBandwidthDetail['tagType'] = 'info'
+  if (suspended) {
+    label = '带宽不足 · 已停用'
+    tagType = 'danger'
+  } else if (enabled && error) {
+    label = '带宽检测异常'
+    tagType = 'warning'
+  } else if (enabled && health?.status === 'suspect') {
+    label = '带宽偏低 · 待确认'
+    tagType = 'warning'
+  } else if (enabled && health?.status === 'healthy') {
+    label = '带宽正常'
+    tagType = 'success'
+  }
+  return {
+    enabled, suspended, label, tagType, error,
+    speed: error ? '测速异常' : typeof mbps === 'number' && Number.isFinite(mbps) && mbps >= 0 ? `${mbps.toFixed(2)} Mbps` : '暂无测速数据',
+    checkedAt: checkedDate && Number.isFinite(checkedDate.getTime()) ? checkedDate.toLocaleString() : '未检测',
+    lowCount: health?.low_count ?? 0,
+    successCount: health?.success_count ?? 0,
+  }
+}
+
+export function getNodeVisibilityDisabledReason(node: Pick<AdminNodeItem, 'auto_online' | 'gfw_check_enabled' | 'gfw_auto_hidden' | 'bandwidth_check_enabled' | 'bandwidth_health'>): string {
+  const reasons: string[] = []
+  if (getNodeBandwidthDetail(node).suspended) reasons.push('带宽不足已自动停用；关闭带宽检测并保存可解除该节点的带宽阻断。')
+  if (node.auto_online) reasons.push('已由自动上线托管，后台会按在线状态同步显示。')
+  if (node.gfw_auto_hidden && node.gfw_check_enabled !== false) reasons.push('墙检测已自动隐藏；关闭墙检测托管可解除墙状态自动显隐。')
+  return reasons.join(' ')
 }
 
 export function getNodeGfwMeta(node: AdminNodeItem): NodeGfwMeta {

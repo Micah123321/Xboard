@@ -37,7 +37,7 @@ class ServerObserver
             NodeSyncService::notifyConfigUpdated($server->id);
         }
 
-        if ($server->wasChanged(['machine_id', 'enabled'])) {
+        if ($server->wasChanged(['machine_id', 'enabled', 'bandwidth_check_enabled'])) {
             $this->notifyMachineChange(
                 $server->machine_id,
                 $server->getOriginal('machine_id')

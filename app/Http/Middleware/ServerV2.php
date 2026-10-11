@@ -27,7 +27,11 @@ class ServerV2
 
     private function authenticateByServerToken(Request $request): void
     {
-        $isHandshake = $request->is('*/server/handshake') || $request->is('api/v2/server/handshake');
+        if ($request->is('api/v2/server/bandwidth/*') && !$request->filled('token') && $request->filled('server_token')) {
+            $request->merge(['token' => $request->input('server_token')]);
+        }
+
+        $isHandshake = $request->is('*/server/handshake') || $request->is('api/v2/server/handshake') || $request->is('api/v2/server/bandwidth/*');
 
         $request->validate([
             'token' => [
@@ -56,7 +60,7 @@ class ServerV2
 
     private function authenticateByMachine(Request $request): void
     {
-        $isHandshake = $request->is('*/server/handshake') || $request->is('api/v2/server/handshake');
+        $isHandshake = $request->is('*/server/handshake') || $request->is('api/v2/server/handshake') || $request->is('api/v2/server/bandwidth/*');
 
         $request->validate([
             'machine_id' => 'required|integer',

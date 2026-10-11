@@ -188,6 +188,7 @@ export function toNodeFormModel(node?: AdminNodeItem | null): NodeFormModel {
   form.serverPort = toStringValue(node.server_port)
   form.parentId = node.parent_id ?? null
   form.tcpCheckEnabled = toBooleanValue(node.tcp_check_enabled)
+  form.bandwidthCheckEnabled = toBooleanValue(node.bandwidth_check_enabled)
   form.show = toBooleanValue(node.show, true)
   form.autoOnline = toBooleanValue(node.auto_online)
   form.autoOnlineCooldownEnabled = toBooleanValue(node.auto_online_cooldown_enabled)
@@ -516,6 +517,7 @@ export function toNodeSavePayload(form: NodeFormModel): AdminNodeSavePayload {
     auto_online_cooldown_enabled: form.autoOnline && form.autoOnlineCooldownEnabled,
     gfw_check_enabled: form.gfwCheckEnabled,
     tcp_check_enabled: Boolean(form.parentId) && form.tcpCheckEnabled,
+    bandwidth_check_enabled: form.bandwidthCheckEnabled,
     transfer_enable: form.trafficLimitEnabled ? gigabytesToBytes(form.trafficLimitGb) : 0,
     traffic_limit_enabled: form.trafficLimitEnabled,
     traffic_limit_reset_day: form.trafficLimitEnabled ? form.trafficLimitResetDay : null,

@@ -151,6 +151,7 @@ class Server extends Model
         'auto_online_cooldown_enabled' => 'boolean',
         'gfw_check_enabled' => 'boolean',
         'tcp_check_enabled' => 'boolean',
+        'bandwidth_check_enabled' => 'boolean',
         'gfw_auto_hidden' => 'boolean',
         'gfw_auto_action_at' => 'integer',
         'parent_auto_hidden' => 'boolean',

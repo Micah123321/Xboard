@@ -54,6 +54,8 @@ class ConfigSave extends FormRequest
         'device_limit_mode' => 'integer',
         'server_ws_enable' => 'boolean',
         'server_ws_url' => 'nullable|url',
+        'server_bandwidth_check_interval' => 'integer|min:60|max:86400',
+        'server_bandwidth_check_threshold_mbps' => 'numeric|min:0.1|max:100',
         // frontend
         'frontend_theme' => '',
         'frontend_theme_sidebar' => 'nullable|in:dark,light',

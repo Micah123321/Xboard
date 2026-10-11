@@ -62,6 +62,7 @@ class ManageController extends Controller
             $item['traffic_limit_snapshot'] = $trafficLimitSnapshots[(int) $item['id']] ?? null;
             return $item;
         });
+        $servers = app(\App\Services\ServerBandwidthService::class)->decorateServers($servers);
         return $this->success($servers);
     }
 
@@ -143,7 +144,7 @@ class ManageController extends Controller
     {
         return $this->success(
             Server::orderBy('sort', 'ASC')
-                ->get(['id', 'name', 'type', 'host', 'port', 'server_port', 'parent_id', 'group_ids', 'route_ids', 'show', 'sort', 'auto_online', 'gfw_check_enabled', 'tcp_check_enabled', 'enabled', 'rate', 'machine_id'])
+                ->get(['id', 'name', 'type', 'host', 'port', 'server_port', 'parent_id', 'group_ids', 'route_ids', 'show', 'sort', 'auto_online', 'gfw_check_enabled', 'tcp_check_enabled', 'bandwidth_check_enabled', 'enabled', 'rate', 'machine_id'])
                 ->toArray()
         );
     }
@@ -361,6 +362,7 @@ class ManageController extends Controller
     private function decorateNodePage($servers, bool $gfwDecorated = false, bool $groupsAttached = false)
     {
         $servers->append(self::NODE_RUNTIME_FIELDS);
+        $servers = app(\App\Services\ServerBandwidthService::class)->decorateServers($servers);
         $trafficStats = $this->buildNodeTrafficStats($servers);
         $trafficLimitSnapshots = app(ServerTrafficLimitService::class)->buildSnapshotsForServers($servers);
 
@@ -614,6 +616,7 @@ class ManageController extends Controller
             'auto_online_cooldown_enabled' => 'nullable|boolean',
             'gfw_check_enabled' => 'nullable|boolean',
             'tcp_check_enabled' => 'nullable|boolean',
+            'bandwidth_check_enabled' => 'sometimes|boolean',
             'machine_id' => 'nullable|integer',
             'enabled' => 'nullable|boolean',
         ]);
@@ -643,6 +646,9 @@ class ManageController extends Controller
         }
         if (array_key_exists('tcp_check_enabled', $params)) {
             $server->tcp_check_enabled = (int) ($server->parent_id ?? 0) > 0 && (bool) $params['tcp_check_enabled'];
+        }
+        if (array_key_exists('bandwidth_check_enabled', $params)) {
+            $server->bandwidth_check_enabled = (bool) $params['bandwidth_check_enabled'];
         }
         if (array_key_exists('machine_id', $params)) {
             $server->machine_id = $params['machine_id'] ?: null;
@@ -785,6 +791,7 @@ class ManageController extends Controller
             'auto_online' => 'nullable|boolean',
             'auto_online_cooldown_enabled' => 'nullable|boolean',
             'gfw_check_enabled' => 'nullable|boolean',
+            'bandwidth_check_enabled' => 'sometimes|boolean',
             'enabled' => 'nullable|boolean',
             'machine_id' => 'nullable|integer',
             'host' => 'sometimes|required|string',
@@ -814,6 +821,9 @@ class ManageController extends Controller
         }
         if (array_key_exists('gfw_check_enabled', $params) && $params['gfw_check_enabled'] !== null) {
             $update['gfw_check_enabled'] = (bool) $params['gfw_check_enabled'];
+        }
+        if (array_key_exists('bandwidth_check_enabled', $params) && $params['bandwidth_check_enabled'] !== null) {
+            $update['bandwidth_check_enabled'] = (bool) $params['bandwidth_check_enabled'];
         }
         if (array_key_exists('enabled', $params) && $params['enabled'] !== null) {
             $update['enabled'] = (bool) $params['enabled'];

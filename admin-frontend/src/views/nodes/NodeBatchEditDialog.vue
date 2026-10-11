@@ -9,6 +9,7 @@ interface NodeBatchEditPayload {
   group_ids?: string[]
   auto_online?: boolean
   gfw_check_enabled?: boolean
+  bandwidth_check_enabled?: boolean
 }
 
 const props = defineProps<{
@@ -34,6 +35,8 @@ const form = reactive({
   autoOnline: true,
   updateGfwCheck: false,
   gfwCheckEnabled: true,
+  updateBandwidthCheck: false,
+  bandwidthCheckEnabled: false,
 })
 
 const hasEnabledField = computed(() => (
@@ -42,6 +45,7 @@ const hasEnabledField = computed(() => (
   || form.updateGroups
   || form.updateAutoOnline
   || form.updateGfwCheck
+  || form.updateBandwidthCheck
 ))
 
 function resetForm() {
@@ -55,6 +59,8 @@ function resetForm() {
   form.autoOnline = true
   form.updateGfwCheck = false
   form.gfwCheckEnabled = true
+  form.updateBandwidthCheck = false
+  form.bandwidthCheckEnabled = false
 }
 
 function closeDialog() {
@@ -83,6 +89,7 @@ function handleSubmit() {
     group_ids: form.updateGroups ? [...new Set(form.groupIds.map((item) => String(item)))] : undefined,
     auto_online: form.updateAutoOnline ? form.autoOnline : undefined,
     gfw_check_enabled: form.updateGfwCheck ? form.gfwCheckEnabled : undefined,
+    bandwidth_check_enabled: form.updateBandwidthCheck ? form.bandwidthCheckEnabled : undefined,
   })
 }
 
@@ -211,6 +218,22 @@ watch(
             <span>关闭后不会参与自动墙检测和墙状态自动显隐。</span>
           </div>
           <ElSwitch v-model="form.gfwCheckEnabled" :disabled="!form.updateGfwCheck" />
+        </label>
+      </section>
+      <section class="batch-section">
+        <label class="batch-switch-card">
+          <div>
+            <strong>批量设置带宽检测</strong>
+            <span>节点向主控面板测速，低于全局阈值且连续确认后自动停用；同机共享测速，仅影响开启选项的节点。</span>
+          </div>
+          <ElSwitch v-model="form.updateBandwidthCheck" />
+        </label>
+        <label class="batch-switch-card batch-switch-card--nested">
+          <div>
+            <strong>{{ form.bandwidthCheckEnabled ? '开启带宽检测' : '关闭带宽检测' }}</strong>
+            <span>适用于所有所选节点；关闭此选项解除该节点的带宽阻断。</span>
+          </div>
+          <ElSwitch v-model="form.bandwidthCheckEnabled" :disabled="!form.updateBandwidthCheck" />
         </label>
       </section>
     </div>

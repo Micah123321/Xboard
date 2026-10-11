@@ -51,6 +51,7 @@ class ServerAutoOnlineService
         $shouldShow = !$isGfwBlocked
             && !$isGfwHeld
             && !$isReconnectSuspended
+            && !app(ServerBandwidthService::class)->isSuspended($server)
             && (int) $server->available_status !== Server::STATUS_OFFLINE;
         $shouldClearGfwAutoHidden = $gfwStatus === ServerGfwCheck::STATUS_NORMAL
             && (bool) $server->gfw_auto_hidden;

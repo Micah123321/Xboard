@@ -30,6 +30,9 @@ class ServerRoute
         ], function ($route) {
             $route->match(['GET', 'POST'], 'handshake', [ServerController::class, 'handshake']);
             $route->post('report', [ServerController::class, 'report']);
+            $route->get('bandwidth/config', [\App\Http\Controllers\V2\Server\BandwidthController::class, 'config']);
+            $route->post('bandwidth/upload', [\App\Http\Controllers\V2\Server\BandwidthController::class, 'upload']);
+            $route->post('bandwidth/report', [\App\Http\Controllers\V2\Server\BandwidthController::class, 'report']);
             $route->get('gfw/task', [ServerController::class, 'gfwTask']);
             $route->post('gfw/report', [ServerController::class, 'gfwReport']);
             $route->get('config', [UniProxyController::class, 'config']);

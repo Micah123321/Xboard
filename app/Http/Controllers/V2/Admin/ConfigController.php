@@ -177,6 +177,8 @@ class ConfigController extends Controller
                 'device_limit_mode' => (int) admin_setting('device_limit_mode', 0),
                 'server_ws_enable' => (bool) admin_setting('server_ws_enable', 1),
                 'server_ws_url' => admin_setting('server_ws_url', ''),
+                'server_bandwidth_check_interval' => (int) admin_setting('server_bandwidth_check_interval', 3600),
+                'server_bandwidth_check_threshold_mbps' => (float) admin_setting('server_bandwidth_check_threshold_mbps', 8),
             ],
             'email' => [
                 'email_host' => admin_setting('email_host'),

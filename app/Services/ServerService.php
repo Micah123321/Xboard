@@ -41,10 +41,12 @@ class ServerService
      */
     public static function getMachineNodes(ServerMachine $machine): Collection
     {
-        return Server::where('machine_id', $machine->id)
+        $servers = Server::where('machine_id', $machine->id)
             ->where('enabled', true)
             ->orderBy('sort', 'ASC')
             ->get();
+
+        return app(ServerBandwidthService::class)->filterAvailable($servers);
     }
 
     /**
@@ -67,6 +69,7 @@ class ServerService
             ->filter(fn (Server $server) => $server->available_status !== Server::STATUS_OFFLINE)
             ->values();
 
+        $servers = app(ServerBandwidthService::class)->filterAvailable($servers);
         $trafficLimitService = app(ServerTrafficLimitService::class);
         $servers = $servers
             ->filter(function (Server $server) use ($trafficLimitService) {
