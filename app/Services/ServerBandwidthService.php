@@ -13,7 +13,9 @@ use Illuminate\Validation\ValidationException;
 class ServerBandwidthService
 {
     public const CHUNK_BYTES = 262144;
-    public const MAX_BYTES = 8388608;
+    public const MAX_BYTES = 10000000;
+    public const PROBE_METHOD = 'cloudflare_download_v1';
+    public const DOWNLOAD_URL = 'https://speed.cloudflare.com/__down?bytes=10000000';
     private const LEASE_SECONDS = 600;
     private const CONFIRMATIONS = 3;
 
@@ -27,10 +29,12 @@ class ServerBandwidthService
             'threshold_mbps' => max(0.1, min(100, (float) admin_setting('server_bandwidth_check_threshold_mbps', 8))),
             'retry_interval' => 60,
             'recovery_interval' => 600,
+            'probe_method' => self::PROBE_METHOD,
+            'download_url' => self::DOWNLOAD_URL,
             'sample_seconds' => 8,
             'chunk_bytes' => self::CHUNK_BYTES,
             'max_bytes' => self::MAX_BYTES,
-            'timeout_seconds' => 60,
+            'timeout_seconds' => 120,
         ];
         $policy['policy_revision'] = sha1(json_encode($policy));
         return $policy;
@@ -91,7 +95,8 @@ class ServerBandwidthService
             $this->health = ServerBandwidthHealth::whereIn('scope_key', $scopes)->get()->keyBy('scope_key');
         }
         $state = $this->health->get($this->scopeKey($server));
-        if (!$state) {
+        // Upload samples include panel RTT and are invalid for the new download policy.
+        if (!$state || $state->probe_method !== self::PROBE_METHOD) {
             return ['status' => 'unknown', 'suspended' => false, 'mbps' => null,
                 'checked_at' => null, 'error' => null, 'low_count' => 0, 'success_count' => 0];
         }
@@ -126,8 +131,18 @@ class ServerBandwidthService
         }
         // A persisted lease prevents different processes from testing one machine twice.
         ServerBandwidthHealth::firstOrCreate(['scope_key' => $scope]);
-        return DB::transaction(function () use ($scope, $node, $policy, $response) {
+        $released = false;
+        $response = DB::transaction(function () use ($scope, $node, $policy, $response, &$released) {
             $state = ServerBandwidthHealth::where('scope_key', $scope)->lockForUpdate()->firstOrFail();
+            if ($state->probe_method !== self::PROBE_METHOD) {
+                $released = $state->suspended;
+                $state->probe_method = self::PROBE_METHOD;
+                $state->suspended = false;
+                $state->status = 'unknown';
+                $state->mbps = $state->checked_at = $state->error = null;
+                $state->last_probe_id = null;
+                $state->policy_revision = null;
+            }
             if ($state->policy_revision !== $policy['policy_revision']) {
                 $state->policy_revision = $policy['policy_revision'];
                 $state->low_count = $state->success_count = 0;
@@ -139,6 +154,7 @@ class ServerBandwidthService
                 $probeId = (string) Str::uuid();
                 Cache::put($this->ticketKey($probeId), [
                     'scope' => $scope, 'revision' => $policy['policy_revision'],
+                    'method' => self::PROBE_METHOD,
                     'bytes' => 0, 'warmup_bytes' => 0,
                 ], self::LEASE_SECONDS);
                 $state->pending_probe_id = $probeId;
@@ -151,6 +167,11 @@ class ServerBandwidthService
             $response['next_check_at'] = $state->next_check_at;
             return $response;
         });
+        $this->health = null;
+        if ($released) {
+            $this->syncScope($scope);
+        }
+        return $response;
     }
 
     private function ticketKey(string $probeId): string
@@ -173,6 +194,7 @@ class ServerBandwidthService
         abort_unless($bytes > 0 && $bytes <= self::CHUNK_BYTES, 413, 'Invalid probe chunk size');
         Cache::lock($this->ticketKey($probeId) . ':lock', 10)->block(3, function () use ($scope, $probeId, $bytes, $warmup) {
             $ticket = $this->ticket($scope, $probeId);
+            abort_if(($ticket['method'] ?? null) === self::PROBE_METHOD, 409, 'Probe requires a public download');
             $key = $warmup ? 'warmup_bytes' : 'bytes';
             $limit = $warmup ? self::CHUNK_BYTES : self::MAX_BYTES;
             abort_if($ticket[$key] + $bytes > $limit, 413, 'Probe byte budget exceeded');
@@ -183,6 +205,7 @@ class ServerBandwidthService
 
     public function report(string $scope, array $result, ?Server $node = null): array
     {
+        abort_unless(($result['probe_method'] ?? null) === self::PROBE_METHOD, 409, 'Probe method changed');
         $probeId = $result['probe_id'];
         $error = trim((string) ($result['error'] ?? ''));
         $policy = $this->policy();
@@ -194,11 +217,16 @@ class ServerBandwidthService
             }
             $ticket = $this->ticket($scope, $probeId);
             abort_unless($result['policy_revision'] === $ticket['revision'], 409, 'Probe policy changed');
-            if ($error === '' && ((float) $result['duration_ms'] <= 0 || !is_finite((float) $result['duration_ms']))) {
-                throw ValidationException::withMessages(['duration_ms' => 'Successful measurement requires positive duration']);
+            if ($error === '' && ((float) $result['duration_ms'] <= 0
+                || !is_finite((float) $result['duration_ms'])
+                || (float) $result['duration_ms'] > $policy['timeout_seconds'] * 1000)) {
+                throw ValidationException::withMessages(['duration_ms' => 'Successful measurement must fit the probe time budget']);
             }
-            if ($error === '' && ($ticket['bytes'] !== (int) $result['bytes_received'] || $ticket['bytes'] <= 0)) {
-                throw ValidationException::withMessages(['bytes_received' => 'Measurement must match acknowledged bytes']);
+            abort_unless(($ticket['method'] ?? null) === self::PROBE_METHOD && $state->probe_method === self::PROBE_METHOD, 409, 'Probe method changed');
+            // The authenticated node measures the public stream; the panel never receives its body.
+            if ($error === '' && ((int) $result['bytes_received'] < 16384
+                || (int) $result['bytes_received'] > self::MAX_BYTES - self::CHUNK_BYTES)) {
+                throw ValidationException::withMessages(['bytes_received' => 'Invalid public download sample size']);
             }
             abort_unless($state->pending_probe_id === $probeId && $state->probe_expires_at > time(), 409, 'Probe expired');
             $wasSuspended = $state->suspended;
@@ -239,15 +267,20 @@ class ServerBandwidthService
         Cache::forget($this->ticketKey($probeId));
         $this->health = null;
         if ($changed) {
-            $members = Server::whereIn('id', $this->memberIds($scope))->get();
-            foreach ($members as $member) {
-                app(ServerAutoOnlineService::class)->syncServer($member);
-            }
-            if (str_starts_with($scope, 'machine:')) {
-                NodeSyncService::notifyMachineNodesChanged((int) substr($scope, 8));
-            }
+            $this->syncScope($scope);
         }
         return $this->verdict($state, $node);
+    }
+
+    private function syncScope(string $scope): void
+    {
+        $members = Server::whereIn('id', $this->memberIds($scope))->get();
+        foreach ($members as $member) {
+            app(ServerAutoOnlineService::class)->syncServer($member);
+        }
+        if (str_starts_with($scope, 'machine:')) {
+            NodeSyncService::notifyMachineNodesChanged((int) substr($scope, 8));
+        }
     }
 
     private function verdict(ServerBandwidthHealth $state, ?Server $node): array

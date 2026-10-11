@@ -207,7 +207,7 @@ export const systemConfigSections: SystemConfigSectionSchema[] = [
       { key: 'server_token', label: '通讯密钥', type: 'password', nullable: true, helper: '长度至少 16 位。' },
       { key: 'server_pull_interval', label: '拉取间隔（秒）', type: 'number', min: 1, step: 1, valueType: 'number', defaultValue: 60 },
       { key: 'server_push_interval', label: '推送间隔（秒）', type: 'number', min: 1, step: 1, valueType: 'number', defaultValue: 60 },
-      { key: 'server_bandwidth_check_interval', label: '带宽检测间隔（秒）', type: 'number', min: 60, max: 86400, step: 1, integer: true, valueType: 'number', defaultValue: 3600, helper: '节点向主控面板测速的间隔，范围 60–86400 秒；同机共享测速，仅影响开启带宽检测的节点。' },
+      { key: 'server_bandwidth_check_interval', label: '带宽检测间隔（秒）', type: 'number', min: 60, max: 86400, step: 1, integer: true, valueType: 'number', defaultValue: 3600, helper: '节点下载 Cloudflare 公开测速数据的间隔，每次最多 10 MB；范围 60–86400 秒，同机共享测速，仅影响开启带宽检测的节点。' },
       { key: 'server_bandwidth_check_threshold_mbps', label: '带宽不足阈值（Mbps）', type: 'number', min: 0.1, max: 100, step: 0.1, valueType: 'number', defaultValue: 8, helper: '范围 0.1–100 Mbps；8 Mbps ≈ 1 MB/s。低于阈值且连续确认后，自动停用开启带宽检测的节点。' },
       { key: 'device_limit_mode', label: '设备数统计模式', type: 'select', valueType: 'number', options: deviceLimitOptions, defaultValue: 0 },
       { key: 'server_ws_enable', label: '启用节点 WebSocket', type: 'switch', defaultValue: true },

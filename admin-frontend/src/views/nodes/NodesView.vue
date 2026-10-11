@@ -1114,7 +1114,7 @@ watch(
                     </header>
                     <article class="node-traffic-row">
                       <div class="node-traffic-row__summary">
-                        <span>节点 → 主控面板</span>
+                        <span>Cloudflare → 节点（下行）</span>
                         <strong>{{ getNodeBandwidthDetail(row).speed }}</strong>
                       </div>
                       <div class="node-traffic-row__split">

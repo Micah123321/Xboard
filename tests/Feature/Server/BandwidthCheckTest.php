@@ -47,6 +47,9 @@ class BandwidthCheckTest extends TestCase
             ->assertJsonPath('data.enabled', false)
             ->assertJsonPath('data.interval', 3600)
             ->assertJsonPath('data.threshold_mbps', 8)
+            ->assertJsonPath('data.probe_method', ServerBandwidthService::PROBE_METHOD)
+            ->assertJsonPath('data.download_url', ServerBandwidthService::DOWNLOAD_URL)
+            ->assertJsonPath('data.max_bytes', 10000000)
             ->assertJsonPath('data.probe_id', '');
         $server->update(['bandwidth_check_enabled' => true]);
         admin_setting(['server_bandwidth_check_interval' => 7200, 'server_bandwidth_check_threshold_mbps' => 12]);
@@ -84,6 +87,7 @@ class BandwidthCheckTest extends TestCase
         $config = $this->getJson($url)->assertOk()->json('data');
         $this->postJson($this->url($server, 'report'), [
             'probe_id' => $config['probe_id'], 'policy_revision' => $config['policy_revision'],
+            'probe_method' => ServerBandwidthService::PROBE_METHOD,
             'bytes_received' => 0, 'duration_ms' => 0, 'error' => 'warmup timed out',
         ])->assertOk()->assertJsonPath('data.suspended', false);
         $this->assertSame('unknown', ServerBandwidthHealth::firstOrFail()->status);
@@ -180,16 +184,34 @@ class BandwidthCheckTest extends TestCase
         $this->getJson($this->url($parent, 'config'))->assertOk()->assertJsonPath('data.enabled', false);
     }
 
-    public function test_duplicate_report_is_idempotent_and_unacknowledged_bytes_are_rejected(): void
+    public function test_duplicate_download_report_is_idempotent_and_invalid_sample_size_is_rejected(): void
     {
         $server = $this->server();
         $config = $this->getJson($this->url($server, 'config'))->json('data');
         $payload = ['probe_id' => $config['probe_id'], 'policy_revision' => $config['policy_revision'],
-            'bytes_received' => 16384, 'duration_ms' => 131.072, 'error' => null];
+            'probe_method' => ServerBandwidthService::PROBE_METHOD,
+            'bytes_received' => 0, 'duration_ms' => 131.072, 'error' => null];
         $this->postJson($this->url($server, 'report'), $payload)->assertStatus(422);
+        $payload['bytes_received'] = 16384;
         $this->submit($server, $config, 1);
         $this->postJson($this->url($server, 'report'), $payload)->assertOk();
         $this->assertSame(1, ServerBandwidthHealth::firstOrFail()->low_count);
+    }
+
+    public function test_over_timeout_success_result_is_rejected_without_counting_a_low_sample(): void
+    {
+        $server = $this->server();
+        $config = $this->getJson($this->url($server, 'config'))->assertOk()->json('data');
+        $payload = ['probe_id' => $config['probe_id'], 'policy_revision' => $config['policy_revision'],
+            'probe_method' => ServerBandwidthService::PROBE_METHOD,
+            'bytes_received' => 16384, 'duration_ms' => 300000, 'error' => null];
+        $this->postJson($this->url($server, 'report'), $payload)->assertStatus(422);
+        $state = ServerBandwidthHealth::firstOrFail();
+        $this->assertSame(0, $state->low_count);
+        $this->assertFalse($state->suspended);
+        $this->assertSame($config['probe_id'], $state->pending_probe_id);
+        $this->submit($server, $config, 8)->assertJsonPath('data.suspended', false);
+        $this->assertSame('healthy', $state->fresh()->status);
     }
 
     public function test_policy_or_opt_in_changes_invalidate_an_in_flight_probe(): void
@@ -198,6 +220,7 @@ class BandwidthCheckTest extends TestCase
         $config = $this->getJson($this->url($server, 'config'))->json('data');
         admin_setting(['server_bandwidth_check_threshold_mbps' => 9]);
         $payload = ['probe_id' => $config['probe_id'], 'policy_revision' => $config['policy_revision'],
+            'probe_method' => ServerBandwidthService::PROBE_METHOD,
             'bytes_received' => 0, 'duration_ms' => 0, 'error' => 'timeout'];
         $this->postJson($this->url($server, 'report'), $payload)->assertStatus(409);
         $newConfig = $this->getJson($this->url($server, 'config'))->assertOk()->json('data');
@@ -217,6 +240,58 @@ class BandwidthCheckTest extends TestCase
         $this->call('POST', $this->url($server, 'upload') . '&probe_id=' . $config['probe_id'], [], [], [],
             ['CONTENT_TYPE' => 'application/octet-stream', 'CONTENT_LENGTH' => ServerBandwidthService::CHUNK_BYTES + 1],
             str_repeat('x', ServerBandwidthService::CHUNK_BYTES + 1))->assertStatus(413);
+    }
+
+    public function test_upload_measurements_are_rejected_after_switching_to_public_download(): void
+    {
+        $server = $this->server();
+        $config = $this->getJson($this->url($server, 'config'))->assertOk()->json('data');
+        $this->call('POST', $this->url($server, 'upload') . '&probe_id=' . $config['probe_id'], [], [], [],
+            ['CONTENT_TYPE' => 'application/octet-stream'], str_repeat('x', 16384))->assertStatus(409);
+        $payload = ['probe_id' => $config['probe_id'], 'policy_revision' => $config['policy_revision'],
+            'bytes_received' => 16384, 'duration_ms' => 131.072, 'error' => null];
+        $this->postJson($this->url($server, 'report'), $payload)->assertStatus(409);
+        $payload['probe_method'] = 'panel_upload_v1';
+        $this->postJson($this->url($server, 'report'), $payload)->assertStatus(409);
+        $state = ServerBandwidthHealth::firstOrFail();
+        $this->assertSame(0, $state->low_count);
+        $this->assertFalse($state->suspended);
+    }
+
+    public function test_old_upload_suspension_is_invalidated_and_does_not_wait_for_three_recovery_samples(): void
+    {
+        $machine = ServerMachine::create(['name' => 'upgrade-machine', 'token' => 'upgrade-token', 'is_active' => true]);
+        $server = $this->server(['machine_id' => $machine->id, 'auto_online' => true]);
+        $manual = $this->server(['machine_id' => $machine->id, 'auto_online' => false, 'show' => false]);
+        ServerService::touchNode($server);
+        $server->update(['show' => false]);
+        $state = ServerBandwidthHealth::create([
+            'scope_key' => 'machine:' . $machine->id, 'suspended' => true, 'status' => 'suspended',
+            'low_count' => 3, 'mbps' => 1, 'checked_at' => time(), 'next_check_at' => time() + 600,
+            'policy_revision' => str_repeat('a', 40), 'probe_method' => null,
+        ]);
+        $this->assertFalse(app(ServerBandwidthService::class)->isSuspended($server));
+        $this->assertSame([$server->id, $manual->id], ServerService::getMachineNodes($machine)->pluck('id')->all());
+        $this->getJson($this->url($server, 'config'))->assertOk()->assertJsonPath('data.block_service', false)
+            ->assertJsonPath('data.suspended', false)->assertJsonPath('data.next_check_at', 0);
+        $this->assertTrue($server->fresh()->show);
+        $this->assertFalse($manual->fresh()->show);
+        $this->assertSame(ServerBandwidthService::PROBE_METHOD, $state->fresh()->probe_method);
+        $this->assertSame('unknown', $state->fresh()->status);
+        $this->assertSame(0, $state->fresh()->low_count);
+        $this->assertNull($state->fresh()->mbps);
+        $this->assertNotNull($state->fresh()->pending_probe_id);
+    }
+
+    public function test_new_download_suspension_remains_when_threshold_settings_change(): void
+    {
+        $server = $this->server();
+        for ($i = 0; $i < 3; $i++) {
+            $this->probe($server, 1);
+        }
+        admin_setting(['server_bandwidth_check_threshold_mbps' => 9]);
+        $this->getJson($this->url($server, 'config'))->assertOk()->assertJsonPath('data.block_service', true);
+        $this->assertSame(ServerBandwidthService::PROBE_METHOD, ServerBandwidthHealth::firstOrFail()->probe_method);
     }
 
     public function test_recovery_does_not_clear_manual_visibility_or_traffic_quota(): void
@@ -244,13 +319,9 @@ class BandwidthCheckTest extends TestCase
     private function submit(Server $server, array $config, float $mbps, ?string $error = null)
     {
         $bytes = 16384;
-        if ($error === null) {
-            $this->call('POST', $this->url($server, 'upload') . '&probe_id=' . $config['probe_id'], [], [], [],
-                ['CONTENT_TYPE' => 'application/octet-stream'], str_repeat('x', $bytes))->assertOk()
-                ->assertJsonPath('data.bytes_received', $bytes);
-        }
         return $this->postJson($this->url($server, 'report'), [
             'probe_id' => $config['probe_id'], 'policy_revision' => $config['policy_revision'],
+            'probe_method' => ServerBandwidthService::PROBE_METHOD,
             'bytes_received' => $error === null ? $bytes : 0,
             'duration_ms' => $mbps > 0 ? $bytes * 8 / $mbps / 1000 : 1, 'error' => $error,
         ])->assertOk();

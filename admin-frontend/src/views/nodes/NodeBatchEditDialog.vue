@@ -224,7 +224,7 @@ watch(
         <label class="batch-switch-card">
           <div>
             <strong>批量设置带宽检测</strong>
-            <span>节点向主控面板测速，低于全局阈值且连续确认后自动停用；同机共享测速，仅影响开启选项的节点。</span>
+            <span>节点下载 Cloudflare 公开测速数据（每次最多 10 MB）检测下行带宽，低于全局阈值连续 3 次后自动停用；同机共享测速，仅影响开启选项的节点。</span>
           </div>
           <ElSwitch v-model="form.updateBandwidthCheck" />
         </label>

@@ -50,6 +50,7 @@ class BandwidthController extends Controller
         $params = $request->validate([
             'probe_id' => 'required|uuid',
             'policy_revision' => 'required|string|size:40',
+            'probe_method' => 'sometimes|string|max:64',
             'bytes_received' => 'required|integer|min:0|max:' . ServerBandwidthService::MAX_BYTES,
             'duration_ms' => 'required|numeric|min:0|max:600000',
             'error' => 'nullable|string|max:512',

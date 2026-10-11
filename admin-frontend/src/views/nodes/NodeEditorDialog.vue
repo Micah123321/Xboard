@@ -396,7 +396,7 @@ watch(
                 <label class="switch-card">
                   <div>
                     <strong>带宽检测</strong>
-                    <span>节点向主控面板测速，低于全局阈值时判定带宽不足，连续确认后自动停用；关闭此选项解除该节点的带宽阻断。同机共享测速，仅影响开启选项的节点。</span>
+                    <span>节点下载 Cloudflare 公开测速数据（每次最多 10 MB）检测下行带宽，主控仅接收结果；低于全局阈值连续 3 次后自动停用，检测异常不计为低速。关闭此选项解除该节点的带宽阻断。同机共享测速，仅影响开启选项的节点。</span>
                   </div>
                   <ElSwitch v-model="form.bandwidthCheckEnabled" />
                 </label>
