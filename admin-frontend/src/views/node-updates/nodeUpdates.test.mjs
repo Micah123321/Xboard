@@ -14,6 +14,15 @@ let failNetwork = false
 globalThis.__nodeUpdateMock = async config => { captured = config; if (failNetwork) throw new Error('network'); return response }
 const api = await load('../../api/nodeUpdates.ts', text => text.replace("import { adminClient } from './client'", 'const adminClient = { request: config => globalThis.__nodeUpdateMock(config) }'))
 const artifacts = ['amd64', 'arm64'].flatMap(arch => ['mi-node', 'xbctl'].map(component => ({ arch, component, https_url: 'https://example.test/' + arch + '/' + component, sha256: 'a'.repeat(64), size_bytes: 123 })))
+test('discovery compares release numbers without inferring age from a missing capability', () => {
+ assert.equal(model.discoveryVersionLabel('v20261012.38249125239.1', 'v20261012.38249125239.1'), '版本号与最新版一致')
+ assert.equal(model.discoveryVersionLabel('v1.9.0', 'v1.10.0'), '版本号低于最新版')
+ assert.equal(model.discoveryVersionLabel('v2.0.0', 'v1.10.0'), '版本号高于当前发布源')
+ assert.equal(model.discoveryVersionLabel('v1.9007199254740992.0', 'v1.9007199254740993.0'), '版本号低于最新版')
+ assert.equal(model.discoveryVersionLabel('5a6626186448cd20472d2ba3c17c3c564533d5b4', 'v20261012.38249125239.1'), '提交 SHA 构建，尚未对应固定版本号')
+ assert.equal(model.discoveryVersionLabel('dev'), '版本格式暂未识别')
+ assert.equal(model.discoveryVersionLabel('v1.2.3'), '等待获取最新版进行比对')
+})
 test('fixed versions and both architecture pairs validate', () => {
  model.validateRelease('v1.2.3', artifacts)
  model.validateRelease('v1.2.3', artifacts.slice(0, 2))

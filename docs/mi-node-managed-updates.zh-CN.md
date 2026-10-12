@@ -24,13 +24,17 @@
 
 旧 SHA `ef587955b32257daa5f96f679ba33b2f94913e42` 的 mi-node 有业务配置同步，启动时没有自动接入更新执行器的逻辑，也没有面板下发任意安装命令的入口。仅更新面板不使旧进程执行新增逻辑。通过现有节点部署方式换成本次新版 mi-node/xbctl 后，新版启动自动完成接入，后续使用面板在线更新。
 
-首次上线本次功能需要同步发布后端、管理前端和节点二进制；节点无需额外的接入命令、票据或绑定变更。新流程不移动历史 dev 标签，应使用 CI 的最新固定发行部署。
+首次上线本次功能需要同步发布后端、管理前端和节点二进制；节点无需额外的接入命令、票据或绑定变更。固定发行不可变；dev 兼容下载入口跟随已经完整发布的 latest，保留历史 dev git 标签。新版 xbctl 和安装脚本的 --version dev 直接使用 latest 下载路径，旧 xbctl 的 dev 下载由 CI 同步兼容产物。
 
 ## 发布和迁移
 
 默认版本源为 https://github.com/Micah123321/mi-node/releases/latest/download/node-release.json。`MI_NODE_RELEASE_MANIFEST_URL` 可设置自建 HTTPS 清单，`MI_NODE_RELEASE_AUTO_SYNC=false` 可关闭定时同步。首次发布前缺少清单或源临时不可用时保留已登记的版本数据。
 
 本次自动接入新增迁移 `2026_10_12_000002_add_node_auto_enrollment_capability.php`，给发现记录增加默认 false 的 `auto_enroll_supported`。此前的 `2026_10_12_000001_add_node_update_latest_policies.php` 保留。部署后执行 `php artisan migrate --force`，重建后端、队列与调度进程，发布管理前端，沿用原 Compose 项目与数据卷。确保 schedule:work 或 cron 正常运行；`php artisan node-update:sync` 可验证清单同步。
+
+## 自动接入失败诊断
+
+节点已报告固定版本号但仍等待登记时，查看 mi-node-update-bootstrap.service 的状态与日志。已修复两项阻断：EnvironmentFile 的绝对路径带字面引号被 systemd 忽略；布局检查对 getty@.service 等无实例模板执行 systemctl show 导致退出。修复后跳过模板定义，继续检查实际实例与真实共享二进制，别名按规范服务 ID 比对。相关服务文件用真实 systemd-analyze verify 验证，布局遍历也在运行中的 systemd 上验证。
 
 ## 更新与恢复
 

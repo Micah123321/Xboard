@@ -155,7 +155,7 @@ Task={id,batch_id,installation_id,state,last_phase,code,message,attempt_id,lease
 Event={id,task_id,attempt_id,seq,source,payload,received_at}，payload脱敏。
 coverage从登记scope映射：有登记status=registered；无登记bootstrap_required（不能据此推断真实版本），reason=not_enrolled；有登记reason=null，具体unsupported看Installation。
 
-Vue按installation_id去重，不按node/service发任务。确认页明确同进程全部绑定（含其他面板）会重启。支持自动接入的节点显示等待自动登记并轮询完成后切换更新操作，无手工接入向导。旧构建显示本次新版部署启动后自动接入，不暗示后端可新增旧程序行为。展示版本/架构/SHA、全局与安装策略、批次失败/失联、事件和暂停/恢复/取消；区分rolled_back、rollback_failed、uncertain、Docker不支持、OpenRC手工。列表每5秒刷新，页面隐藏暂停。预览后创建再次服务端校验，不开放shell输入和在途强制取消。
+Vue按installation_id去重，不按node/service发任务。确认页明确同进程全部绑定（含其他面板）会重启。支持自动接入的节点显示等待自动登记并轮询完成后切换更新操作，无手工接入向导。版本与能力分开呈现：固定版本按整数三元组比对，SHA显示尚未映射固定版本；auto_enroll_supported缺省只表示未报告能力，不能据此认定旧构建。展示版本/架构/SHA、全局与安装策略、批次失败/失联、事件和暂停/恢复/取消；区分rolled_back、rollback_failed、uncertain、Docker不支持、OpenRC手工。列表每5秒刷新，页面隐藏暂停。预览后创建再次服务端校验，不开放shell输入和在途强制取消。
 
 ## 9. 精确实现补充
 
