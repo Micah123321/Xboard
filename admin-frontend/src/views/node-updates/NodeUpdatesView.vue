@@ -44,6 +44,13 @@ const ticketInstanceId = ref('')
 const coverageKind = ref<'machine_id' | 'node_id'>('node_id')
 const coverageId = ref('')
 const coverage = ref<Coverage>()
+const onlineOpen = ref(false)
+const onlineNode = ref<Discovery>()
+const onlineInstallation = ref<Installation>()
+const onlineState = ref<'loading' | 'ready' | 'bootstrap' | 'error'>('loading')
+const onlineError = ref('')
+let onlineController: AbortController | undefined
+let onlineGeneration = 0
 const plan = reactive<BatchInput>({ release_id: '', installation_ids: [], max_concurrency: 5, fail_pause_after: 1 })
 const preview = ref<Preview>()
 const frozenPlan = ref<BatchInput>()
@@ -101,6 +108,17 @@ async function refresh() {
    const result = await updates.installations(pages.installations, appliedFilters.value, signal)
    if (token !== generation) return
    installations.value = result
+   if (onlineOpen.value && onlineNode.value && onlineState.value !== 'loading') {
+    const nodeId = onlineNode.value.node_id
+    try {
+     const managed = await findNodeInstallation(nodeId, signal)
+     if (token !== generation || !onlineOpen.value || onlineNode.value?.node_id !== nodeId) return
+     onlineInstallation.value = managed; onlineState.value = managed ? 'ready' : 'bootstrap'; onlineError.value = ''
+    } catch {
+     if (token !== generation || signal.aborted) return
+     onlineError.value = '在线更新状态刷新失败，稍后重试；已有安装信息保留。'
+    }
+   }
   }
   if (tab.value === 'batches') {
    const result = await updates.batches(pages.batches, signal)
@@ -159,8 +177,38 @@ function saveSettings() {
  void mutate('settings', data, key => updates.saveSettings(data, key), () => { settingsDialog.value = false })
 }
 function checkReleases() { void mutate('syncReleases', {}, key => updates.syncReleases(key), result => { releaseSource.value = result }) }
+async function findNodeInstallation(nodeId: number, signal?: AbortSignal): Promise<Installation | undefined> {
+ for (let page = 1; ; page++) {
+  const result = await updates.installations(page, { node_id: nodeId }, signal)
+  const active = result.items.find(item => !item.revoked_at)
+  if (active) return active
+  if (result.page * result.page_size >= result.total || result.items.length === 0) return undefined
+ }
+}
+async function openOnlineUpdate(item: Discovery) {
+ onlineController?.abort()
+ const token = ++onlineGeneration
+ onlineController = new AbortController()
+ const signal = onlineController.signal
+ onlineNode.value = item; onlineInstallation.value = undefined; onlineError.value = ''; onlineState.value = 'loading'; onlineOpen.value = true
+ try {
+  const managed = await findNodeInstallation(item.node_id, signal)
+  if (token !== onlineGeneration || disposed || signal.aborted) return
+  onlineInstallation.value = managed; onlineState.value = managed ? 'ready' : 'bootstrap'
+ } catch (failure) {
+  if (token !== onlineGeneration || disposed || signal.aborted) return
+  onlineState.value = 'error'; onlineError.value = failure instanceof UpdateError ? reasonLabel(failure.code) : '查询在线更新状态失败，请重试'
+ }
+}
+function prepareNodeEnrollment() {
+ if (!onlineNode.value || busy.value) return
+ ticket.value = undefined; ticketInstanceId.value = ''
+ ticketKind.value = onlineNode.value.machine_id === null ? 'legacy' : 'machine'
+ ticketIds.value = String(onlineNode.value.machine_id ?? onlineNode.value.node_id)
+ ticketOpen.value = true
+}
 function installLatest(item: Installation) {
- return confirmAction('将安装 ' + item.update?.latest_version + '，并重启同一安装的全部绑定。', () => mutate('updateLatest:' + item.id, {}, key => updates.updateLatest(item.id, key), result => { tab.value = 'batches'; openBatch(result) }))
+ return confirmAction('将安装 ' + item.update?.latest_version + '，并重启同一安装的全部绑定。', () => mutate('updateLatest:' + item.id, {}, key => updates.updateLatest(item.id, key), result => { onlineOpen.value = false; tab.value = 'batches'; openBatch(result) }))
 }
 function followLatest(item: Installation, enabled: unknown) {
  const data: Policy = { enabled: enabled === true, follow_latest: enabled === true, target_release_id: null, revision: item.policy.revision }
@@ -240,9 +288,10 @@ function resolve() {
 function pageChange(kind: keyof typeof pages, page: number) { pages[kind] = page; void refresh() }
 function visibility() { stopRefresh(); if (!document.hidden) void refresh() }
 watch(tab, () => void refresh())
-watch(ticketOpen, value => { if (!value) { ticket.value = undefined; ticketIds.value = '' } })
+watch(ticketOpen, value => { if (!value) { ticket.value = undefined; ticketIds.value = ''; ticketInstanceId.value = '' } })
+watch(onlineOpen, value => { if (!value) { onlineController?.abort(); onlineGeneration++ } })
 onMounted(() => { document.addEventListener('visibilitychange', visibility); void refresh() })
-onBeforeUnmount(() => { disposed = true; stopRefresh(); ticket.value = undefined; document.removeEventListener('visibilitychange', visibility) })
+onBeforeUnmount(() => { disposed = true; stopRefresh(); onlineController?.abort(); onlineGeneration++; ticket.value = undefined; document.removeEventListener('visibilitychange', visibility) })
 </script>
 
 <template>
@@ -257,17 +306,18 @@ onBeforeUnmount(() => { disposed = true; stopRefresh(); ticket.value = undefined
     <div class="toolbar"><el-select v-model="filters.kind" aria-label="筛选范围"><el-option label="机器 ID" value="machine_id" /><el-option label="节点 ID" value="node_id" /></el-select><el-input v-model="filters.id" placeholder="可选 ID" /><el-select v-model="filters.capability_status" placeholder="能力状态" clearable><el-option label="支持" value="supported" /><el-option label="不支持" value="unsupported" /></el-select><el-button @click="applyFilters">查询</el-button><el-button @click="ticketOpen = true">生成登记票据</el-button></div>
     <el-card shadow="never">
      <h3>自动发现的节点</h3>
-     <p>升级后自动出现，无需登记票据；远程升级需单独启用托管</p>
-     <p>节点 / 机器 ID 筛选同时适用；能力状态仅筛选下方受管实例。已发现仅表示收到业务 HTTP 上报，不代表已获远程升级授权。</p>
+     <p>点击每行右侧的“在线更新”，查看该节点的更新状态、安装最新版或开启自动更新。</p>
+     <p>首次接入更新执行器只需进行一次。已发现表示收到版本上报；是否已接入在线更新会在操作窗口中实际查询。</p>
      <el-alert v-if="discoveryError" :title="discoveryError" type="info" :closable="false" show-icon />
      <el-table :data="discoveries.items" :row-key="(row: Discovery) => row.node_id + ':' + row.installation_id" empty-text="暂无自动发现的节点，等待升级后的业务上报">
       <el-table-column label="状态" width="90"><template #default><el-tag type="info">已发现</el-tag></template></el-table-column>
       <el-table-column label="节点 / ID" min-width="180"><template #default="{ row }">{{ row.node_name }}<p>节点 ID：{{ row.node_id }}</p></template></el-table-column>
       <el-table-column label="机器 ID" width="110"><template #default="{ row }">{{ row.machine_id ?? '—' }}</template></el-table-column>
       <el-table-column prop="installation_id" label="安装 ID" min-width="280" />
-      <el-table-column label="当前 / 最新版本" min-width="220"><template #default="{ row }"><code>{{ row.version }}</code><p>最新版：{{ releaseSource?.latest?.version ?? '等待构建' }}</p><small>远程安装需首次接入更新 agent</small></template></el-table-column>
+      <el-table-column label="当前 / 最新版本" min-width="220"><template #default="{ row }"><code>{{ row.version }}</code><p>最新版：{{ releaseSource?.latest?.version ?? '等待构建' }}</p><small>在线更新按钮可查看实际接入状态</small></template></el-table-column>
       <el-table-column label="系统 / 架构" min-width="150"><template #default="{ row }">{{ row.os }} / {{ row.arch }}</template></el-table-column>
       <el-table-column prop="last_seen_at" label="最近上报时间（UTC）" min-width="230" />
+      <el-table-column label="操作" width="140" fixed="right"><template #default="{ row }"><el-button type="primary" :disabled="busy" @click="openOnlineUpdate(row)">在线更新</el-button></template></el-table-column>
      </el-table>
      <UpdatePager :page="pages.discoveries" :total="discoveries.total" @change="pageChange('discoveries', $event)" />
     </el-card>
@@ -288,6 +338,36 @@ onBeforeUnmount(() => { disposed = true; stopRefresh(); ticket.value = undefined
    <el-tab-pane label="更新批次" name="batches"><el-table :data="batches.items"><el-table-column prop="id" label="批次 ID" min-width="260" /><el-table-column prop="release_id" label="发行 ID" min-width="260" /><el-table-column label="状态" min-width="200"><template #default="{ row }">{{ batchLabels[row.state as keyof typeof batchLabels] }}</template></el-table-column><el-table-column label="失败 / 不确定" width="150"><template #default="{ row }">{{ row.counts.failed + row.counts.rolled_back + row.counts.rollback_failed }} / {{ row.counts.uncertain }}</template></el-table-column><el-table-column label="操作" width="245"><template #default="{ row }"><el-button link @click="openBatch(row)">任务详情</el-button><el-button v-if="row.state === 'running'" link :disabled="busy" @click="batchAction(row, 'pause')">暂停</el-button><el-button v-if="row.state === 'paused'" link :disabled="busy || row.counts.uncertain > 0" @click="batchAction(row, 'resume')">恢复</el-button><el-button v-if="['running', 'paused'].includes(row.state)" link type="danger" :disabled="busy" @click="batchAction(row, 'cancel')">取消</el-button></template></el-table-column></el-table><UpdatePager :page="pages.batches" :total="batches.total" @change="pageChange('batches', $event)" /></el-tab-pane>
    <el-tab-pane label="托管覆盖查询" name="coverage"><el-form inline @submit.prevent="checkCoverage"><el-form-item label="查询范围"><el-select v-model="coverageKind"><el-option value="node_id" label="节点 ID" /><el-option value="machine_id" label="机器 ID" /></el-select></el-form-item><el-form-item label="ID"><el-input v-model="coverageId" /></el-form-item><el-button native-type="submit" :loading="busy">查询登记覆盖</el-button></el-form><template v-if="coverage"><el-alert :title="coverage.status === 'bootstrap_required' ? '尚未登记托管；远程升级需单独启用更新 agent' : '已有托管登记，请在受管安装实例中核对能力与策略'" :type="coverage.status === 'bootstrap_required' ? 'warning' : 'success'" :closable="false" /><p>自动发现与托管登记独立：升级后业务上报即可在安装实例页显示，无需登记票据；登记票据用于单独启用托管，自动发现不授予远程升级权限。</p><p v-for="id in coverage.installation_ids" :key="id">安装：{{ id }}</p></template></el-tab-pane>
   </el-tabs>
+  <el-dialog v-model="onlineOpen" :title="'在线更新 · ' + (onlineNode?.node_name ?? '')" width="min(680px, 95vw)" destroy-on-close>
+   <p v-if="onlineNode">节点 ID：{{ onlineNode.node_id }}；当前上报版本：{{ onlineNode.version }}</p>
+   <el-skeleton v-if="onlineState === 'loading'" :rows="3" animated />
+   <el-alert v-if="onlineError" :title="onlineError" type="error" :closable="false" />
+   <el-button v-if="onlineState === 'error' && onlineNode" @click="openOnlineUpdate(onlineNode)">重新查询</el-button>
+   <template v-if="onlineState === 'ready' && onlineInstallation">
+    <el-tag type="success">已接入在线更新</el-tag>
+    <el-descriptions :column="1" border><el-descriptions-item label="mi-node">{{ onlineInstallation.versions.mi_node ?? '未知' }}</el-descriptions-item><el-descriptions-item label="xbctl">{{ onlineInstallation.versions.xbctl ?? '未知' }}</el-descriptions-item><el-descriptions-item label="可用最新版">{{ onlineInstallation.update?.latest_version ?? '等待构建' }}</el-descriptions-item><el-descriptions-item label="更新状态">{{ reasonLabel(onlineInstallation.update?.status ?? 'no_release') }}</el-descriptions-item><el-descriptions-item label="更新执行器">{{ onlineInstallation.online ? '最近有上报' : '离线或尚未上报，任务等待执行器连接' }}</el-descriptions-item></el-descriptions>
+    <el-alert v-if="onlineInstallation.update?.status === 'version_unknown'" title="当前为旧构建或版本尚未识别，先在节点执行下方命令升级一次。" type="info" :closable="false" /><pre v-if="onlineInstallation.update?.status === 'version_unknown'">sudo xbctl upgrade --version latest</pre>
+    <p>同一安装的全部绑定都会随更新重启。</p>
+    <el-button type="primary" :loading="busy" :disabled="!onlineInstallation.update?.available" @click="installLatest(onlineInstallation)">安装最新版</el-button>
+    <el-divider />
+    <el-switch :model-value="onlineInstallation.policy.enabled && onlineInstallation.policy.follow_latest === true" :disabled="!selectable(onlineInstallation) || busy" active-text="自动跟随最新版" @change="followLatest(onlineInstallation, $event)" />
+    <p v-if="onlineInstallation.policy.enabled && onlineInstallation.policy.follow_latest && !settings?.enabled">已设置，等待开启全局自动更新。</p>
+   </template>
+   <template v-if="onlineState === 'bootstrap'">
+    <el-alert title="该节点尚未接入在线更新，首次需要在节点服务器启用更新执行器。" type="info" :closable="false" />
+    <ol class="setup-steps">
+     <li>在节点服务器升级到当前构建版本，并查看本机绑定实例 ID：<pre>sudo xbctl upgrade --version latest
+sudo xbctl list</pre></li>
+     <li>点击下方按钮，登记范围会自动带入当前节点。生成票据后填写上一步的本机绑定实例 ID，再下载接入文件。</li>
+     <li>将接入文件放到节点的 /root/mi-node-enrollment.json，执行一次：<pre>sudo chmod 600 /root/mi-node-enrollment.json
+sudo xbctl update-agent install --authority-panel-url https://PANEL_HOST --enrollment-file /root/mi-node-enrollment.json
+sudo xbctl update-agent status</pre><p>PANEL_HOST 使用节点当前配置中绑定的 HTTPS 面板地址。</p></li>
+    </ol>
+    <p>完成后回到此窗口点击重新检查，即可在线安装新版本或开启自动更新。原生 Linux amd64/arm64、systemd 安装支持此流程。</p>
+    <el-button type="primary" :disabled="busy" @click="prepareNodeEnrollment">为此节点生成接入票据</el-button>
+    <el-button v-if="onlineNode" @click="openOnlineUpdate(onlineNode)">已接入，重新检查</el-button>
+   </template>
+  </el-dialog>
   <el-dialog v-model="settingsDialog" title="全局更新设置" width="480px"><el-form v-if="settingsDraft" label-position="top" :disabled="busy"><el-form-item label="启用自动更新"><el-switch v-model="settingsDraft.enabled" /></el-form-item><el-form-item label="最大并发"><el-input-number v-model="settingsDraft.max_concurrency" :min="1" :max="100" :precision="0" /></el-form-item><el-button type="primary" :loading="busy" @click="saveSettings">保存修订 {{ settingsDraft.revision }}</el-button></el-form></el-dialog>
   <el-dialog v-model="policyOpen" title="安装更新策略" width="min(620px, 95vw)"><template v-if="policyDraft && policyInstallation"><p>{{ policyInstallation.id }}</p><el-alert title="同安装全部绑定（含其他面板）都会重启。固定目标适用于高级批次；跟随最新版会自动创建更新任务。" type="warning" :closable="false" /><el-form :disabled="busy" label-position="top"><el-form-item label="启用策略"><el-switch v-model="policyDraft.enabled" :disabled="!selectable(policyInstallation)" /></el-form-item><el-form-item label="自动跟随最新版"><el-switch v-model="policyDraft.follow_latest" /></el-form-item><el-form-item v-if="!policyDraft.follow_latest" label="固定目标发行"><el-select v-model="policyDraft.target_release_id" clearable @clear="policyDraft.target_release_id = null"><el-option v-for="release in activeReleases" :key="release.id" :label="release.version" :value="release.id" /></el-select><p>当前目标 ID：{{ policyDraft.target_release_id ?? '未设置' }}</p></el-form-item><UpdatePager :page="pages.releases" :total="releases.total" @change="pageChange('releases', $event)" /><el-button type="primary" :loading="busy" @click="savePolicy">保存修订 {{ policyDraft.revision }}</el-button></el-form></template></el-dialog>
   <el-dialog v-model="ticketOpen" title="一次性登记票据" width="min(650px, 95vw)" :close-on-click-modal="false" :before-close="done => { if (!busy) done() }"><el-alert title="有效期 900 秒。秘密仅在本弹窗展示，关闭即清除；下载后在节点以 0600 权限保存，勿放入命令行或日志。" type="warning" :closable="false" /><template v-if="ticket"><p>票据 ID：{{ ticket.enrollment_id }}</p><p>有效至：{{ ticket.expires_at }}</p><el-input :model-value="ticket.enrollment_secret" readonly type="textarea" aria-label="登记票据秘密" /><el-input v-model="ticketInstanceId" placeholder="本机绑定实例 ID（xbctl list 中的 ID）" aria-label="本机绑定实例 ID" maxlength="255" /><el-button :disabled="!ticketInstanceId.trim()" @click="downloadTicket">下载票据 JSON</el-button><p>本机绑定实例 ID 用于从既有配置读取认证信息，与面板机器 ID、节点 ID 不同。仅写入下载文件，不作为后台权限依据。</p></template><el-form v-else label-position="top" :disabled="busy"><el-form-item label="登记范围"><el-radio-group v-model="ticketKind"><el-radio value="machine">单机器</el-radio><el-radio value="legacy">旧节点集合</el-radio></el-radio-group></el-form-item><el-form-item :label="ticketKind === 'machine' ? '机器 ID' : '节点 ID（逗号分隔）'"><el-input v-model="ticketIds" /></el-form-item><el-button type="primary" :loading="busy" @click="generateTicket">生成并显示一次</el-button></el-form></el-dialog>
@@ -309,6 +389,8 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; word-break: break-al
 .el-pagination { margin: 16px 0; overflow-x: auto; }
 .el-card, .el-alert { margin-bottom: 12px; }
 .el-select { min-width: 180px; }
+.setup-steps { padding-left: 22px; line-height: 1.7; }
+.setup-steps li { margin-bottom: 16px; }
 .counts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 @media (max-width: 959px) {
  .node-updates { padding-left: 72px; }
