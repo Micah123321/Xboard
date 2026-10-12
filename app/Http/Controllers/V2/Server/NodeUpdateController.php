@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 class NodeUpdateController
 {
     public function __construct(private NodeUpdateService $service) {}
+    public function autoEnroll(Request $r): JsonResponse { return new JsonResponse(['data'=>$this->service->autoEnroll(json_decode($r->getContent(), true, 512, JSON_THROW_ON_ERROR))]); }
     public function enroll(Request $r): JsonResponse { return new JsonResponse(['data'=>$this->service->enroll(json_decode($r->getContent(), true, 512, JSON_THROW_ON_ERROR))]); }
     public function poll(Request $r): JsonResponse { return new JsonResponse(['data'=>$this->service->poll((string)$r->bearerToken(),json_decode($r->getContent(), true, 512, JSON_THROW_ON_ERROR))]); }
     public function claim(Request $r, string $task_id): JsonResponse { return new JsonResponse(['data'=>$this->service->claim((string)$r->bearerToken(),$task_id,json_decode($r->getContent(), true, 512, JSON_THROW_ON_ERROR))]); }

@@ -112,6 +112,46 @@ class NodeUpdateService
         return $i;
     }
 
+    public function autoEnroll(array $data): array
+    {
+        Protocol::fields($data, ['protocol_version','installation_id','agent_token','auth']);
+        if ($data['protocol_version'] !== 1 || !is_array($data['auth'])) Protocol::fail();
+        Protocol::uuid($data['installation_id']); Protocol::secret($data['agent_token']);
+        $auth = $data['auth'];
+        Protocol::fields($auth, ($auth['kind'] ?? null) === 'machine'
+            ? ['kind','machine_id','token'] : ['kind','node_ids','token']);
+        if (!in_array($auth['kind'], ['machine','legacy'], true) || !is_string($auth['token'])
+            || $auth['token'] === '' || strlen($auth['token']) > 4096) Protocol::fail();
+        $scope = $auth['kind'] === 'machine' ? ['kind'=>'machine','machine_id'=>$auth['machine_id']]
+            : ['kind'=>'legacy','node_ids'=>$auth['node_ids']];
+        return $this->atomic(function () use ($data, $auth, $scope) {
+            $this->validateScope($scope);
+            if ($scope['kind'] === 'legacy') sort($scope['node_ids'], SORT_NUMERIC);
+            $credential = $this->credential($scope);
+            if ($credential === null || !hash_equals($credential, $auth['token'])) Protocol::fail('invalid_credentials',401);
+            $existing = $this->q('installations')->find($data['installation_id']);
+            if ($existing) {
+                // Replays retain the original identity, policy and revocation decision.
+                if (!$this->validInstallation($existing)) Protocol::fail('invalid_credentials',401);
+                $existingScope = $existing->scope;
+                if ($existingScope['kind'] === 'legacy') sort($existingScope['node_ids'], SORT_NUMERIC);
+                if (!hash_equals($existing->token_hash, hash('sha256', $data['agent_token']))
+                    || Protocol::hash($existingScope) !== Protocol::hash($scope)) Protocol::fail('scope_conflict',409);
+                return ['installation_id'=>$existing->id,'scope'=>$existing->scope,'policy_revision'=>$existing->policy_revision];
+            }
+            if ($this->q('installations')->where('token_hash', hash('sha256', $data['agent_token']))->exists()) Protocol::fail('scope_conflict',409);
+            $this->overlap($scope);
+            $installation = $this->q('installations')->create([
+                'id'=>$data['installation_id'],'scope'=>$scope,'token_hash'=>hash('sha256',$data['agent_token']),
+                'credential_hash'=>hash('sha256',$credential),'policy_enabled'=>false,'follow_latest'=>false,'policy_revision'=>1,
+                'runtime'=>['os'=>null,'arch'=>null,'init'=>null,'container'=>null],
+                'versions'=>['mi_node'=>null,'xbctl'=>null],'installed_sha256'=>['mi_node'=>null,'xbctl'=>null],
+                'capability'=>['status'=>'unsupported','reason'=>'not_reported'],
+            ]);
+            return ['installation_id'=>$installation->id,'scope'=>$installation->scope,'policy_revision'=>1];
+        });
+    }
+
     public function enroll(array $d): array
     {
         Protocol::fields($d,['protocol_version','enrollment_id','enrollment_secret','installation_id','agent_token','auth']);

@@ -17,7 +17,7 @@ class NodeUpdateAgent
             if (!$request->isSecure() || !$request->isJson() || $request->query->count() || strlen($request->getContent())>131072) Protocol::fail();
             $body=json_decode($request->getContent());
             if (!is_object($body) || json_last_error()!==JSON_ERROR_NONE) Protocol::fail();
-            $enroll=$request->route()?->getActionMethod()==='enroll';
+            $enroll=in_array($request->route()?->getActionMethod(), ['enroll','autoEnroll'], true);
             $key='node-update:'.hash('sha256',$enroll ? (string)$request->ip() : (string)$request->bearerToken());
             if (RateLimiter::tooManyAttempts($key,$enroll?20:240)) Protocol::fail('rate_limited',429);
             RateLimiter::hit($key,60);

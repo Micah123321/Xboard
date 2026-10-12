@@ -274,6 +274,132 @@ class NodeUpdateServiceTest extends TestCase
         $this->error('no_release', fn() => $this->admin('installations/'.$installation['id'].'/update-latest'));
     }
 
+    private function automaticRequest(int $machine = 1): array
+    {
+        return ['protocol_version'=>1,'installation_id'=>(string)Str::uuid(),'agent_token'=>Protocol::token(),
+            'auth'=>['kind'=>'machine','machine_id'=>$machine,'token'=>'machine-'.$machine]];
+    }
+
+    public function testAutomaticEnrollmentUsesExistingBindingWithoutTicketAndReplays(): void
+    {
+        $request = $this->automaticRequest();
+        $result = $this->service->autoEnroll($request);
+        self::assertSame($request['installation_id'], $result['installation_id']);
+        self::assertSame(['kind'=>'machine','machine_id'=>1], $result['scope']);
+        self::assertSame($result, $this->service->autoEnroll($request));
+        self::assertSame(1, $this->service->q('installations')->count());
+        self::assertSame(0, $this->service->q('enrollments')->count());
+        $installation = $this->service->authenticate($request['agent_token'], $request['installation_id']);
+        self::assertFalse($installation->policy_enabled); self::assertFalse($installation->follow_latest);
+        $this->release();
+        $policy = $this->admin('installations/'.$installation->id.'/policy', ['enabled'=>true,'follow_latest'=>true,'target_release_id'=>null,'revision'=>1], 'PATCH');
+        self::assertSame($policy['revision'], $this->service->autoEnroll($request)['policy_revision']);
+        self::assertTrue($installation->fresh()->policy_enabled);
+        $stored = json_encode($this->service->q('installations')->get()->toArray());
+        self::assertStringNotContainsString($request['agent_token'], $stored);
+        self::assertStringNotContainsString('machine-1', $stored);
+    }
+
+    public function testAutomaticLegacyEnrollmentHasExactCanonicalScopeAndNoIdentityReplacement(): void
+    {
+        DB::table('v2_server')->whereIn('id',[1,2])->update(['machine_id'=>null]);
+        $request = $this->automaticRequest();
+        $request['auth'] = ['kind'=>'legacy','node_ids'=>[2,1],'token'=>'legacy-fixture-credential'];
+        $first = $this->service->autoEnroll($request);
+        self::assertSame(['kind'=>'legacy','node_ids'=>[1,2]], $first['scope']);
+        $request['auth']['node_ids'] = [1,2];
+        self::assertSame($first, $this->service->autoEnroll($request));
+        $changed = $request; $changed['agent_token']=Protocol::token();
+        $this->error('scope_conflict', fn()=>$this->service->autoEnroll($changed));
+        $changed = $request; $changed['auth']['node_ids']=[1];
+        $this->error('scope_conflict', fn()=>$this->service->autoEnroll($changed));
+        $changed = $request; $changed['installation_id']=(string)Str::uuid(); $changed['agent_token']=Protocol::token();
+        $this->error('scope_conflict', fn()=>$this->service->autoEnroll($changed));
+    }
+
+    public function testAutomaticReplayPreservesExistingLegacyScopeOrder(): void
+    {
+        DB::table('v2_server')->whereIn('id',[1,2])->update(['machine_id'=>null]);
+        $installation=$this->enrollment(1,['kind'=>'legacy','node_ids'=>[2,1]]);
+        $result=$this->service->autoEnroll(['protocol_version'=>1,'installation_id'=>$installation['id'],'agent_token'=>$installation['token'],
+            'auth'=>['kind'=>'legacy','node_ids'=>[1,2],'token'=>'legacy-fixture-credential']]);
+        self::assertSame(['kind'=>'legacy','node_ids'=>[2,1]],$result['scope']);
+        self::assertSame($result['scope'],$this->service->find('installations',$installation['id'])->scope);
+        self::assertSame(1,$this->service->q('installations')->count());
+    }
+
+    public function testAutomaticEnrollmentRejectsWrongDisabledAndRevokedCredentials(): void
+    {
+        $request = $this->automaticRequest();
+        $bad=$request; $bad['auth']['token']='machine-2';
+        $this->error('invalid_credentials', fn()=>$this->service->autoEnroll($bad),401);
+        self::assertSame(0, $this->service->q('installations')->count());
+        $this->service->autoEnroll($request);
+        $this->admin('installations/'.$request['installation_id'].'/revoke');
+        $this->error('invalid_credentials', fn()=>$this->service->autoEnroll($request),401);
+        self::assertNotNull($this->service->find('installations',$request['installation_id'])->revoked_at);
+        $disabled=$this->automaticRequest(2); ServerMachine::find(2)->update(['is_active'=>false]);
+        $this->error('scope_mismatch', fn()=>$this->service->autoEnroll($disabled),403);
+        $changed=$this->automaticRequest(3); $this->service->autoEnroll($changed);
+        ServerMachine::find(3)->update(['token'=>'replacement']); $changed['auth']['token']='replacement';
+        $this->error('invalid_credentials', fn()=>$this->service->autoEnroll($changed),401);
+    }
+
+    public function testAutomaticallyRegisteredNodeCanCompleteAnOnlineUpdateWithoutTicket(): void
+    {
+        $request=$this->automaticRequest(); $result=$this->service->autoEnroll($request);
+        $installation=['id'=>$result['installation_id'],'token'=>$request['agent_token']];
+        $release=$this->release();
+        $this->service->poll($installation['token'],$this->report($installation));
+        $listed=$this->admin('installations',['node_id'=>'1'],'GET');
+        self::assertSame($installation['id'],$listed['items'][0]['id']);
+        self::assertTrue($listed['items'][0]['update']['available']);
+        $batch=$this->admin('installations/'.$installation['id'].'/update-latest');
+        $candidate=$this->service->poll($installation['token'],$this->report($installation))['candidate'];
+        self::assertTrue($candidate['manual']); self::assertSame($release['id'],$candidate['release_id']);
+        $claim=$this->service->claim($installation['token'],$candidate['task_id'],['installation_id'=>$installation['id'],
+            'claim_id'=>(string)Str::uuid(),'policy_revision'=>$candidate['policy_revision']]);
+        $this->installing($installation,$candidate['task_id'],$claim);
+        $this->send($installation,$candidate['task_id'],$claim,4,'verifying');
+        self::assertSame('succeeded',$this->send($installation,$candidate['task_id'],$claim,5,'succeeded')['state']);
+        self::assertSame('completed',$this->service->find('batches',$batch['id'])->state);
+        self::assertSame(0,$this->service->q('enrollments')->count());
+        self::assertFalse($this->admin('settings',[],'GET')['enabled']);
+    }
+
+    public function testAutomaticEnrollmentValidatesProtocolScopeAndTokens(): void
+    {
+        foreach ([['protocol_version'=>2],['installation_id'=>'bad'],['agent_token'=>'bad'],['extra'=>'not-allowed']] as $change) {
+            $request=array_replace($this->automaticRequest(),$change);
+            $this->error('validation_failed', fn()=>$this->service->autoEnroll($request),422);
+        }
+        foreach ([[],[1,1],[1,2],['1']] as $nodes) {
+            $request=$this->automaticRequest();
+            $request['auth']=['kind'=>'legacy','node_ids'=>$nodes,'token'=>'legacy-fixture-credential'];
+            $this->error('validation_failed', fn()=>$this->service->autoEnroll($request),422);
+        }
+        self::assertSame(0, $this->service->q('installations')->count());
+    }
+
+    public function testAutomaticEnrollmentHttpRequiresHttpsAndProtectsNormalAgentRoutes(): void
+    {
+        \Illuminate\Support\Facades\RateLimiter::swap(new \Illuminate\Cache\RateLimiter(Cache::getFacadeRoot()));
+        $data=$this->automaticRequest();
+        $request=\Illuminate\Http\Request::create('https://panel.test/api/v2/server/update/auto-enroll','POST',[],[],[],['CONTENT_TYPE'=>'application/json'],json_encode($data));
+        $request->setRouteResolver(fn()=>new \Illuminate\Routing\Route('POST','server/update/auto-enroll',[\App\Http\Controllers\V2\Server\NodeUpdateController::class,'autoEnroll']));
+        $middleware=new \App\Http\Middleware\NodeUpdateAgent();
+        $controller=new \App\Http\Controllers\V2\Server\NodeUpdateController($this->service);
+        $response=$middleware->handle($request,fn($request)=>$controller->autoEnroll($request));
+        self::assertSame(200,$response->getStatusCode());
+        self::assertSame($data['installation_id'],$response->getData(true)['data']['installation_id']);
+        $http=\Illuminate\Http\Request::create('http://panel.test/api/v2/server/update/auto-enroll','POST',[],[],[],['CONTENT_TYPE'=>'application/json'],json_encode($data));
+        $http->setRouteResolver($request->getRouteResolver());
+        self::assertSame(422,$middleware->handle($http,fn()=>throw new \RuntimeException('insecure request passed'))->getStatusCode());
+        $poll=\Illuminate\Http\Request::create('https://panel.test/api/v2/server/update/poll','POST',[],[],[],['CONTENT_TYPE'=>'application/json'],json_encode(['installation_id'=>$data['installation_id']]));
+        $poll->setRouteResolver(fn()=>new \Illuminate\Routing\Route('POST','server/update/poll',[\App\Http\Controllers\V2\Server\NodeUpdateController::class,'poll']));
+        self::assertSame(401,$middleware->handle($poll,fn()=>throw new \RuntimeException('missing token passed'))->getStatusCode());
+    }
+
     public function testDefaultsEnrollmentReplayAndCredentialSecrecy(): void
     {
         self::assertSame(['enabled'=>false,'max_concurrency'=>5,'revision'=>1],$this->admin('settings',[],'GET'));

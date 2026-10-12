@@ -200,13 +200,6 @@ async function openOnlineUpdate(item: Discovery) {
   onlineState.value = 'error'; onlineError.value = failure instanceof UpdateError ? reasonLabel(failure.code) : '查询在线更新状态失败，请重试'
  }
 }
-function prepareNodeEnrollment() {
- if (!onlineNode.value || busy.value) return
- ticket.value = undefined; ticketInstanceId.value = ''
- ticketKind.value = onlineNode.value.machine_id === null ? 'legacy' : 'machine'
- ticketIds.value = String(onlineNode.value.machine_id ?? onlineNode.value.node_id)
- ticketOpen.value = true
-}
 function installLatest(item: Installation) {
  return confirmAction('将安装 ' + item.update?.latest_version + '，并重启同一安装的全部绑定。', () => mutate('updateLatest:' + item.id, {}, key => updates.updateLatest(item.id, key), result => { onlineOpen.value = false; tab.value = 'batches'; openBatch(result) }))
 }
@@ -303,18 +296,18 @@ onBeforeUnmount(() => { disposed = true; stopRefresh(); onlineController?.abort(
   <el-card shadow="never"><div class="toolbar"><span>全局自动更新：<el-tag :type="settings?.enabled ? 'success' : 'info'">{{ settings ? (settings.enabled ? '已启用' : '已关闭') : '尚未读取' }}</el-tag> 并发上限 {{ settings?.max_concurrency ?? '—' }} / 修订 {{ settings?.revision ?? '—' }}</span><el-button :disabled="!settings || busy" @click="settingsDraft = settings && { ...settings }; settingsDialog = true">修改全局设置</el-button></div><p>开启全局和安装的自动更新后，节点会自动跟随最新版。单次安装最新版可直接操作；关闭自动更新后已开始的安装继续完成。</p></el-card>
   <el-tabs v-model="tab">
    <el-tab-pane label="节点与更新" name="installations">
-    <div class="toolbar"><el-select v-model="filters.kind" aria-label="筛选范围"><el-option label="机器 ID" value="machine_id" /><el-option label="节点 ID" value="node_id" /></el-select><el-input v-model="filters.id" placeholder="可选 ID" /><el-select v-model="filters.capability_status" placeholder="能力状态" clearable><el-option label="支持" value="supported" /><el-option label="不支持" value="unsupported" /></el-select><el-button @click="applyFilters">查询</el-button><el-button @click="ticketOpen = true">生成登记票据</el-button></div>
+    <div class="toolbar"><el-select v-model="filters.kind" aria-label="筛选范围"><el-option label="机器 ID" value="machine_id" /><el-option label="节点 ID" value="node_id" /></el-select><el-input v-model="filters.id" placeholder="可选 ID" /><el-select v-model="filters.capability_status" placeholder="能力状态" clearable><el-option label="支持" value="supported" /><el-option label="不支持" value="unsupported" /></el-select><el-button @click="applyFilters">查询</el-button></div>
     <el-card shadow="never">
      <h3>自动发现的节点</h3>
      <p>点击每行右侧的“在线更新”，查看该节点的更新状态、安装最新版或开启自动更新。</p>
-     <p>首次接入更新执行器只需进行一次。已发现表示收到版本上报；是否已接入在线更新会在操作窗口中实际查询。</p>
+     <p>新版节点会沿用现有面板绑定自动接入，无需登记票据；状态将随更新执行器上报自动刷新。</p>
      <el-alert v-if="discoveryError" :title="discoveryError" type="info" :closable="false" show-icon />
      <el-table :data="discoveries.items" :row-key="(row: Discovery) => row.node_id + ':' + row.installation_id" empty-text="暂无自动发现的节点，等待升级后的业务上报">
       <el-table-column label="状态" width="90"><template #default><el-tag type="info">已发现</el-tag></template></el-table-column>
       <el-table-column label="节点 / ID" min-width="180"><template #default="{ row }">{{ row.node_name }}<p>节点 ID：{{ row.node_id }}</p></template></el-table-column>
       <el-table-column label="机器 ID" width="110"><template #default="{ row }">{{ row.machine_id ?? '—' }}</template></el-table-column>
       <el-table-column prop="installation_id" label="安装 ID" min-width="280" />
-      <el-table-column label="当前 / 最新版本" min-width="220"><template #default="{ row }"><code>{{ row.version }}</code><p>最新版：{{ releaseSource?.latest?.version ?? '等待构建' }}</p><small>在线更新按钮可查看实际接入状态</small></template></el-table-column>
+      <el-table-column label="当前 / 最新版本" min-width="220"><template #default="{ row }"><code>{{ row.version }}</code><p>最新版：{{ releaseSource?.latest?.version ?? '等待构建' }}</p><small>{{ row.auto_enroll_supported ? '支持自动接入，点击查看状态' : '旧构建：新版部署启动后自动接入' }}</small></template></el-table-column>
       <el-table-column label="系统 / 架构" min-width="150"><template #default="{ row }">{{ row.os }} / {{ row.arch }}</template></el-table-column>
       <el-table-column prop="last_seen_at" label="最近上报时间（UTC）" min-width="230" />
       <el-table-column label="操作" width="140" fixed="right"><template #default="{ row }"><el-button type="primary" :disabled="busy" @click="openOnlineUpdate(row)">在线更新</el-button></template></el-table-column>
@@ -332,7 +325,7 @@ onBeforeUnmount(() => { disposed = true; stopRefresh(); onlineController?.abort(
      <el-table-column label="操作" width="210"><template #default="{ row }"><el-button link type="primary" :disabled="!row.update?.available || busy" @click="installLatest(row)">安装最新版</el-button><el-button link type="primary" :disabled="!!row.revoked_at || busy" @click="openPolicy(row)">配置策略</el-button><el-button link type="danger" :disabled="!!row.revoked_at || busy" @click="confirmAction('撤销登记将使该 agent 凭据失效；本地恢复继续，未补报事务可能需要人工核验。', () => mutate('revokeInstallation:' + row.id, {}, key => updates.revokeInstallation(row.id, key)))">撤销登记</el-button></template></el-table-column>
     </el-table>
     <UpdatePager :page="pages.installations" :total="installations.total" @change="pageChange('installations', $event)" />
-    <details><summary>高级设置：指定版本与批量更新</summary><el-card shadow="never"><h3>创建更新批次</h3><p>已跨页选择 {{ selected.length }} 个安装（按安装 ID 去重）。实际并发取全局与批次设置的较小值。</p><el-button :disabled="busy" @click="selected = []">清空选择</el-button><el-form label-position="top"><el-form-item label="固定目标发行（当前发行页）"><el-select v-model="plan.release_id" placeholder="选择发行"><el-option v-for="release in activeReleases" :key="release.id" :label="release.version" :value="release.id" /></el-select></el-form-item><UpdatePager :page="pages.releases" :total="releases.total" @change="pageChange('releases', $event)" /><el-form-item label="批次并发"><el-input-number v-model="plan.max_concurrency" :min="1" :max="100" :precision="0" /></el-form-item><el-form-item label="新增失败达到此数量暂停"><el-input-number v-model="plan.fail_pause_after" :min="1" :max="1000" :precision="0" /></el-form-item><el-button type="primary" :loading="busy" :disabled="!settings?.enabled" @click="previewBatch">预览选中实例</el-button></el-form></el-card></details>
+    <details><summary>高级设置：指定版本与批量更新</summary><el-button :disabled="busy" @click="ticketOpen = true">高级票据登记</el-button><el-card shadow="never"><h3>创建更新批次</h3><p>已跨页选择 {{ selected.length }} 个安装（按安装 ID 去重）。实际并发取全局与批次设置的较小值。</p><el-button :disabled="busy" @click="selected = []">清空选择</el-button><el-form label-position="top"><el-form-item label="固定目标发行（当前发行页）"><el-select v-model="plan.release_id" placeholder="选择发行"><el-option v-for="release in activeReleases" :key="release.id" :label="release.version" :value="release.id" /></el-select></el-form-item><UpdatePager :page="pages.releases" :total="releases.total" @change="pageChange('releases', $event)" /><el-form-item label="批次并发"><el-input-number v-model="plan.max_concurrency" :min="1" :max="100" :precision="0" /></el-form-item><el-form-item label="新增失败达到此数量暂停"><el-input-number v-model="plan.fail_pause_after" :min="1" :max="1000" :precision="0" /></el-form-item><el-button type="primary" :loading="busy" :disabled="!settings?.enabled" @click="previewBatch">预览选中实例</el-button></el-form></el-card></details>
    </el-tab-pane>
    <el-tab-pane label="自动构建版本" name="releases"><p>成功构建的版本自动同步到此处，无需手工填写制品信息。</p><el-button type="primary" :disabled="busy" @click="checkReleases">检查新版本</el-button><el-table :data="releases.items"><el-table-column type="expand"><template #default="{ row }"><el-table :data="row.artifacts"><el-table-column prop="arch" label="架构" /><el-table-column prop="component" label="组件" /><el-table-column prop="https_url" label="HTTPS URL" min-width="240" /><el-table-column prop="sha256" label="SHA256" min-width="280" /><el-table-column prop="size_bytes" label="字节数" /></el-table></template></el-table-column><el-table-column prop="version" label="版本" /><el-table-column prop="id" label="发行 ID" min-width="260" /><el-table-column prop="min_agent_protocol" label="最低协议" /><el-table-column prop="published_at" label="发布时间" min-width="180" /><el-table-column label="状态"><template #default="{ row }">{{ row.revoked_at ? '已撤销' : '已发布' }}</template></el-table-column><el-table-column label="操作"><template #default="{ row }"><el-button link type="danger" :disabled="!!row.revoked_at || busy" @click="confirmAction('撤销发行将阻止尚未开始的安装，已安装中的事务继续。', () => mutate('revokeRelease:' + row.id, {}, key => updates.revokeRelease(row.id, key)))">撤销</el-button></template></el-table-column></el-table><UpdatePager :page="pages.releases" :total="releases.total" @change="pageChange('releases', $event)" /></el-tab-pane>
    <el-tab-pane label="更新批次" name="batches"><el-table :data="batches.items"><el-table-column prop="id" label="批次 ID" min-width="260" /><el-table-column prop="release_id" label="发行 ID" min-width="260" /><el-table-column label="状态" min-width="200"><template #default="{ row }">{{ batchLabels[row.state as keyof typeof batchLabels] }}</template></el-table-column><el-table-column label="失败 / 不确定" width="150"><template #default="{ row }">{{ row.counts.failed + row.counts.rolled_back + row.counts.rollback_failed }} / {{ row.counts.uncertain }}</template></el-table-column><el-table-column label="操作" width="245"><template #default="{ row }"><el-button link @click="openBatch(row)">任务详情</el-button><el-button v-if="row.state === 'running'" link :disabled="busy" @click="batchAction(row, 'pause')">暂停</el-button><el-button v-if="row.state === 'paused'" link :disabled="busy || row.counts.uncertain > 0" @click="batchAction(row, 'resume')">恢复</el-button><el-button v-if="['running', 'paused'].includes(row.state)" link type="danger" :disabled="busy" @click="batchAction(row, 'cancel')">取消</el-button></template></el-table-column></el-table><UpdatePager :page="pages.batches" :total="batches.total" @change="pageChange('batches', $event)" /></el-tab-pane>
@@ -346,7 +339,7 @@ onBeforeUnmount(() => { disposed = true; stopRefresh(); onlineController?.abort(
    <template v-if="onlineState === 'ready' && onlineInstallation">
     <el-tag type="success">已接入在线更新</el-tag>
     <el-descriptions :column="1" border><el-descriptions-item label="mi-node">{{ onlineInstallation.versions.mi_node ?? '未知' }}</el-descriptions-item><el-descriptions-item label="xbctl">{{ onlineInstallation.versions.xbctl ?? '未知' }}</el-descriptions-item><el-descriptions-item label="可用最新版">{{ onlineInstallation.update?.latest_version ?? '等待构建' }}</el-descriptions-item><el-descriptions-item label="更新状态">{{ reasonLabel(onlineInstallation.update?.status ?? 'no_release') }}</el-descriptions-item><el-descriptions-item label="更新执行器">{{ onlineInstallation.online ? '最近有上报' : '离线或尚未上报，任务等待执行器连接' }}</el-descriptions-item></el-descriptions>
-    <el-alert v-if="onlineInstallation.update?.status === 'version_unknown'" title="当前为旧构建或版本尚未识别，先在节点执行下方命令升级一次。" type="info" :closable="false" /><pre v-if="onlineInstallation.update?.status === 'version_unknown'">sudo xbctl upgrade --version latest</pre>
+    <el-alert v-if="onlineInstallation.update?.status === 'version_unknown'" title="当前版本尚未识别，等待执行器上报。本次新版部署启动后会自动接入并报告版本。" type="info" :closable="false" />
     <p>同一安装的全部绑定都会随更新重启。</p>
     <el-button type="primary" :loading="busy" :disabled="!onlineInstallation.update?.available" @click="installLatest(onlineInstallation)">安装最新版</el-button>
     <el-divider />
@@ -354,18 +347,13 @@ onBeforeUnmount(() => { disposed = true; stopRefresh(); onlineController?.abort(
     <p v-if="onlineInstallation.policy.enabled && onlineInstallation.policy.follow_latest && !settings?.enabled">已设置，等待开启全局自动更新。</p>
    </template>
    <template v-if="onlineState === 'bootstrap'">
-    <el-alert title="该节点尚未接入在线更新，首次需要在节点服务器启用更新执行器。" type="info" :closable="false" />
-    <ol class="setup-steps">
-     <li>在节点服务器升级到当前构建版本，并查看本机绑定实例 ID：<pre>sudo xbctl upgrade --version latest
-sudo xbctl list</pre></li>
-     <li>点击下方按钮，登记范围会自动带入当前节点。生成票据后填写上一步的本机绑定实例 ID，再下载接入文件。</li>
-     <li>将接入文件放到节点的 /root/mi-node-enrollment.json，执行一次：<pre>sudo chmod 600 /root/mi-node-enrollment.json
-sudo xbctl update-agent install --authority-panel-url https://PANEL_HOST --enrollment-file /root/mi-node-enrollment.json
-sudo xbctl update-agent status</pre><p>PANEL_HOST 使用节点当前配置中绑定的 HTTPS 面板地址。</p></li>
-    </ol>
-    <p>完成后回到此窗口点击重新检查，即可在线安装新版本或开启自动更新。原生 Linux amd64/arm64、systemd 安装支持此流程。</p>
-    <el-button type="primary" :disabled="busy" @click="prepareNodeEnrollment">为此节点生成接入票据</el-button>
-    <el-button v-if="onlineNode" @click="openOnlineUpdate(onlineNode)">已接入，重新检查</el-button>
+    <el-alert :title="onlineNode?.auto_enroll_supported ? '等待节点自动接入在线更新' : '当前节点运行旧构建，本次新版部署启动后会自动接入'" type="info" :closable="false" />
+    <p>新版节点会读取已有面板绑定，在独立服务中自动登记并开始上报。无需生成票据、下载接入文件或填写本机实例 ID。</p>
+    <el-steps :active="onlineNode?.auto_enroll_supported ? 1 : 0" finish-status="success" align-center><el-step title="新版节点启动" /><el-step title="自动登记并上报" /><el-step title="在线安装与自动更新" /></el-steps>
+    <p v-if="!onlineNode?.auto_enroll_supported">该构建尚未包含自动接入启动逻辑。按现有部署流程发布本次节点新版后，接入会自动完成；此处会自动刷新状态。</p>
+    <p v-else>后台每 5 秒检查一次接入状态。面板暂时离线时节点会自动重试，业务继续运行。</p>
+    <p>自动登记与自动安装是独立设置。接入完成后可以直接安装最新版，也可以开启自动跟随。</p>
+    <el-button v-if="onlineNode" :disabled="busy" @click="openOnlineUpdate(onlineNode)">重新检查</el-button>
    </template>
   </el-dialog>
   <el-dialog v-model="settingsDialog" title="全局更新设置" width="480px"><el-form v-if="settingsDraft" label-position="top" :disabled="busy"><el-form-item label="启用自动更新"><el-switch v-model="settingsDraft.enabled" /></el-form-item><el-form-item label="最大并发"><el-input-number v-model="settingsDraft.max_concurrency" :min="1" :max="100" :precision="0" /></el-form-item><el-button type="primary" :loading="busy" @click="saveSettings">保存修订 {{ settingsDraft.revision }}</el-button></el-form></el-dialog>
@@ -389,8 +377,6 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; word-break: break-al
 .el-pagination { margin: 16px 0; overflow-x: auto; }
 .el-card, .el-alert { margin-bottom: 12px; }
 .el-select { min-width: 180px; }
-.setup-steps { padding-left: 22px; line-height: 1.7; }
-.setup-steps li { margin-bottom: 16px; }
 .counts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 @media (max-width: 959px) {
  .node-updates { padding-left: 72px; }

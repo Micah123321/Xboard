@@ -1,6 +1,6 @@
 export type Scope = { kind: 'machine'; machine_id: number } | { kind: 'legacy'; node_ids: number[] }
 export interface Page<T> { items: T[]; page: number; page_size: number; total: number }
-export interface Discovery { node_id: number; node_name: string; machine_id: number | null; installation_id: string; version: string; os: string; arch: string; last_seen_at: string }
+export interface Discovery { auto_enroll_supported?: boolean; node_id: number; node_name: string; machine_id: number | null; installation_id: string; version: string; os: string; arch: string; last_seen_at: string }
 export interface DiscoveryFilters { node_id?: number; machine_id?: number; page_size?: number }
 export interface Settings { enabled: boolean; max_concurrency: number; revision: number }
 export interface Policy { enabled: boolean; target_release_id: string | null; revision: number; follow_latest?: boolean }

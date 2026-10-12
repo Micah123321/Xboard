@@ -1,6 +1,6 @@
 # mi-node 自动更新统一实现契约 v1
 
-状态：Go / PHP / Vue 已按本文实现并完成本地隔离回归，尚未部署；真实生产 systemd 整机更新与 MySQL/PostgreSQL 并发尚待灰度验收。
+状态：本文包含自动版本同步、单次安装与自动接入扩展；本轮改动在本地验证，外部发布与真实 systemd 整机替换尚未执行。
 
 ## 1. 已核实基础
 
@@ -10,9 +10,9 @@ Go cmd/xbctl/main.go:398–531 已实现双二进制下载、备份、替换、�
 
 ## 自动发现（独立于托管权限）
 
-新版 mi-node 启动后，通过既有 `/api/v2/server/report` 认证通道附带 `update_inventory={installation_id,version,os,arch}`，兼容原 HTTP/HTTPS 面板绑定。版本允许构建提交 SHA。服务端只依据认证所得 node_info 关联节点，机器归属来自现有节点记录；元数据不得扩大权限。独立发现表按 node_id 更新最后上报信息，管理接口 `/server/update/discoveries` 分页返回。它不创建托管安装、不签发凭据、不启用策略、不下发二进制操作。元数据无效或尚未迁移时，忽略发现信息，保持原流量ACK。
+新版 mi-node 启动后，通过既有 `/api/v2/server/report` 认证通道附带 `update_inventory={installation_id,version,os,arch}`，兼容原 HTTP/HTTPS 面板绑定。版本允许构建提交 SHA；新增可选布尔字段 auto_enroll_supported 表示运行程序包含自动接入能力，旧程序缺省 false。服务端只依据认证所得 node_info 关联节点，机器归属来自现有节点记录；元数据不得扩大权限。独立发现表按 node_id 更新最后上报信息，管理接口 `/server/update/discoveries` 分页返回。它不创建托管安装、不签发凭据、不启用策略、不下发二进制操作。元数据无效或尚未迁移时，忽略发现信息，保持原流量ACK。
 
-发现 installation_id 在本机单独持久化，只用于识别同一安装的多个逻辑节点；不与托管凭据身份自动合并。
+发现 installation_id 在本机持久化，识别同一安装多个逻辑节点。首次自动登记优先复用此 ID；已有手工 agent 保留既有身份，不以发现 ID 覆盖。发现上报本身不建立 agent 身份，自动登记仍须验证已有绑定认证。
 
 ## 2. 安装身份与鉴权
 
@@ -20,11 +20,17 @@ installation_id 是本机初始化生成并持久化的 UUIDv4，代表共享二
 
 本地 root-only 配置指定唯一 authority_panel_url、authority_scope、固定安装路径和服务名。只从 authority 领取任务，其他面板继续业务；服务端不得下发路径、命令、脚本或变更 authority。authority 转移需本机停 timer、处理在途事务、撤销旧登记再登记。文件锁以 canonical binary path 为键，manual upgrade 和 agent 共用，防止伪造多个 ID 并行修改同一文件。
 
-管理员生成登记票据，服务端固定 scope 为 {kind:machine,machine_id:12} 或 {kind:legacy,node_ids:[31,32]}（V2 全局节点 ID）。票据随机32字节 base64url，有效900秒，库只存 SHA256。两种模式均需要票据；legacy 共享 token 本身不证明节点安装归属。
+管理员生成登记票据，服务端固定 scope 为 {kind:machine,machine_id:12} 或 {kind:legacy,node_ids:[31,32]}（V2 全局节点 ID）。票据随机32字节 base64url，有效900秒，库只存 SHA256。票据登记为高级兼容入口；普通新版节点走下述自动登记，不要求票据。自动登记验证现有有效绑定凭据、明确 scope、安装 ID 和 agent token，遵守范围独占和撤销规则。
 
 S = /api/v2/server/update。新建独立 update-agent 鉴权中间件，不直接套用要求 node_id 的 server.v2。所有节点请求 HTTPS + JSON，凭据不放 query。
 
-POST S/enroll：
+POST S/auto-enroll（无需 agent bearer 或票据，须现有绑定认证）：
+~~~json
+{"protocol_version":1,"installation_id":"uuid-v4","agent_token":"client-generated-32-byte-base64url","auth":{"kind":"machine","machine_id":12,"token":"existing-machine-token"}}
+~~~
+legacy auth={kind:legacy,node_ids:[31,32],token:existing-server-token}。node_ids为此管理面板实际绑定的去重节点列表，服务器验证启用/归属并排序；已被其他有效安装覆盖则409。请求前0600持久化身份和agent token。重复同身份、token、scope请求返回当前 policy_revision，不重建记录、不启用策略、不恢复撤销。错误认证401，格式422，身份/范围变化409；只存认证散列。
+
+POST S/enroll（高级票据登记）：
 ~~~json
 {"protocol_version":1,"enrollment_id":"uuid","enrollment_secret":"opaque","installation_id":"uuid","agent_token":"client-generated-32-byte-base64url","auth":{"kind":"machine","machine_id":12,"token":"existing-machine-token"}}
 ~~~
@@ -42,7 +48,7 @@ Release：
 ~~~
 version 只接受 vMAJOR.MINOR.PATCH，不接受 latest/预发布。每个支持架构恰有 mi-node/xbctl 两项，架构仅 amd64/arm64；若同时支持则四项。文件为纯二进制，size_bytes正数且≤512MiB。发布后不可变，仅撤销；目标架构缺制品不能排队。HTTPS URL 无 userinfo/fragment，最多3次HTTPS重定向，跨域不传面板凭据，TLS验证常开。两文件尺寸和SHA全部验证后才执行版本探测；新发行双方须提供稳定机器可读版本输出（精确version），兼容旧 -v/version。散列由可信发布构建生成，不能用下载所得散列冒充发布校验。
 
-Policy={enabled:false,target_release_id:null,revision:1}。全局默认关闭、各安装默认关闭；两者启用且目标明确才允许创建/领取任务。不跟随latest。批次release必须等于安装target。相同版本且两散列一致→skipped/already_current；相同版本异散列→version_conflict；目标低于当前→downgrade_forbidden。版本未知时不自动升级。手工upgrade不依赖面板开关。
+Policy={enabled:false,target_release_id:null,revision:1,follow_latest:false}。自动接入默认不启用安装策略；follow_latest=true且全局及安装策略开启时自动选择兼容最新版并冻结任务快照。手动 update-latest 批次带manual=true，独立于两个自动开关，仍验证身份、能力、制品和事务状态。固定版本策略要求两开关及明确目标。批次release必须等于安装target。相同版本且两散列一致→skipped/already_current；相同版本异散列→version_conflict；目标低于当前→downgrade_forbidden。版本未知时不自动升级。手工upgrade不依赖面板开关。
 
 ## 4. Agent 接口
 
@@ -51,7 +57,7 @@ Policy={enabled:false,target_release_id:null,revision:1}。全局默认关闭、
 {"protocol_version":1,"installation_id":"uuid","versions":{"mi_node":"v1.2.2","xbctl":"v1.2.2"},"installed_sha256":{"mi_node":"64hex","xbctl":"64hex"},"runtime":{"os":"linux","arch":"amd64","init":"systemd","container":false},"capability":{"status":"supported","reason":null},"active_attempt":null}
 ~~~
 versions/installed_sha256 各成员可null，null时不自动升级。init=systemd/openrc/other；capability.status=supported/unsupported，reason=null/docker/openrc/unsupported_os/unsupported_arch/shared_binary_layout/local_disabled。active_attempt非空为{task_id,attempt_id,last_seq,phase}，仅恢复提示，不直接改变任务状态。
-返回 data={server_time,poll_after_seconds:60,global_enabled,policy,candidate:null}。candidate非空为{task_id,release_id,version,policy_revision}；无任务/关闭/暂停返回null。poll不授予执行权。HTTP超时10秒；失败退避60/120/240/480/900秒加0–15秒抖动。
+返回 data={server_time,poll_after_seconds:60,global_enabled,policy,candidate:null}。candidate非空为{task_id,release_id,version,policy_revision,manual}；manual只表示面板单次任务，不是本地Transaction.Manual；无任务/关闭/暂停返回null。poll不授予执行权。HTTP超时10秒；失败退避60/120/240/480/900秒加0–15秒抖动。
 
 ### POST S/tasks/{task_id}/claim
 请求 {installation_id,claim_id,policy_revision}；claim_id UUID先落盘，重试复用。
@@ -85,7 +91,7 @@ Batch=running/paused/canceling/completed/canceled。创建running；failure_coun
 
 新增CLI：xbctl update-agent install --authority-panel-url URL --enrollment-file PATH；xbctl update-agent run；xbctl update-agent status；xbctl update-agent disable。票据文件0600，含 enrollment_id、enrollment_secret、expires_at 及 instance_id；instance_id 是 xbctl list 展示的本机既有绑定实例 ID，仅用于选择既有认证配置，不是后台 installation_id 或权限范围。秘密不放命令行。
 
-install是本机明确操作。独立mi-node-update.service：Type=oneshot、User=root、固定ExecStart为xbctl update-agent run、TimeoutStartSec=0；timer：OnBootSec=60s、OnUnitInactiveSec=60s、RandomizedDelaySec=15s。不得PartOf/BindsTo主服务；禁止在mi-node子进程或其cgroup执行升级。timer保持报告，面板两个开关默认关闭。disable先检查在途事务，禁止杀掉恢复过程。
+新版启动自动引导外置bootstrap服务/timer执行 xbctl update-agent auto-install，参数仅实际配置文件路径，无认证秘密。外置流程读取绑定并自动登记后启动既有更新timer，临时故障重试；已正常登记不每分钟重写身份或unit，本地停用及坏配置保留。高级install兼容保留。独立mi-node-update.service：Type=oneshot、User=root、固定ExecStart为xbctl update-agent run、TimeoutStartSec=0；timer：OnBootSec=60s、OnUnitInactiveSec=60s、RandomizedDelaySec=15s。不得PartOf/BindsTo主服务；禁止在mi-node子进程或其cgroup执行升级。timer保持报告，面板两个开关默认关闭。disable先检查在途事务，禁止杀掉恢复过程。
 
 事务：共同flock→恢复journal/补报→poll/claim→两文件在目标同盘暂存→流式大小/SHA/ELF架构/版本校验→备份两原件→journal+fsync→installing ACK→顺序rename及目录fsync→固定systemctl restart→健康确认→写元数据→补报。每下载10分钟上限、最多两次尝试，systemctl每次180秒上限（覆盖既有120秒节点优雅退出预算）。两个rename不是联合原子，journal逐步记录，第二个失败恢复两件。至少保留最近成功事务备份至下次安全备份完成，失败备份不删。
 
@@ -104,8 +110,8 @@ install是本机明确操作。独立mi-node-update.service：Type=oneshot、Use
 | settings | id=1 PK, enabled, max_concurrency=5, revision |
 | releases | id, version varchar(64) UNIQUE, os, min_agent_protocol, artifacts JSON, published_at, revoked_at nullable, created_by |
 | enrollments | id, secret_hash char(64) UNIQUE, scope JSON, expires_at, consumed_at nullable, installation_id nullable, token_hash nullable, created_by |
-| installations | id, scope JSON immutable, token_hash UNIQUE, revoked_at nullable, policy_enabled, target_release_id nullable FK, policy_revision, capability/runtime/versions/installed_sha256 JSON, last_seen_at nullable, active_task_id nullable UNIQUE, reported_active_attempt nullable JSON |
-| batches | id, release_id FK, state, max_concurrency, fail_pause_after, failure_baseline, cancel_requested, created_by, finished_at nullable |
+| installations | id, scope JSON immutable, token_hash UNIQUE, revoked_at nullable, policy_enabled, follow_latest=false, target_release_id nullable FK, policy_revision, capability/runtime/versions/installed_sha256 JSON, last_seen_at nullable, active_task_id nullable UNIQUE, reported_active_attempt nullable JSON |
+| batches | id, release_id FK, manual=false, state, max_concurrency, fail_pause_after, failure_baseline, cancel_requested, created_by, finished_at nullable |
 | tasks | id, batch_id FK, installation_id FK, release_snapshot JSON, policy_revision, state, last_phase nullable, cancel_requested, code/message nullable, finished_at nullable；UNIQUE(batch_id,installation_id) |
 | attempts | id, task_id UNIQUE FK, installation_id FK, claim_id, claim_request_hash, lease_token_hash, lease_token_ciphertext TEXT, lease_expires_at nullable, last_seq, installing_acked_at nullable, started_at, finished_at nullable；UNIQUE(installation_id,claim_id) |
 | events | id bigint PK, attempt_id nullable FK, task_id FK, seq nullable, payload_hash, payload JSON, source=agent/server/admin, received_at；UNIQUE(attempt_id,seq)，server/admin seq=null |
@@ -127,7 +133,10 @@ A=/api/v2/{实际secure_path}/server/update，沿用admin/log。写操作需Idem
 | POST /enrollments | {scope} | {enrollment_id,enrollment_secret,expires_at} |
 | POST /installations/{id}/revoke | {} | {id,revoked_at} |
 | GET /installations | 分页，machine_id?/node_id?/capability_status? | Installation列表 |
-| PATCH /installations/{id}/policy | {enabled,target_release_id,revision} | Policy，enabled=true时target必填 |
+| PATCH /installations/{id}/policy | {enabled,target_release_id,revision,follow_latest?} | Policy；follow_latest=true时可无固定target |
+| POST /installations/{id}/update-latest | {} | 单次manual批次，两个自动开关关闭时亦可执行 |
+| GET /release-source | 无 | {url,checked_at,error,latest} |
+| POST /releases/sync | {} | 同上，拉取发布清单并幂等导入 |
 | POST /batches/preview | {release_id,installation_ids} | {eligible_ids,excluded:[{installation_id,code}],affected_installation_count}，只读不需幂等key |
 | POST /batches | {release_id,installation_ids,max_concurrency,fail_pause_after} | Batch；最多1000安装，去重冻结；任何不合格422并附excluded，不静默忽略 |
 | GET /batches | 分页 | Batch列表 |
@@ -140,13 +149,13 @@ A=/api/v2/{实际secure_path}/server/update，沿用admin/log。写操作需Idem
 | POST /tasks/{id}/resolve | {state,reason,agent_stopped:true} | Task，仅uncertain，state限failed/rolled_back/rollback_failed，reason 1–1024字符，审计人工核验声明 |
 | GET /coverage | machine_id或node_id恰选一 | {status,installation_ids,reason} |
 
-Installation={id,scope,versions,installed_sha256,runtime,capability,last_seen_at,online,policy,active_task_id,revoked_at}；online为180秒内poll，非业务在线。
+Installation={id,scope,versions,installed_sha256,runtime,capability,last_seen_at,online,policy,active_task_id,revoked_at,update}；update={latest_release_id,latest_version,available,status}；online为180秒内poll，非业务在线。
 Batch={id,release_id,state,max_concurrency,fail_pause_after,counts,created_at,finished_at}，counts包括全部Task状态的整数，零也返回。
 Task={id,batch_id,installation_id,state,last_phase,code,message,attempt_id,lease_expires_at,created_at,finished_at}，attempt_id/lease_expires_at可null。
 Event={id,task_id,attempt_id,seq,source,payload,received_at}，payload脱敏。
 coverage从登记scope映射：有登记status=registered；无登记bootstrap_required（不能据此推断真实版本），reason=not_enrolled；有登记reason=null，具体unsupported看Installation。
 
-Vue按installation_id去重，不按node/service发任务。确认页明确同进程全部绑定（含其他面板）会重启。旧节点显示“需手动升级一次并启用更新agent”，不显示虚假远程一键引导。展示版本/架构/SHA、全局与安装策略、批次失败/失联、事件和暂停/恢复/取消；区分rolled_back、rollback_failed、uncertain、Docker不支持、OpenRC手工。列表每5秒刷新，页面隐藏暂停。预览后创建再次服务端校验，不开放shell输入和在途强制取消。
+Vue按installation_id去重，不按node/service发任务。确认页明确同进程全部绑定（含其他面板）会重启。支持自动接入的节点显示等待自动登记并轮询完成后切换更新操作，无手工接入向导。旧构建显示本次新版部署启动后自动接入，不暗示后端可新增旧程序行为。展示版本/架构/SHA、全局与安装策略、批次失败/失联、事件和暂停/恢复/取消；区分rolled_back、rollback_failed、uncertain、Docker不支持、OpenRC手工。列表每5秒刷新，页面隐藏暂停。预览后创建再次服务端校验，不开放shell输入和在途强制取消。
 
 ## 9. 精确实现补充
 
@@ -163,6 +172,6 @@ Vue按installation_id去重，不按node/service发任务。确认页明确同�
 
 Go负责外置单agent、安装锁/事务/journal、协议及补报、校验/readiness/回滚、手工兼容；PHP负责表/DTO/范围鉴权、租约幂等/闸门/批次/审计；Vue负责类型和后台页面，禁止自行新增状态。
 
-联合必须验证：amd64/arm64双产物；SHA错误零替换；第二rename失败双恢复；restart成功但不健康回滚；进程/机器重启恢复；xbctl自替换不丢回滚；丢响应幂等；100并发claim不超容量；暂停取消与installing竞争；租约失联保留占位；跨machine/installation/task冒领403/404；legacy无票据不可登记；多面板只有authority；Docker/OpenRC准确；旧节点bootstrap_required；手动/自动互斥；现有流量与部署改动保留。
+联合必须验证：amd64/arm64双产物；SHA错误零替换；第二rename失败双恢复；restart成功但不健康回滚；进程/机器重启恢复；xbctl自替换不丢回滚；丢响应幂等；100并发claim不超容量；暂停取消与installing竞争；租约失联保留占位；跨machine/installation/task冒领403/404；机器/legacy使用有效既有绑定自动登记、丢ACK复用身份/token、错误认证与撤销不得复活；多面板只有authority；Docker/OpenRC准确；旧节点bootstrap_required；手动/自动互斥；现有流量与部署改动保留。
 
-本地验收：后端更新与流量联合 47 测试/295 断言；管理页面 7 项逻辑测试及两端类型检查/构建；Edge 隔离模拟接口渲染与设置提交；Go 故障注入、Linux WSL 文件锁及崩溃恢复。真实服务升级灰度、生产数据库并发与外部发行发布尚未执行。
+本轮本地验收：后端更新/发现与自动登记 38 测试/321 断言；管理页面19项测试、类型检查与构建；Edge隔离接口验证无票据等待及自动状态转换。Go自动登记、发现、面板、CLI及启动五包在Windows/Linux测试通过，systemd调用使用桩。真实服务升级灰度、生产数据库并发与外部发行发布未执行。

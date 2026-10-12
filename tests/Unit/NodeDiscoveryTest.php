@@ -50,6 +50,7 @@ class NodeDiscoveryTest extends TestCase
             $t->unsignedInteger('machine_id')->nullable();
         });
         (require __DIR__.'/../../database/migrations/2026_08_30_000001_create_node_update_discoveries_table.php')->up();
+        (require __DIR__.'/../../database/migrations/2026_10_12_000002_add_node_auto_enrollment_capability.php')->up();
         $this->service = new NodeDiscoveryService();
     }
 
@@ -86,7 +87,7 @@ class NodeDiscoveryTest extends TestCase
         $node = $this->node();
         $this->service->report($node, $this->inventory() + ['node_id' => 99, 'machine_id' => 999, 'token' => 'secret']);
         $row = (array) DB::table('v2_node_update_discoveries')->sole();
-        self::assertSame(['node_id', 'installation_id', 'version', 'os', 'arch', 'last_seen_at'], array_keys($row));
+        self::assertSame(['node_id', 'installation_id', 'version', 'os', 'arch', 'last_seen_at', 'auto_enroll_supported'], array_keys($row));
         self::assertSame(1, $row['node_id']);
         self::assertSame('2026-08-30 08:00:00', $row['last_seen_at']);
         Carbon::setTestNow(Carbon::parse('2026-08-30T09:00:00Z'));
@@ -99,6 +100,21 @@ class NodeDiscoveryTest extends TestCase
         self::assertSame('arm64', $item['arch']);
         self::assertSame('2026-08-30T09:00:00Z', $item['last_seen_at']);
         self::assertSame(7, $item['machine_id']);
+    }
+
+    public function testAutomaticEnrollmentCapabilityIsTypedAndKeepsOldNodesVisible(): void
+    {
+        $node = $this->node();
+        $this->service->report($node, $this->inventory());
+        self::assertFalse($this->service->listing([])['items'][0]['auto_enroll_supported']);
+        $this->service->report($node, $this->inventory() + ['auto_enroll_supported'=>true]);
+        self::assertTrue($this->service->listing([])['items'][0]['auto_enroll_supported']);
+        foreach (['true', 1, [], null] as $invalid) {
+            $this->service->report($node, $this->inventory() + ['auto_enroll_supported'=>$invalid]);
+            self::assertTrue($this->service->listing([])['items'][0]['auto_enroll_supported']);
+        }
+        $this->service->report($node, $this->inventory() + ['auto_enroll_supported'=>false]);
+        self::assertFalse($this->service->listing([])['items'][0]['auto_enroll_supported']);
     }
 
     public function testMalformedInventoryDoesNotOverwriteLastValidRecord(): void

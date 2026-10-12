@@ -26,6 +26,8 @@ class NodeDiscoveryService
                 }
                 $values[$field] = $value;
             }
+            if (array_key_exists('auto_enroll_supported', $inventory) && !is_bool($inventory['auto_enroll_supported'])) return;
+            $values['auto_enroll_supported'] = $inventory['auto_enroll_supported'] ?? false;
             $values['last_seen_at'] = Carbon::now('UTC')->format('Y-m-d H:i:s');
             DB::table('v2_node_update_discoveries')->upsert(
                 [['node_id' => $node->id] + $values], ['node_id'], array_keys($values)
@@ -55,9 +57,10 @@ class NodeDiscoveryService
         $total = (clone $query)->count();
         $items = $query->orderBy('d.node_id')->offset(($page - 1) * $pageSize)->limit($pageSize)
             ->get(['d.node_id', 's.name as node_name', 's.machine_id', 'd.installation_id',
-                'd.version', 'd.os', 'd.arch', 'd.last_seen_at'])
+                'd.version', 'd.os', 'd.arch', 'd.last_seen_at', 'd.auto_enroll_supported'])
             ->map(static function ($row): array {
                 $item = (array) $row;
+                $item['auto_enroll_supported'] = (bool) $item['auto_enroll_supported'];
                 $item['last_seen_at'] = Carbon::parse($item['last_seen_at'], 'UTC')->format('Y-m-d\TH:i:s\Z');
                 return $item;
             })->all();

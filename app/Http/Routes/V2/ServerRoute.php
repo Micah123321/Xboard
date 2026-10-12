@@ -18,6 +18,7 @@ class ServerRoute
         ], function ($route) {
             $controller = \App\Http\Controllers\V2\Server\NodeUpdateController::class;
             $route->post('enroll', [$controller, 'enroll']);
+            $route->post('auto-enroll', [$controller, 'autoEnroll']);
             $route->post('poll', [$controller, 'poll']);
             foreach (['claim', 'heartbeat', 'events'] as $action) {
                 $route->post('tasks/{task_id}/'.$action, [$controller, $action]);

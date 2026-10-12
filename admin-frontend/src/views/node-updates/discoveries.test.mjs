@@ -20,7 +20,7 @@ function setup() {
    settings: async () => ({ enabled: false }), releases: async () => page(), installations: async () => page([{ id: 'managed' }]),
  }
  const bindings = { updates, UpdateError, createIdempotencyKeys: () => ({ get: () => 'stable-key', clear() {} }), ref: value => ({ value }), reactive: value => value, computed: fn => ({ get value() { return fn() } }), watch() {}, onMounted() {}, onBeforeUnmount: fn => { unmount = fn }, document, setTimeout: (fn, delay) => { timers.set(++nextTimer, { fn, delay }); return nextTimer }, clearTimeout: id => timers.delete(id), positiveIds: text => [Number(text)], reasonLabel: code => code, ElMessage: { error() {}, success() {} }, ElMessageBox: { confirm: async () => true } }
- const state = new Function(...Object.keys(bindings), compiled + '\nreturn { refresh, visibility, pageChange, applyFilters, discoveries, discoveryError, installations, pages, filters, tab, installLatest, followLatest, releaseSourceError, openOnlineUpdate, onlineState, onlineInstallation, onlineNode, onlineError, prepareNodeEnrollment, ticketKind, ticketIds, ticketInstanceId, ticketOpen }')(...Object.values(bindings))
+ const state = new Function(...Object.keys(bindings), compiled + '\nreturn { refresh, visibility, pageChange, applyFilters, discoveries, discoveryError, installations, pages, filters, tab, installLatest, followLatest, releaseSourceError, openOnlineUpdate, onlineState, onlineInstallation, onlineNode, onlineError, onlineOpen, ticketKind, ticketIds, ticketInstanceId, ticketOpen }')(...Object.values(bindings))
  return { ...state, updates, requests, timers, document, unmount: () => unmount() }
 }
 test('discovery survives unavailable management and preserves SHA version', async () => {
@@ -68,13 +68,14 @@ test('node update lookup follows pagination past revoked installations', async (
  assert.equal(s.onlineState.value, 'ready'); assert.equal(s.onlineInstallation.value.id, 'active')
  assert.deepEqual(queries, [{ pageNumber: 1, filters: { node_id: 7 } }, { pageNumber: 2, filters: { node_id: 7 } }])
 })
-test('unmanaged node gets first-time guide and a prefilled enrollment scope', async () => {
+test('new node waits for automatic enrollment without opening a ticket dialog', async () => {
  const s = setup(); s.updates.installations = async () => page()
- await s.openOnlineUpdate(node); assert.equal(s.onlineState.value, 'bootstrap')
- s.ticketInstanceId.value = 'old-binding'; s.prepareNodeEnrollment()
- assert.equal(s.ticketOpen.value, true); assert.equal(s.ticketKind.value, 'legacy'); assert.equal(s.ticketIds.value, '7'); assert.equal(s.ticketInstanceId.value, '')
- await s.openOnlineUpdate({ ...node, machine_id: 17 }); s.prepareNodeEnrollment()
- assert.equal(s.ticketKind.value, 'machine'); assert.equal(s.ticketIds.value, '17')
+ await s.openOnlineUpdate({ ...node, auto_enroll_supported: true })
+ assert.equal(s.onlineState.value, 'bootstrap'); assert.equal(s.ticketOpen.value, false)
+ s.updates.installations = async () => page([{ id: 'automatically-registered', revoked_at: null }])
+ await s.refresh()
+ assert.equal(s.onlineState.value, 'ready'); assert.equal(s.onlineInstallation.value.id, 'automatically-registered')
+ assert.equal(s.ticketOpen.value, false)
 })
 test('lookup failure is not presented as an unregistered node', async () => {
  const s = setup(); s.updates.installations = async () => { throw new Error('network') }
