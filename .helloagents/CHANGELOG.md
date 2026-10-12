@@ -2,6 +2,8 @@
 
 ## 2026-10-12
 
+- **[node-updates / http-enrollment]**: 根据修复版节点日志`no HTTPS authority binding`，接入客户端与后台接口改为沿用现有HTTP/HTTPS面板绑定，保留凭据/身份/范围/撤销校验以及制品下载HTTPS约束。接入阶段与固定错误码随业务上报，后台短期缓存按时间保护较新诊断并在窗口实时显示；无新增迁移。本地验证不表示线上已登记。
+
 - **[node-updates / enrollment-fix]**: 根据线上日志修复systemd EnvironmentFile字面引号造成路径被忽略，以及查询getty@.service等无实例模板导致布局检查失败；按规范服务ID识别别名并保留实际实例共享检查。真实Linux解析器和服务枚举验证通过。dev旧下载入口增加CI兼容同步，新CLI及安装脚本dev跟随latest；界面独立比对版本与接入能力，SHA显示未映射而非旧版。
 
 - **[node-updates / auto-enrollment]**: 接入改为新版节点启动自动引导独立服务，后台使用现有绑定认证无票据登记；身份/token请求前落盘、幂等重试且保留撤销与停用。发现能力字段区分旧构建与自动接入版本，管理界面自动等待与刷新；需同时发布Go/PHP/Vue并执行新增能力迁移。

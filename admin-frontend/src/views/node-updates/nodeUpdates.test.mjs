@@ -23,6 +23,13 @@ test('discovery compares release numbers without inferring age from a missing ca
  assert.equal(model.discoveryVersionLabel('dev'), '版本格式暂未识别')
  assert.equal(model.discoveryVersionLabel('v1.2.3'), '等待获取最新版进行比对')
 })
+test('enrollment failures show the actual stage and fixed reason without raw strings', () => {
+ assert.equal(model.enrollmentStatusLabel(), '尚未收到接入执行结果')
+ assert.equal(model.enrollmentStatusLabel({ state: 'retrying', stage: 'layout', code: 'systemd_failed' }), '自动接入失败，等待重试；阶段：检查安装布局；原因：系统服务命令执行失败')
+ assert.ok(model.enrollmentStatusLabel({ state: 'retrying', stage: 'enroll', code: 'invalid_credentials' }).includes('现有节点认证失败'))
+ assert.ok(!model.enrollmentStatusLabel({ state: 'retrying', stage: 'enroll', code: 'token=private-value' }).includes('private-value'))
+ assert.ok(model.enrollmentStatusLabel({ state: 'disabled', stage: 'config', code: 'local_disabled' }).includes('接入已停用'))
+})
 test('fixed versions and both architecture pairs validate', () => {
  model.validateRelease('v1.2.3', artifacts)
  model.validateRelease('v1.2.3', artifacts.slice(0, 2))

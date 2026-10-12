@@ -14,7 +14,8 @@ class NodeUpdateAgent
     public function handle(Request $request, Closure $next)
     {
         try {
-            if (!$request->isSecure() || !$request->isJson() || $request->query->count() || strlen($request->getContent())>131072) Protocol::fail();
+            // Use the existing panel transport; authentication still binds every request to its installation.
+            if (!$request->isJson() || $request->query->count() || strlen($request->getContent())>131072) Protocol::fail();
             $body=json_decode($request->getContent());
             if (!is_object($body) || json_last_error()!==JSON_ERROR_NONE) Protocol::fail();
             $enroll=in_array($request->route()?->getActionMethod(), ['enroll','autoEnroll'], true);

@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { updates, UpdateError, createIdempotencyKeys } from '@/api/nodeUpdates'
 import type { Settings, Release, ReleaseSource, Installation, Policy, Batch, BatchInput, Task, TaskState, UpdateEvent, Page, Preview, Enrollment, Coverage, Scope, Discovery, DiscoveryFilters } from '@/types/nodeUpdates'
-import { batchLabels, taskLabels, reasonLabel, discoveryVersionLabel, positiveIds } from './model'
+import { batchLabels, taskLabels, reasonLabel, discoveryVersionLabel, enrollmentStatusLabel, positiveIds } from './model'
 import UpdatePager from './UpdatePager.vue'
 
 const emptyPage = <T,>(): Page<T> => ({ items: [], page: 1, page_size: 20, total: 0 })
@@ -80,6 +80,10 @@ async function refresh() {
     const result = await updates.discoveries(pages.discoveries, discoveryFilters.value, signal)
     if (token !== generation || signal.aborted) return
     discoveries.value = result; discoveryError.value = ''
+    if (onlineOpen.value && onlineNode.value) {
+     const current = result.items.find(item => item.node_id === onlineNode.value?.node_id)
+     if (current) onlineNode.value = current
+    }
    } catch (failure) {
     if (token !== generation || signal.aborted) return
     discoveryError.value = failure instanceof UpdateError && failure.status === 404
@@ -307,7 +311,7 @@ onBeforeUnmount(() => { disposed = true; stopRefresh(); onlineController?.abort(
       <el-table-column label="节点 / ID" min-width="180"><template #default="{ row }">{{ row.node_name }}<p>节点 ID：{{ row.node_id }}</p></template></el-table-column>
       <el-table-column label="机器 ID" width="110"><template #default="{ row }">{{ row.machine_id ?? '—' }}</template></el-table-column>
       <el-table-column prop="installation_id" label="安装 ID" min-width="280" />
-      <el-table-column label="当前 / 最新版本" min-width="220"><template #default="{ row }"><code>{{ row.version }}</code><p>最新版：{{ releaseSource?.latest?.version ?? '等待构建' }}</p><small>{{ discoveryVersionLabel(row.version, releaseSource?.latest?.version) }}</small><small>{{ row.auto_enroll_supported ? '已报告自动接入能力' : '尚未报告自动接入能力' }}</small></template></el-table-column>
+      <el-table-column label="当前 / 最新版本" min-width="220"><template #default="{ row }"><code>{{ row.version }}</code><p>最新版：{{ releaseSource?.latest?.version ?? '等待构建' }}</p><small>{{ discoveryVersionLabel(row.version, releaseSource?.latest?.version) }}</small><small>{{ row.auto_enroll_supported ? '已报告自动接入能力' : '尚未报告自动接入能力' }}</small><small v-if="row.enrollment_status">{{ enrollmentStatusLabel(row.enrollment_status) }}</small></template></el-table-column>
       <el-table-column label="系统 / 架构" min-width="150"><template #default="{ row }">{{ row.os }} / {{ row.arch }}</template></el-table-column>
       <el-table-column prop="last_seen_at" label="最近上报时间（UTC）" min-width="230" />
       <el-table-column label="操作" width="140" fixed="right"><template #default="{ row }"><el-button type="primary" :disabled="busy" @click="openOnlineUpdate(row)">在线更新</el-button></template></el-table-column>
@@ -347,12 +351,14 @@ onBeforeUnmount(() => { disposed = true; stopRefresh(); onlineController?.abort(
     <p v-if="onlineInstallation.policy.enabled && onlineInstallation.policy.follow_latest && !settings?.enabled">已设置，等待开启全局自动更新。</p>
    </template>
    <template v-if="onlineState === 'bootstrap'">
-    <el-alert :title="onlineNode?.auto_enroll_supported ? '等待节点自动接入在线更新' : '尚未报告自动接入能力，当前未登记更新执行器'" type="info" :closable="false" />
+    <el-alert :title="onlineNode?.enrollment_status ? enrollmentStatusLabel(onlineNode.enrollment_status) : onlineNode?.auto_enroll_supported ? '尚未收到接入执行结果，正在检查登记状态' : '尚未报告自动接入能力，当前未登记更新执行器'" :type="onlineNode?.enrollment_status?.state === 'retrying' ? 'error' : onlineNode?.enrollment_status?.state === 'disabled' || onlineNode?.enrollment_status?.state === 'unsupported' ? 'warning' : 'info'" :closable="false" />
+    <p v-if="onlineNode?.enrollment_status">节点执行结果时间（UTC）：{{ onlineNode.enrollment_status.updated_at }}</p>
+    <p v-if="onlineNode?.enrollment_status?.state === 'registered'">节点已报告登记完成，但当前面板尚未找到有效安装记录；请核对该安装的管理面板和登记范围。</p>
     <p v-if="onlineNode">版本比对：{{ discoveryVersionLabel(onlineNode.version, releaseSource?.latest?.version) }}</p>
     <p>新版节点会读取已有面板绑定，在独立服务中自动登记并开始上报。无需生成票据、下载接入文件或填写本机实例 ID。</p>
     <el-steps v-if="onlineNode?.auto_enroll_supported" :active="1" finish-status="success" align-center><el-step title="节点能力已上报" /><el-step title="自动登记并上报" /><el-step title="在线安装与自动更新" /></el-steps>
     <p v-if="!onlineNode?.auto_enroll_supported">节点目前尚未报告自动接入能力。若刚完成升级，请等待节点重启后重新上报；该状态与版本比对结果分别展示，不据此判断版本新旧。</p>
-    <p v-else>后台每 5 秒检查一次接入状态。面板暂时离线时节点会自动重试，业务继续运行。</p>
+    <p v-else>后台每 5 秒刷新。节点将接入执行结果随业务上报发送；临时失败由独立定时服务重试。</p>
     <p>自动登记与自动安装是独立设置。接入完成后可以直接安装最新版，也可以开启自动跟随。</p>
     <el-button v-if="onlineNode" :disabled="busy" @click="openOnlineUpdate(onlineNode)">重新检查</el-button>
    </template>

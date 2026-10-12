@@ -381,7 +381,7 @@ class NodeUpdateServiceTest extends TestCase
         self::assertSame(0, $this->service->q('installations')->count());
     }
 
-    public function testAutomaticEnrollmentHttpRequiresHttpsAndProtectsNormalAgentRoutes(): void
+    public function testAutomaticEnrollmentSupportsExistingHttpAndHttpsAndProtectsAgentRoutes(): void
     {
         \Illuminate\Support\Facades\RateLimiter::swap(new \Illuminate\Cache\RateLimiter(Cache::getFacadeRoot()));
         $data=$this->automaticRequest();
@@ -394,7 +394,15 @@ class NodeUpdateServiceTest extends TestCase
         self::assertSame($data['installation_id'],$response->getData(true)['data']['installation_id']);
         $http=\Illuminate\Http\Request::create('http://panel.test/api/v2/server/update/auto-enroll','POST',[],[],[],['CONTENT_TYPE'=>'application/json'],json_encode($data));
         $http->setRouteResolver($request->getRouteResolver());
-        self::assertSame(422,$middleware->handle($http,fn()=>throw new \RuntimeException('insecure request passed'))->getStatusCode());
+        self::assertSame(200,$middleware->handle($http,fn($request)=>$controller->autoEnroll($request))->getStatusCode());
+        $authenticated=\Illuminate\Http\Request::create('http://panel.test/api/v2/server/update/poll','POST',[],[],[],
+            ['CONTENT_TYPE'=>'application/json','HTTP_AUTHORIZATION'=>'Bearer '.$data['agent_token']],json_encode($this->report(['id'=>$data['installation_id']])));
+        $authenticated->setRouteResolver(fn()=>new \Illuminate\Routing\Route('POST','server/update/poll',[\App\Http\Controllers\V2\Server\NodeUpdateController::class,'poll']));
+        self::assertSame(200,$middleware->handle($authenticated,fn($request)=>$controller->poll($request))->getStatusCode());
+        $invalid=clone $http;
+        $wrong=$data; $wrong['auth']['token']='incorrect-existing-token';
+        $invalid->initialize([],[],[],[],[],['CONTENT_TYPE'=>'application/json'],json_encode($wrong));
+        self::assertSame(401,$middleware->handle($invalid,fn($request)=>$controller->autoEnroll($request))->getStatusCode());
         $poll=\Illuminate\Http\Request::create('https://panel.test/api/v2/server/update/poll','POST',[],[],[],['CONTENT_TYPE'=>'application/json'],json_encode(['installation_id'=>$data['installation_id']]));
         $poll->setRouteResolver(fn()=>new \Illuminate\Routing\Route('POST','server/update/poll',[\App\Http\Controllers\V2\Server\NodeUpdateController::class,'poll']));
         self::assertSame(401,$middleware->handle($poll,fn()=>throw new \RuntimeException('missing token passed'))->getStatusCode());

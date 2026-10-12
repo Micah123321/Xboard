@@ -51,6 +51,7 @@ class NodeDiscoveryTest extends TestCase
         });
         (require __DIR__.'/../../database/migrations/2026_08_30_000001_create_node_update_discoveries_table.php')->up();
         (require __DIR__.'/../../database/migrations/2026_10_12_000002_add_node_auto_enrollment_capability.php')->up();
+        Cache::swap(new \Illuminate\Cache\Repository(new \Illuminate\Cache\ArrayStore()));
         $this->service = new NodeDiscoveryService();
     }
 
@@ -135,6 +136,74 @@ class NodeDiscoveryTest extends TestCase
             $this->service->report($node, $inventory);
             self::assertSame($before, (array) DB::table('v2_node_update_discoveries')->sole());
         }
+    }
+
+    public function testEnrollmentFailureDiagnosticsAreWhitelistedVersionScopedAndExpire(): void
+    {
+        $node = $this->node();
+        $status = ['state'=>'retrying','stage'=>'enroll','code'=>'invalid_credentials','updated_at'=>'2026-08-30T08:00:00Z'];
+        $inventory = $this->inventory() + ['auto_enroll_supported'=>true,'enrollment_status'=>$status];
+        $this->service->report($node, $inventory);
+        self::assertSame($status, $this->service->listing([])['items'][0]['enrollment_status']);
+        foreach ([array_replace($status,['code'=>'token=private-value']), $status + ['token'=>'private-value'],
+            array_replace($status,['state'=>'bad']), array_replace($status,['updated_at'=>'2026-02-30T08:00:00Z'])] as $invalid) {
+            $this->service->report($node, array_replace($inventory,['enrollment_status'=>$invalid]));
+            self::assertSame($status, $this->service->listing([])['items'][0]['enrollment_status']);
+        }
+        self::assertStringNotContainsString('private-value', json_encode($this->service->listing([])));
+        $this->service->report($node, array_replace($inventory,['version'=>'v1.2.3','enrollment_status'=>null]));
+        self::assertNull($this->service->listing([])['items'][0]['enrollment_status']);
+        $this->service->report($node, $inventory);
+        Carbon::setTestNow(Carbon::parse('2026-08-30T08:05:01Z'));
+        self::assertNull($this->service->listing([])['items'][0]['enrollment_status']);
+        self::assertSame($inventory['version'], $this->service->listing([])['items'][0]['version']);
+        $completed=array_replace($status,['state'=>'registered','stage'=>'poll','code'=>'']);
+        $this->service->report($node,array_replace($inventory,['enrollment_status'=>$completed]));
+        self::assertSame(array_replace($completed,['code'=>null]),$this->service->listing([])['items'][0]['enrollment_status']);
+    }
+
+    public function testDelayedEnrollmentReportsCannotReplaceNewerTerminalResults(): void
+    {
+        foreach (['registered','disabled'] as $index => $state) {
+            $node = $this->node($index + 1);
+            $completed = ['state'=>$state,'stage'=>'enroll','code'=>null,'updated_at'=>'2026-08-30T08:00:12Z'];
+            $inventory = $this->inventory() + ['enrollment_status'=>$completed];
+            $this->service->report($node, $inventory);
+            foreach (['starting','retrying'] as $delayed) {
+                $old = ['state'=>$delayed,'stage'=>'bootstrap','code'=>'systemd_failed','updated_at'=>'2026-08-30T08:00:10Z'];
+                $this->service->report($node, array_replace($inventory, ['enrollment_status'=>$old]));
+                self::assertSame($completed, $this->service->listing(['node_id'=>$node->id])['items'][0]['enrollment_status']);
+            }
+        }
+    }
+
+    public function testSameSecondPreservesTerminalStateWhileLaterPollResultsCanAdvance(): void
+    {
+        $node = $this->node();
+        $registered = ['state'=>'registered','stage'=>'poll','code'=>null,'updated_at'=>'2026-08-30T08:00:12Z'];
+        $inventory = $this->inventory() + ['enrollment_status'=>$registered];
+        $this->service->report($node, $inventory);
+        $failure = array_replace($registered, ['state'=>'retrying','code'=>'api_unavailable']);
+        $this->service->report($node, array_replace($inventory, ['enrollment_status'=>$failure]));
+        self::assertSame($registered, $this->service->listing([])['items'][0]['enrollment_status']);
+        $failure['updated_at'] = '2026-08-30T08:00:13Z';
+        $this->service->report($node, array_replace($inventory, ['enrollment_status'=>$failure]));
+        self::assertSame($failure, $this->service->listing([])['items'][0]['enrollment_status']);
+        $recovered = array_replace($registered, ['updated_at'=>$failure['updated_at']]);
+        $this->service->report($node, array_replace($inventory, ['enrollment_status'=>$recovered]));
+        self::assertSame($recovered, $this->service->listing([])['items'][0]['enrollment_status']);
+    }
+
+    public function testDiagnosticsCacheFailurePreservesVersionReportAndListing(): void
+    {
+        Cache::swap(\Mockery::mock());
+        Cache::shouldReceive('lock')->andThrow(new \RuntimeException('cache down'));
+        Cache::shouldReceive('get')->andThrow(new \RuntimeException('cache down'));
+        $inventory = $this->inventory() + ['enrollment_status'=>['state'=>'retrying','stage'=>'layout','code'=>'systemd_failed','updated_at'=>'2026-08-30T08:00:00Z']];
+        $this->service->report($this->node(), $inventory);
+        $item = $this->service->listing([])['items'][0];
+        self::assertSame($inventory['version'], $item['version']);
+        self::assertNull($item['enrollment_status']);
     }
 
     public function testPaginationFiltersAndLiveServerAssociation(): void

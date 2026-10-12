@@ -77,6 +77,20 @@ test('new node waits for automatic enrollment without opening a ticket dialog', 
  assert.equal(s.onlineState.value, 'ready'); assert.equal(s.onlineInstallation.value.id, 'automatically-registered')
  assert.equal(s.ticketOpen.value, false)
 })
+test('refresh updates the opened node with reported enrollment failure and recovery', async () => {
+ const s = setup(); s.updates.installations = async () => page()
+ await s.openOnlineUpdate({ ...node, auto_enroll_supported: true })
+ const failure = { state: 'retrying', stage: 'enroll', code: 'invalid_credentials', updated_at: '2026-10-12T12:00:00Z' }
+ s.updates.discoveries = async () => page([{ ...node, enrollment_status: failure }])
+ await s.refresh()
+ assert.deepEqual(s.onlineNode.value.enrollment_status, failure)
+ assert.equal(s.onlineState.value, 'bootstrap')
+ s.updates.discoveries = async () => page([{ ...node, enrollment_status: { ...failure, state: 'registered', code: null } }])
+ s.updates.installations = async () => page([{ id: 'registered', revoked_at: null }])
+ await s.refresh()
+ assert.equal(s.onlineState.value, 'ready')
+ assert.equal(s.onlineNode.value.enrollment_status.state, 'registered')
+})
 test('lookup failure is not presented as an unregistered node', async () => {
  const s = setup(); s.updates.installations = async () => { throw new Error('network') }
  await s.openOnlineUpdate(node); assert.equal(s.onlineState.value, 'error'); assert.match(s.onlineError.value, /查询在线更新状态失败/)

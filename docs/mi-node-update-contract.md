@@ -10,7 +10,7 @@ Go cmd/xbctl/main.go:398–531 已实现双二进制下载、备份、替换、�
 
 ## 自动发现（独立于托管权限）
 
-新版 mi-node 启动后，通过既有 `/api/v2/server/report` 认证通道附带 `update_inventory={installation_id,version,os,arch}`，兼容原 HTTP/HTTPS 面板绑定。版本允许构建提交 SHA；新增可选布尔字段 auto_enroll_supported 表示运行程序包含自动接入能力，旧程序缺省 false。服务端只依据认证所得 node_info 关联节点，机器归属来自现有节点记录；元数据不得扩大权限。独立发现表按 node_id 更新最后上报信息，管理接口 `/server/update/discoveries` 分页返回。它不创建托管安装、不签发凭据、不启用策略、不下发二进制操作。元数据无效或尚未迁移时，忽略发现信息，保持原流量ACK。
+新版 mi-node 启动后，通过既有 `/api/v2/server/report` 认证通道附带 `update_inventory={installation_id,version,os,arch}`，兼容原 HTTP/HTTPS 面板绑定。版本允许构建提交 SHA；新增可选布尔字段 auto_enroll_supported 表示运行程序包含自动接入能力，旧程序缺省 false；新增可选 enrollment_status={state,stage,code,updated_at}，只接受固定枚举与UTC时间，无原始配置/错误正文。可选诊断缓存五分钟且按node/installation/version隔离，缓存故障不影响发现和流量。服务端只依据认证所得 node_info 关联节点，机器归属来自现有节点记录；元数据不得扩大权限。独立发现表按 node_id 更新最后上报信息，管理接口 `/server/update/discoveries` 分页返回。它不创建托管安装、不签发凭据、不启用策略、不下发二进制操作。元数据无效或尚未迁移时，忽略发现信息，保持原流量ACK。
 
 发现 installation_id 在本机持久化，识别同一安装多个逻辑节点。首次自动登记优先复用此 ID；已有手工 agent 保留既有身份，不以发现 ID 覆盖。发现上报本身不建立 agent 身份，自动登记仍须验证已有绑定认证。
 
@@ -22,9 +22,9 @@ installation_id 是本机初始化生成并持久化的 UUIDv4，代表共享二
 
 管理员生成登记票据，服务端固定 scope 为 {kind:machine,machine_id:12} 或 {kind:legacy,node_ids:[31,32]}（V2 全局节点 ID）。票据随机32字节 base64url，有效900秒，库只存 SHA256。票据登记为高级兼容入口；普通新版节点走下述自动登记，不要求票据。自动登记验证现有有效绑定凭据、明确 scope、安装 ID 和 agent token，遵守范围独占和撤销规则。
 
-S = /api/v2/server/update。新建独立 update-agent 鉴权中间件，不直接套用要求 node_id 的 server.v2。所有节点请求 HTTPS + JSON，凭据不放 query。
+S = /api/v2/server/update。新建独立 update-agent 鉴权中间件，不直接套用要求 node_id 的 server.v2。节点更新请求沿用现有 authority 的 HTTP 或 HTTPS 地址并使用 JSON，凭据不放 query；客户端不自动跟随管理面板重定向。下载制品仍独立要求HTTPS。
 
-POST S/auto-enroll（无需 agent bearer 或票据，须现有绑定认证）：
+POST S/auto-enroll（无需 agent bearer 或票据，须现有绑定认证；HTTP/HTTPS均支持）：
 ~~~json
 {"protocol_version":1,"installation_id":"uuid-v4","agent_token":"client-generated-32-byte-base64url","auth":{"kind":"machine","machine_id":12,"token":"existing-machine-token"}}
 ~~~
