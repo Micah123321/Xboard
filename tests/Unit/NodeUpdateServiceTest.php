@@ -8,6 +8,12 @@ use App\Models\ServerMachine;
 use App\Models\Setting;
 use App\Services\NodeUpdate\NodeUpdateService;
 use App\Services\NodeUpdate\Protocol;
+use App\Services\NodeUpdate\ReleaseSourceService;
+use Illuminate\Cache\ArrayStore;
+use Illuminate\Cache\Repository as CacheRepository;
+use Illuminate\Http\Client\Factory;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Config\Repository;
 use Illuminate\Container\Container;
 use Illuminate\Database\Capsule\Manager;
@@ -51,6 +57,9 @@ class NodeUpdateServiceTest extends TestCase
             $t->increments('id'); $t->string('name')->unique(); $t->text('value'); $t->timestamps();
         });
         (require __DIR__.'/../../database/migrations/2026_08_29_000001_create_node_update_tables.php')->up();
+        (require __DIR__.'/../../database/migrations/2026_10_12_000001_add_node_update_latest_policies.php')->up();
+        Cache::swap(new CacheRepository(new ArrayStore()));
+        Http::swap(new Factory());
         DB::table('v2_settings')->insert(['name'=>'server_token','value'=>'legacy-fixture-credential']);
         for ($n=1;$n<=6;$n++) {
             DB::table('v2_server_machine')->insert(['id'=>$n,'token'=>'machine-'.$n,'is_active'=>true]);
@@ -145,6 +154,124 @@ class NodeUpdateServiceTest extends TestCase
         $this->send($i,$task,$a,1,'downloading');
         $this->send($i,$task,$a,2,'verifying_artifacts');
         $this->send($i,$task,$a,3,'installing');
+    }
+
+    public function testManifestImportIsIdempotentAndNeverRewritesOrUnrevokesARelease(): void
+    {
+        $release = $this->release();
+        $data = array_intersect_key($release, array_flip(['version','os','min_agent_protocol','artifacts']));
+        $data['artifacts'] = array_reverse($data['artifacts']);
+        self::assertSame($release['id'], $this->service->importRelease($data)['id']);
+        self::assertSame(1, $this->service->q('releases')->count());
+        $bad = $data; $bad['artifacts'][0]['size_bytes']++;
+        $this->error('version_conflict', fn() => $this->service->importRelease($bad));
+        $this->admin('releases/'.$release['id'].'/revoke');
+        self::assertNotNull($this->service->importRelease($data)['revoked_at']);
+        self::assertNull($this->service->latestRelease());
+    }
+
+    public function testLatestUsesNumericVersionOrderAndCompatibleArchitecture(): void
+    {
+        $this->release('v1.9.99');
+        $latest = $this->release('v1.10.0', ['amd64','arm64']);
+        $this->release('v1.2.3');
+        self::assertSame($latest['id'], $this->service->latestRelease('arm64')->id);
+        self::assertSame('v1.10.0', $this->admin('releases', [], 'GET')['items'][0]['version']);
+        $this->admin('releases/'.$latest['id'].'/revoke');
+        self::assertNull($this->service->latestRelease('arm64'));
+        self::assertSame('v1.9.99', $this->service->latestRelease('amd64')->version);
+    }
+
+    public function testManualLatestRunsWhileAutomaticUpdatesRemainDisabled(): void
+    {
+        $release = $this->release(); $installation = $this->enrollment();
+        $this->service->poll($installation['token'], $this->report($installation));
+        $key = (string) Str::uuid();
+        $batch = $this->admin('installations/'.$installation['id'].'/update-latest', [], 'POST', $key);
+        self::assertTrue($batch['manual']);
+        self::assertSame($batch, $this->admin('installations/'.$installation['id'].'/update-latest', [], 'POST', $key));
+        $poll = $this->service->poll($installation['token'], $this->report($installation));
+        self::assertFalse($poll['global_enabled']); self::assertFalse($poll['policy']['enabled']);
+        self::assertTrue($poll['candidate']['manual']);
+        $task = $poll['candidate']['task_id'];
+        $claim = $this->service->claim($installation['token'], $task, ['installation_id'=>$installation['id'], 'claim_id'=>(string)Str::uuid(), 'policy_revision'=>1]);
+        $this->installing($installation, $task, $claim);
+        $this->send($installation, $task, $claim, 4, 'verifying');
+        self::assertSame('succeeded', $this->send($installation, $task, $claim, 5, 'succeeded')['state']);
+        self::assertFalse($this->admin('settings', [], 'GET')['enabled']);
+        self::assertFalse($this->service->find('installations', $installation['id'])->policy_enabled);
+    }
+
+    public function testFollowLatestQueuesWithoutManualBatchAndPreservesInflightTarget(): void
+    {
+        $installation = $this->enrollment(); $release = $this->release();
+        $this->service->poll($installation['token'], $this->report($installation));
+        $this->admin('installations/'.$installation['id'].'/policy', ['enabled'=>true,'follow_latest'=>true,'target_release_id'=>null,'revision'=>1], 'PATCH');
+        self::assertNull($this->service->poll($installation['token'], $this->report($installation))['candidate']);
+        $this->admin('settings', ['enabled'=>true,'max_concurrency'=>5,'revision'=>1], 'PATCH');
+        $poll = $this->service->poll($installation['token'], $this->report($installation));
+        self::assertSame($release['id'], $poll['candidate']['release_id']);
+        self::assertFalse($poll['candidate']['manual']);
+        self::assertSame(1, $this->service->q('tasks')->count());
+        $newer = $this->release('v1.2.4');
+        $again = $this->service->poll($installation['token'], $this->report($installation));
+        self::assertSame($release['id'], $again['candidate']['release_id']);
+        self::assertSame(1, $this->service->q('tasks')->count());
+        $this->admin('batches/'.$this->service->q('batches')->first()->id.'/cancel');
+        $next = $this->service->poll($installation['token'], $this->report($installation));
+        self::assertSame($newer['id'], $next['candidate']['release_id']);
+    }
+
+    public function testFollowLatestDoesNotRetryFailedBuildOrDowngrade(): void
+    {
+        $installation = $this->enrollment(); $this->release();
+        $this->service->poll($installation['token'], $this->report($installation));
+        $this->admin('installations/'.$installation['id'].'/policy', ['enabled'=>true,'follow_latest'=>true,'target_release_id'=>null,'revision'=>1], 'PATCH');
+        $this->admin('settings', ['enabled'=>true,'max_concurrency'=>5,'revision'=>1], 'PATCH');
+        $poll = $this->service->poll($installation['token'], $this->report($installation));
+        $task = $poll['candidate']['task_id'];
+        $claim = $this->service->claim($installation['token'], $task, ['installation_id'=>$installation['id'],'claim_id'=>(string)Str::uuid(),'policy_revision'=>$poll['candidate']['policy_revision']]);
+        $this->send($installation, $task, $claim, 1, 'failed', 'download_failed');
+        self::assertNull($this->service->poll($installation['token'], $this->report($installation))['candidate']);
+        self::assertSame(1, $this->service->q('tasks')->count());
+        $report = $this->report($installation, ['versions'=>['mi_node'=>'v2.0.0','xbctl'=>'v2.0.0']]);
+        self::assertNull($this->service->poll($installation['token'], $report)['candidate']);
+        $dto = $this->admin('installations', [], 'GET')['items'][0];
+        self::assertSame('downgrade_forbidden', $dto['update']['status']);
+        self::assertFalse($dto['update']['available']);
+    }
+
+    public function testReleaseSourceFetchesManifestAndKeepsPreviousReleaseOnFailure(): void
+    {
+        $release = $this->release();
+        $data = array_intersect_key($release, array_flip(['version','os','min_agent_protocol','artifacts']));
+        $data['version'] = 'v1.2.4';
+        Http::fake(['*' => Http::response($data, 200)]);
+        $source = new ReleaseSourceService($this->service);
+        self::assertSame('v1.2.4', $source->sync()['latest']['version']);
+        self::assertNull($source->status()['error']);
+        Http::swap(new Factory()); Http::fake(['*' => Http::response('not found', 404)]);
+        $this->error('release_source_unavailable', fn() => $source->sync(), 503);
+        self::assertSame('v1.2.4', $source->status()['latest']['version']);
+        self::assertSame('release_source_unavailable', $source->status()['error']);
+        Http::swap(new Factory()); Http::fake(['*' => Http::response(str_repeat('x', 131073), 200)]);
+        $this->error('invalid_release_manifest', fn() => $source->sync(), 503);
+        self::assertSame(2, $this->service->q('releases')->count());
+    }
+
+    public function testManualLatestStillRejectsUnsupportedRevokedAndCurrentInstallations(): void
+    {
+        $release = $this->release(); $installation = $this->enrollment();
+        $report = $this->report($installation, ['runtime'=>['os'=>'linux','arch'=>'amd64','init'=>'systemd','container'=>true]]);
+        $this->service->poll($installation['token'], $report);
+        $this->error('unsupported', fn() => $this->admin('installations/'.$installation['id'].'/update-latest'));
+        $this->service->poll($installation['token'], $this->report($installation, ['versions'=>['mi_node'=>'v1.2.3','xbctl'=>'v1.2.3'],
+            'installed_sha256'=>['mi_node'=>str_repeat('a',64),'xbctl'=>str_repeat('b',64)]]));
+        $dto = $this->admin('installations', [], 'GET')['items'][0];
+        self::assertSame('already_current', $dto['update']['status']);
+        $this->error('already_current', fn() => $this->admin('installations/'.$installation['id'].'/update-latest'));
+        $this->admin('releases/'.$release['id'].'/revoke');
+        $this->error('no_release', fn() => $this->admin('installations/'.$installation['id'].'/update-latest'));
     }
 
     public function testDefaultsEnrollmentReplayAndCredentialSecrecy(): void

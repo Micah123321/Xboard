@@ -68,6 +68,12 @@ test('discovery contract supports plain and wrapped pages, filters, cancellation
  await assert.rejects(api.updates.discoveries(1, {}), error => error instanceof api.UpdateError && error.status === 404)
  response = { status: 200, data: { data: {} } }
 })
+test('latest release source and single install use stable authenticated routes', async () => {
+ response = { status: 200, data: { data: { latest: null } } }
+ await api.updates.releaseSource(); assert.equal(captured.url, '/server/update/release-source')
+ await api.updates.syncReleases('sync-key'); assert.equal(captured.url, '/server/update/releases/sync'); assert.deepEqual(captured.data, {}); assert.equal(captured.headers['Idempotency-Key'], 'sync-key')
+ await api.updates.updateLatest('installation', 'install-key'); assert.equal(captured.url, '/server/update/installations/installation/update-latest'); assert.deepEqual(captured.data, {}); assert.equal(captured.headers['Idempotency-Key'], 'install-key')
+})
 test('network failure retry keeps the same submission key', async () => {
  const keys = api.createIdempotencyKeys(); const body = { scope: { kind: 'machine', machine_id: 12 } }
  failNetwork = true

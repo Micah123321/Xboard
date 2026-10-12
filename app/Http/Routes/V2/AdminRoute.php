@@ -32,13 +32,13 @@ class AdminRoute
         ], function ($router) {
             $router->group(['prefix' => 'server/update'], function ($route) {
                 $controller = \App\Http\Controllers\V2\Admin\NodeUpdateController::class;
-                foreach (['settings', 'releases', 'installations', 'discoveries', 'batches', 'batches/{id}', 'batches/{id}/tasks', 'tasks/{id}/events', 'coverage'] as $uri) {
+                foreach (['settings', 'release-source', 'releases', 'installations', 'discoveries', 'batches', 'batches/{id}', 'batches/{id}/tasks', 'tasks/{id}/events', 'coverage'] as $uri) {
                     $route->get($uri, [$controller, 'handle']);
                 }
                 foreach (['settings', 'installations/{id}/policy'] as $uri) {
                     $route->patch($uri, [$controller, 'handle']);
                 }
-                foreach (['releases', 'releases/{id}/revoke', 'enrollments', 'installations/{id}/revoke', 'batches/preview', 'batches', 'batches/{id}/pause', 'batches/{id}/resume', 'batches/{id}/cancel', 'tasks/{id}/resolve'] as $uri) {
+                foreach (['releases', 'releases/sync', 'releases/{id}/revoke', 'enrollments', 'installations/{id}/revoke', 'installations/{id}/update-latest', 'batches/preview', 'batches', 'batches/{id}/pause', 'batches/{id}/resume', 'batches/{id}/cancel', 'tasks/{id}/resolve'] as $uri) {
                     $route->post($uri, [$controller, 'handle']);
                 }
             });

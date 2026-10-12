@@ -178,15 +178,17 @@ class NodeUpdateService
             $i=$this->authenticate($token,$d['installation_id']);
             $i->forceFill(['versions'=>$d['versions'],'installed_sha256'=>$d['installed_sha256'],'runtime'=>$d['runtime'],
                 'capability'=>$d['capability'],'reported_active_attempt'=>$d['active_attempt'],'last_seen_at'=>now('UTC')])->save();
+            $this->enqueueLatest($s);
+            $i->refresh();
             $candidate=null;
             if (!$i->active_task_id && $d['active_attempt']===null) {
                 foreach ($this->q('tasks')->where('installation_id',$i->id)->where('state','queued')->orderBy('created_at')->get() as $t) {
                     $b=$this->find('batches',$t->batch_id);
                     $r=$this->find('releases',$b->release_id);
-                    $code=$this->eligibility($i,$r,$s);
+                    $code=$this->eligibility($i,$r,$s,$b->manual);
                     if ($code==='already_current') { $this->finish($t,'skipped',$code); $this->aggregate($b); continue; }
-                    if ($code===null && $b->state==='running' && $t->policy_revision===$i->policy_revision) {
-                        $candidate=['task_id'=>$t->id,'release_id'=>$r->id,'version'=>$r->version,'policy_revision'=>$t->policy_revision]; break;
+                    if ($code===null && $b->state==='running' && ($b->manual || $t->policy_revision===$i->policy_revision)) {
+                        $candidate=['task_id'=>$t->id,'release_id'=>$r->id,'version'=>$r->version,'policy_revision'=>$t->policy_revision,'manual'=>$b->manual]; break;
                     }
                 }
             }
@@ -194,10 +196,10 @@ class NodeUpdateService
         });
     }
 
-    public function eligibility(Record $i, Record $r, Record $s): ?string
+    public function eligibility(Record $i, Record $r, Record $s, bool $manual = false): ?string
     {
         if (!$this->validInstallation($i)) return 'invalid_credentials';
-        if (!$s->enabled || !$i->policy_enabled || $i->target_release_id!==$r->id) return 'policy_disabled';
+        if (!$manual && (!$s->enabled || !$i->policy_enabled || $i->target_release_id!==$r->id)) return 'policy_disabled';
         if ($r->revoked_at) return 'release_revoked';
         if ($i->active_task_id || $i->reported_active_attempt!==null) return 'task_claimed';
         $rt=$i->runtime;
@@ -224,7 +226,7 @@ class NodeUpdateService
         if ($b->cancel_requested || $b->state==='canceling') return 'batch_canceled';
         if ($t->cancel_requested) return $t->code==='batch_paused' ? 'batch_paused' : 'batch_canceled';
         if ($b->state!=='running') return 'batch_paused';
-        if (!$s->enabled || !$i->policy_enabled || $i->target_release_id!==$b->release_id || $t->policy_revision!==$i->policy_revision) return 'policy_disabled';
+        if (!$b->manual && (!$s->enabled || !$i->policy_enabled || $i->target_release_id!==$b->release_id || $t->policy_revision!==$i->policy_revision)) return 'policy_disabled';
         if ($this->find('releases',$b->release_id)->revoked_at) return 'release_revoked';
         return null;
     }
@@ -243,9 +245,9 @@ class NodeUpdateService
                 return json_decode(Crypt::decryptString($prior->claim_response_ciphertext),true,512,JSON_THROW_ON_ERROR);
             }
             if ($t->state!=='queued' || $this->q('attempts')->where('task_id',$t->id)->exists()) Protocol::fail('task_claimed',409);
-            if ($d['policy_revision']!==$i->policy_revision || $this->gate($s,$b,$i,$t)) Protocol::fail('policy_changed',409);
+            if ($d['policy_revision']!==$t->policy_revision || (!$b->manual && $d['policy_revision']!==$i->policy_revision) || $this->gate($s,$b,$i,$t)) Protocol::fail('policy_changed',409);
             $r=$this->find('releases',$b->release_id);
-            $code=$this->eligibility($i,$r,$s);
+            $code=$this->eligibility($i,$r,$s,$b->manual);
             if ($code!==null) Protocol::fail($code,409);
             $occupied=$this->q('tasks')->whereNotIn('state',array_merge(['queued'],Protocol::TERMINAL))->count();
             $inBatch=$this->q('tasks')->where('batch_id',$b->id)->whereNotIn('state',array_merge(['queued'],Protocol::TERMINAL))->count();
@@ -370,7 +372,7 @@ class NodeUpdateService
             [$b,$i,$t]=$this->context($candidate);
             if ($t->state==='queued') {
                 $release=$this->find('releases',$b->release_id);
-                $code=$b->cancel_requested?'batch_canceled':($release->revoked_at?'release_revoked':((!$s->enabled || !$i->policy_enabled || $i->revoked_at || $i->target_release_id!==$b->release_id || $i->policy_revision!==$t->policy_revision)?'policy_disabled':null));
+                $code=$b->cancel_requested?'batch_canceled':($release->revoked_at?'release_revoked':(($i->revoked_at || (!$b->manual && (!$s->enabled || !$i->policy_enabled || $i->target_release_id!==$b->release_id || $i->policy_revision!==$t->policy_revision)))?'policy_disabled':null));
                 if ($code) $this->finish($t,'canceled',$code);
             } elseif ($t->state!=='uncertain') {
                 $a=$this->q('attempts')->where('task_id',$t->id)->first();
@@ -404,8 +406,81 @@ class NodeUpdateService
         });
     }
 
-    public function maintain(): void { $this->atomic(fn()=>null); }
-    public function policy(Record $i): array { return ['enabled'=>$i->policy_enabled,'target_release_id'=>$i->target_release_id,'revision'=>$i->policy_revision]; }
+    public function latestRelease(?string $arch = null): ?Record
+    {
+        return $this->q('releases')->whereNull('revoked_at')->get()
+            ->filter(fn($release) => $arch === null || ($release->min_agent_protocol <= 1 && count(array_filter($release->artifacts, fn($a) => $a['arch'] === $arch)) === 2))
+            ->sort(fn($a, $b) => Protocol::compare($b->version, $a->version))->first();
+    }
+
+    public function importRelease(array $data): array
+    {
+        Protocol::release($data);
+        return $this->atomic(function () use ($data) {
+            $existing = $this->q('releases')->where('version', $data['version'])->first();
+            if ($existing) {
+                $stored = array_intersect_key($this->dto('releases', $existing), $data);
+                $normalize = static function ($release) {
+                    usort($release['artifacts'], fn($a, $b) => strcmp($a['arch'].':'.$a['component'], $b['arch'].':'.$b['component']));
+                    return $release;
+                };
+                if (Protocol::hash($normalize($stored)) !== Protocol::hash($normalize($data))) Protocol::fail('version_conflict', 409);
+                return $this->dto('releases', $existing);
+            }
+            return $this->dto('releases', $this->create('releases', $data + ['published_at' => now('UTC'), 'created_by' => 0]));
+        });
+    }
+
+    private function updateStatus(Record $installation): array
+    {
+        $release = $this->latestRelease($installation->runtime['arch'] ?? null);
+        $status = $release ? $this->eligibility($installation, $release, $this->q('settings')->find(1), true) : 'no_release';
+        if ($release && $this->q('tasks')->where('installation_id', $installation->id)->whereNotIn('state', Protocol::TERMINAL)->exists()) $status = 'task_claimed';
+        return ['latest_release_id' => $release?->id, 'latest_version' => $release?->version,
+            'available' => $release !== null && $status === null, 'status' => $status ?? 'update_available'];
+    }
+
+    private function queueLatestBatch(int $admin, Record $release, Record $settings, array $installations, bool $manual): Record
+    {
+        $batch = $this->create('batches', ['release_id' => $release->id, 'manual' => $manual, 'state' => 'running',
+            'max_concurrency' => $settings->max_concurrency, 'fail_pause_after' => 1, 'failure_baseline' => 0,
+            'cancel_requested' => false, 'created_by' => $admin]);
+        foreach ($installations as $installation) {
+            $task = $this->create('tasks', ['batch_id' => $batch->id, 'installation_id' => $installation->id,
+                'release_snapshot' => $this->dto('releases', $release), 'policy_revision' => $installation->policy_revision, 'state' => 'queued']);
+            $this->audit($task, ['state' => 'queued', 'admin_id' => $admin, 'manual' => $manual], $manual ? 'admin' : 'server');
+        }
+        return $batch;
+    }
+
+    private function enqueueLatest(Record $settings): void
+    {
+        if (!$settings->enabled || $this->q('batches')->whereIn('state', ['running','paused','canceling'])->exists()) return;
+        $groups = [];
+        foreach ($this->q('installations')->whereNull('revoked_at')->where('policy_enabled', true)->where('follow_latest', true)->get() as $installation) {
+            if ($installation->active_task_id || $installation->reported_active_attempt !== null
+                || !$installation->last_seen_at || $installation->last_seen_at->lt(now('UTC')->subSeconds(180))) continue;
+            $release = $this->latestRelease($installation->runtime['arch'] ?? null);
+            if (!$release || $this->eligibility($installation, $release, $settings, true) !== null) continue;
+            // A failed/canceled rollout requires an explicit retry; polling must not restart it forever.
+            $prior = $this->q('tasks')->where('installation_id', $installation->id)
+                ->whereIn('batch_id', $this->q('batches')->where('release_id', $release->id)->select('id'))
+                ->where(function ($q) { $q->whereNotIn('state', ['canceled','succeeded','skipped'])->orWhere(function ($q) { $q->where('state', 'canceled')->where('code', '!=', 'policy_disabled'); }); })->exists();
+            if ($prior) continue;
+            if ($installation->target_release_id !== $release->id) {
+                $installation->forceFill(['target_release_id' => $release->id, 'policy_revision' => $installation->policy_revision + 1])->save();
+            }
+            $groups[$release->id]['release'] = $release;
+            $groups[$release->id]['installations'][] = $installation;
+        }
+        foreach ($groups as $group) {
+            $this->queueLatestBatch(0, $group['release'], $settings, $group['installations'], false);
+            break;
+        }
+    }
+
+    public function maintain(): void { $this->atomic(fn($s)=>$this->enqueueLatest($s)); }
+    public function policy(Record $i): array { return ['enabled'=>$i->policy_enabled,'target_release_id'=>$i->target_release_id,'revision'=>$i->policy_revision,'follow_latest'=>$i->follow_latest]; }
     public function counts(string $batchId): array
     {
         $counts=array_fill_keys(Protocol::STATES,0);
@@ -419,8 +494,8 @@ class NodeUpdateService
         if ($type==='releases') return ['id'=>$r->id,'version'=>$r->version,'os'=>$r->os,'min_agent_protocol'=>$r->min_agent_protocol,'artifacts'=>$r->artifacts,'published_at'=>Protocol::time($r->published_at),'revoked_at'=>Protocol::time($r->revoked_at)];
         if ($type==='installations') return ['id'=>$r->id,'scope'=>$r->scope,'versions'=>$r->versions,'installed_sha256'=>$r->installed_sha256,'runtime'=>$r->runtime,'capability'=>$r->capability,
             'last_seen_at'=>Protocol::time($r->last_seen_at),'online'=>$r->last_seen_at!==null && $r->last_seen_at->gte(now('UTC')->subSeconds(180)),
-            'policy'=>$this->policy($r),'active_task_id'=>$r->active_task_id,'revoked_at'=>Protocol::time($r->revoked_at)];
-        if ($type==='batches') return ['id'=>$r->id,'release_id'=>$r->release_id,'state'=>$r->state,'max_concurrency'=>$r->max_concurrency,'fail_pause_after'=>$r->fail_pause_after,'counts'=>$this->counts($r->id),'created_at'=>Protocol::time($r->created_at),'finished_at'=>Protocol::time($r->finished_at)];
+            'policy'=>$this->policy($r),'active_task_id'=>$r->active_task_id,'revoked_at'=>Protocol::time($r->revoked_at),'update'=>$this->updateStatus($r)];
+        if ($type==='batches') return ['id'=>$r->id,'release_id'=>$r->release_id,'manual'=>$r->manual,'state'=>$r->state,'max_concurrency'=>$r->max_concurrency,'fail_pause_after'=>$r->fail_pause_after,'counts'=>$this->counts($r->id),'created_at'=>Protocol::time($r->created_at),'finished_at'=>Protocol::time($r->finished_at)];
         if ($type==='tasks') {
             $a=$this->q('attempts')->where('task_id',$r->id)->first();
             return ['id'=>$r->id,'batch_id'=>$r->batch_id,'installation_id'=>$r->installation_id,'state'=>$r->state,'last_phase'=>$r->last_phase,'code'=>$r->code,'message'=>$r->message,
@@ -434,6 +509,16 @@ class NodeUpdateService
     {
         $write=$method!=='GET' && $path!=='batches/preview';
         if ($write) Protocol::uuid($key);
+        if ($method === 'POST' && $path === 'releases/sync') {
+            Protocol::fields($d, []);
+            $prior = $this->q('requests')->where('admin_id', $admin)->where('key', $key)->first();
+            if ($prior) {
+                if (!hash_equals($prior->request_hash, Protocol::hash(['method'=>$method,'path'=>$path,'body'=>$d]))) Protocol::fail('idempotency_conflict',409);
+                return $prior->response;
+            }
+            // Fetch outside the transaction so network latency never holds the update writer lock.
+            (new ReleaseSourceService($this))->sync();
+        }
         return $this->atomic(function ($s) use ($admin,$method,$path,$d,$key,$write) {
             $hash=Protocol::hash(['method'=>$method,'path'=>$path,'body'=>$d]);
             if ($write) {
@@ -474,6 +559,10 @@ class NodeUpdateService
     private function adminAction(int $admin, string $method, string $path, array $d, Record $s): array
     {
         $parts=explode('/',$path); $type=$parts[0]; $id=$parts[1]??null; $action=$parts[2]??null;
+        if ($type === 'release-source' || ($type === 'releases' && $id === 'sync')) {
+            Protocol::fields($d, []);
+            return (new ReleaseSourceService($this))->status();
+        }
         if ($type==='settings') {
             if ($method==='GET') Protocol::fields($d,[]);
             else {
@@ -517,7 +606,9 @@ class NodeUpdateService
             }
             $page=$this->queryInt($d['page']??1,1,1000000); $size=$this->queryInt($d['page_size']??20,1,100);
             $total=$query->count();
-            $rows=$query->orderBy($dtoType==='events'?'received_at':'created_at')->orderBy('id')->offset(($page-1)*$size)->limit($size)->get();
+            $rows=$type==='releases'
+                ? $query->get()->sort(fn($a,$b)=>Protocol::compare($b->version,$a->version))->slice(($page-1)*$size,$size)->values()
+                : $query->orderBy($dtoType==='events'?'received_at':'created_at')->orderBy('id')->offset(($page-1)*$size)->limit($size)->get();
             return ['items'=>$rows->map(fn($r)=>$this->dto($dtoType,$r))->all(),'page'=>$page,'page_size'=>$size,'total'=>$total];
         }
         if ($type==='releases' && !$id) {
@@ -536,6 +627,16 @@ class NodeUpdateService
             $e=$this->create('enrollments',['scope'=>$d['scope'],'secret_hash'=>hash('sha256',$secret),'expires_at'=>now('UTC')->addSeconds(900),'created_by'=>$admin]);
             return ['enrollment_id'=>$e->id,'enrollment_secret'=>$secret,'expires_at'=>Protocol::time($e->expires_at)];
         }
+        if ($type === 'installations' && $action === 'update-latest') {
+            Protocol::fields($d, []); Protocol::uuid($id);
+            $installation = $this->find('installations', $id);
+            $release = $this->latestRelease($installation->runtime['arch'] ?? null);
+            if (!$release) Protocol::fail('no_release', 409);
+            $code = $this->eligibility($installation, $release, $s, true);
+            if ($code !== null) Protocol::fail($code, 409);
+            if ($this->q('batches')->whereIn('state', ['running','paused','canceling'])->exists()) Protocol::fail('active_batch', 409);
+            return $this->dto('batches', $this->queueLatestBatch($admin, $release, $s, [$installation], true));
+        }
         if ($type==='installations') {
             Protocol::uuid($id); $i=$this->find('installations',$id);
             if ($action==='revoke') {
@@ -543,11 +644,12 @@ class NodeUpdateService
                 if (!$i->revoked_at) $i->forceFill(['revoked_at'=>now('UTC'),'policy_enabled'=>false,'policy_revision'=>$i->policy_revision+1])->save();
                 $this->sweep($s); return ['id'=>$i->id,'revoked_at'=>Protocol::time($i->revoked_at)];
             }
-            Protocol::fields($d,['enabled','target_release_id','revision']); Protocol::boolean($d['enabled']); Protocol::integer($d['revision']);
+            Protocol::fields($d,['enabled','target_release_id','revision'],['follow_latest']); Protocol::boolean($d['enabled']); Protocol::integer($d['revision']);
+            $follow=$d['follow_latest']??false; Protocol::boolean($follow);
             if ($d['target_release_id']!==null) { Protocol::uuid($d['target_release_id']); $r=$this->find('releases',$d['target_release_id']); if ($r->revoked_at) Protocol::fail('release_revoked',409); }
-            if ($d['enabled'] && ($d['target_release_id']===null || $i->revoked_at)) Protocol::fail();
+            if ($d['enabled'] && ((!$follow && $d['target_release_id']===null) || $i->revoked_at)) Protocol::fail();
             if ($d['revision']!==$i->policy_revision) Protocol::fail('revision_conflict',409);
-            $i->forceFill(['policy_enabled'=>$d['enabled'],'target_release_id'=>$d['target_release_id'],'policy_revision'=>$i->policy_revision+1])->save();
+            $i->forceFill(['policy_enabled'=>$d['enabled'],'follow_latest'=>$follow,'target_release_id'=>$d['target_release_id'],'policy_revision'=>$i->policy_revision+1])->save();
             $this->sweep($s); return $this->policy($i);
         }
         if ($type==='batches' && (!$id || $id==='preview')) {

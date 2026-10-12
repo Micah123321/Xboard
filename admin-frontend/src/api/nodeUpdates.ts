@@ -1,5 +1,5 @@
 import { adminClient } from './client'
-import type { Page, Settings, Policy, Release, ReleaseInput, Installation, Batch, BatchInput, Task, TaskState, UpdateEvent, Preview, Scope, Enrollment, Coverage, Discovery, DiscoveryFilters } from '@/types/nodeUpdates'
+import type { ReleaseSource, Page, Settings, Policy, Release, ReleaseInput, Installation, Batch, BatchInput, Task, TaskState, UpdateEvent, Preview, Scope, Enrollment, Coverage, Discovery, DiscoveryFilters } from '@/types/nodeUpdates'
 
 export class UpdateError extends Error {
  code: string
@@ -22,6 +22,9 @@ async function request<T>(method: string, path: string, data?: unknown, key?: st
  return (path === '/discoveries' ? response.data.data ?? response.data : response.data.data) as T
 }
 export const updates = {
+ releaseSource: (signal?: AbortSignal) => request<ReleaseSource>('GET', '/release-source', undefined, undefined, undefined, signal),
+ syncReleases: (key: string) => request<ReleaseSource>('POST', '/releases/sync', {}, key),
+ updateLatest: (id: string, key: string) => request<Batch>('POST', '/installations/' + id + '/update-latest', {}, key),
  discoveries: (page: number, filters: DiscoveryFilters, signal?: AbortSignal) => request<Page<Discovery>>('GET', '/discoveries', undefined, undefined, { page, page_size: 20, ...filters }, signal),
  settings: (signal?: AbortSignal) => request<Settings>('GET', '/settings', undefined, undefined, undefined, signal),
  saveSettings: (data: Settings, key: string) => request<Settings>('PATCH', '/settings', data, key),

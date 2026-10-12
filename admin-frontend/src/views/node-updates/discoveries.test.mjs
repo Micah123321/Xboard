@@ -14,10 +14,13 @@ function setup() {
  const document = { hidden: false, addEventListener() {}, removeEventListener() {} }
  const updates = {
   discoveries: async (...args) => { requests.push(args); return page([node]) },
-  settings: async () => ({ enabled: false }), releases: async () => page(), installations: async () => page([{ id: 'managed' }]),
+  releaseSource: async () => ({ latest: null, url: '', checked_at: null, error: null }),
+   policy: async (_id, data) => data, updateLatest: async () => ({ id: 'batch' }),
+   batches: async () => page(), batch: async () => ({ id: 'batch' }), tasks: async () => page(),
+   settings: async () => ({ enabled: false }), releases: async () => page(), installations: async () => page([{ id: 'managed' }]),
  }
- const bindings = { updates, UpdateError, createIdempotencyKeys: () => ({}), ref: value => ({ value }), reactive: value => value, computed: fn => ({ get value() { return fn() } }), watch() {}, onMounted() {}, onBeforeUnmount: fn => { unmount = fn }, document, setTimeout: (fn, delay) => { timers.set(++nextTimer, { fn, delay }); return nextTimer }, clearTimeout: id => timers.delete(id), positiveIds: text => [Number(text)], reasonLabel: code => code, ElMessage: { error() {} } }
- const state = new Function(...Object.keys(bindings), compiled + '\nreturn { refresh, visibility, pageChange, applyFilters, discoveries, discoveryError, installations, pages, filters, tab }')(...Object.values(bindings))
+ const bindings = { updates, UpdateError, createIdempotencyKeys: () => ({ get: () => 'stable-key', clear() {} }), ref: value => ({ value }), reactive: value => value, computed: fn => ({ get value() { return fn() } }), watch() {}, onMounted() {}, onBeforeUnmount: fn => { unmount = fn }, document, setTimeout: (fn, delay) => { timers.set(++nextTimer, { fn, delay }); return nextTimer }, clearTimeout: id => timers.delete(id), positiveIds: text => [Number(text)], reasonLabel: code => code, ElMessage: { error() {}, success() {} }, ElMessageBox: { confirm: async () => true } }
+ const state = new Function(...Object.keys(bindings), compiled + '\nreturn { refresh, visibility, pageChange, applyFilters, discoveries, discoveryError, installations, pages, filters, tab, installLatest, followLatest, releaseSourceError }')(...Object.values(bindings))
  return { ...state, updates, requests, timers, document, unmount: () => unmount() }
 }
 test('discovery survives unavailable management and preserves SHA version', async () => {
@@ -41,6 +44,19 @@ test('independent discovery pagination and shared ID filters exclude capability'
   assert.deepEqual(s.requests.at(-1)[1], { [kind]: 7 }); assert.equal(s.pages.discoveries, 1); assert.equal(s.pages.installations, 1)
  }
  s.filters.id = ''; s.applyFilters(); await s.refresh(); assert.deepEqual(s.requests.at(-1)[1], {})
+})
+test('release detection failure keeps the managed node list available', async () => {
+ const s = setup(); s.updates.releaseSource = async () => { throw new UpdateError(404) }
+ await s.refresh(); assert.equal(s.installations.value.items[0].id, 'managed'); assert.match(s.releaseSourceError.value, /暂未就绪/)
+})
+test('single install works with global auto off and following latest needs no fixed version', async () => {
+ const s = setup(); let installed; let policy
+ s.updates.updateLatest = async (id, key) => { installed = { id, key }; return { id: 'batch' } }
+ await s.refresh(); await s.installLatest({ id: 'managed', update: { latest_version: 'v1.2.3' } })
+ assert.deepEqual(installed, { id: 'managed', key: 'stable-key' })
+ s.updates.policy = async (id, data) => { policy = { id, ...data }; return data }
+ await s.followLatest({ id: 'managed', policy: { revision: 2 } }, true)
+ assert.deepEqual(policy, { id: 'managed', enabled: true, follow_latest: true, target_release_id: null, revision: 2 })
 })
 test('hidden and unmounted views cancel discovery and ignore stale results', async () => {
  const s = setup(); await s.refresh(); let resolve; let signal

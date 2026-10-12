@@ -3,11 +3,14 @@ export interface Page<T> { items: T[]; page: number; page_size: number; total: n
 export interface Discovery { node_id: number; node_name: string; machine_id: number | null; installation_id: string; version: string; os: string; arch: string; last_seen_at: string }
 export interface DiscoveryFilters { node_id?: number; machine_id?: number; page_size?: number }
 export interface Settings { enabled: boolean; max_concurrency: number; revision: number }
-export interface Policy { enabled: boolean; target_release_id: string | null; revision: number }
+export interface Policy { enabled: boolean; target_release_id: string | null; revision: number; follow_latest?: boolean }
 export interface Artifact { arch: 'amd64' | 'arm64'; component: 'mi-node' | 'xbctl'; https_url: string; sha256: string; size_bytes: number }
 export interface ReleaseInput { version: string; os: 'linux'; min_agent_protocol: number; artifacts: Artifact[] }
 export interface Release extends ReleaseInput { id: string; published_at: string; revoked_at: string | null }
+export interface ReleaseSource { url: string; checked_at: string | null; error: string | null; latest: Release | null }
+export interface UpdateStatus { latest_release_id: string | null; latest_version: string | null; available: boolean; status: string }
 export interface Installation {
+ update?: UpdateStatus;
  id: string; scope: Scope; versions: { mi_node: string | null; xbctl: string | null };
  installed_sha256: { mi_node: string | null; xbctl: string | null };
  runtime: { os: string | null; arch: string | null; init: string | null; container: boolean | null };

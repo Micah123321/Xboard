@@ -29,6 +29,9 @@ class Kernel extends ConsoleKernel
     {
         Cache::put(CacheKey::get('SCHEDULE_LAST_CHECK_AT', null), time());
         $schedule->command('node-update:maintain')->everyThirtySeconds()->onOneServer()->withoutOverlapping(1);
+        if (config('node_updates.auto_sync', true)) {
+            $schedule->command('node-update:sync')->everyFiveMinutes()->onOneServer()->withoutOverlapping(5);
+        }
         // v2board
         $schedule->command('xboard:statistics')->dailyAt('0:10')->onOneServer();
         // check

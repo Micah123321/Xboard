@@ -15,6 +15,7 @@ class NodeUpdateRecord extends Model
         'installed_sha256'=>'array','reported_active_attempt'=>'array','release_snapshot'=>'array',
         'payload'=>'array','response'=>'array','request_payload'=>'array',
         'enabled'=>'boolean','policy_enabled'=>'boolean','cancel_requested'=>'boolean',
+        'follow_latest'=>'boolean','manual'=>'boolean',
         'revision'=>'integer','policy_revision'=>'integer','max_concurrency'=>'integer',
         'fail_pause_after'=>'integer','failure_baseline'=>'integer','min_agent_protocol'=>'integer',
         'last_seq'=>'integer','seq'=>'integer',
