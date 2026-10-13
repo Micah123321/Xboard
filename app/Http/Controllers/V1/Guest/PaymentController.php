@@ -4,6 +4,7 @@ namespace App\Http\Controllers\V1\Guest;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\User;
 use App\Services\OrderService;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
@@ -39,10 +40,16 @@ class PaymentController extends Controller
 
     private function handleBepusdt(array $verify): bool
     {
-        return DB::transaction(function () use ($verify) {
+        $userId = Order::where('trade_no', $verify['trade_no'])->value('user_id');
+        return DB::transaction(function () use ($verify, $userId) {
+            // Match fulfillment's user-before-order lock order for concurrent purchases.
+            if (!$userId || !User::lockForUpdate()->find($userId)) {
+                return false;
+            }
             $order = Order::where('trade_no', $verify['trade_no'])->lockForUpdate()->first();
             // Recheck under the lock: checkout may have changed the channel or fee.
-            if (!$order || (int) $order->payment_id !== $verify['payment_id']
+            if (!$order || (int) $order->user_id !== (int) $userId
+                || (int) $order->payment_id !== $verify['payment_id']
                 || $order->payment?->payment !== 'BEpusdt'
                 || (int) $order->total_amount + (int) $order->handling_amount !== $verify['expected_amount']) {
                 return false;
@@ -57,7 +64,7 @@ class PaymentController extends Controller
                 // paid() catches dispatch failures; throwing here restores the pending order for retry.
                 throw new \RuntimeException('BEpusdt order fulfillment failed');
             }
-            HookManager::call('payment.notify.success', $order);
+            DB::afterCommit(fn () => HookManager::call('payment.notify.success', $order));
             return true;
         });
     }

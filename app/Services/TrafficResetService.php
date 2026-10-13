@@ -43,7 +43,7 @@ class TrafficResetService
 
         $nextResetTime = $this->calculateNextResetTime($lockedUser);
 
-        $lockedUser->update([
+        if (!$lockedUser->update([
           'u' => 0,
           'd' => 0,
           'transfer_enable' => $transferEnableAfterReset,
@@ -51,7 +51,9 @@ class TrafficResetService
           'last_reset_at' => time(),
           'reset_count' => $lockedUser->reset_count + 1,
           'next_reset_at' => $nextResetTime ? $nextResetTime->timestamp : null,
-        ]);
+        ])) {
+          throw new \RuntimeException('Traffic reset user save failed');
+        }
 
         $this->recordResetLog($lockedUser, [
           'reset_type' => $this->getResetTypeFromPlan($lockedUser->plan),

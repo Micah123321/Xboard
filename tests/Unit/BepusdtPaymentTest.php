@@ -63,6 +63,7 @@ class BepusdtPaymentTest extends TestCase
         $this->database = new Manager($container);
         $this->database->addConnection(['driver' => 'sqlite', 'database' => ':memory:']);
         $this->database->bootEloquent();
+        $this->database->getConnection()->setTransactionManager(new \Illuminate\Database\DatabaseTransactionsManager());
         $container->instance('db', $this->database->getDatabaseManager());
         $schema = $this->database->getConnection()->getSchemaBuilder();
         $schema->create('v2_payment', function (Blueprint $table) {
@@ -74,8 +75,13 @@ class BepusdtPaymentTest extends TestCase
             $table->boolean('enable');
             $table->timestamps();
         });
+        $schema->create('v2_user', function (Blueprint $table) {
+            $table->id();
+        });
+        $this->database->getConnection()->table('v2_user')->insert(['id'=>1]);
         $schema->create('v2_order', function (Blueprint $table) {
             $table->id();
+            $table->integer('user_id')->default(1);
             $table->string('trade_no')->unique();
             $table->integer('payment_id');
             $table->integer('total_amount');
@@ -333,6 +339,29 @@ class BepusdtPaymentTest extends TestCase
         app()->instance(Dispatcher::class, $dispatcher);
         self::assertSame('success', (new PaymentController())->notify('Legacy', 'payment-uuid', Request::create('/notify', 'POST')));
         self::assertSame('legacy-1', Order::first()->callback_no);
+    }
+
+    public function test_payment_success_hook_waits_for_outer_commit_and_is_discarded_on_rollback(): void
+    {
+        $this->expectDispatches(2);
+        $completed = 0;
+        HookManager::register('payment.notify.success', function () use (&$completed) {
+            self::assertSame(0, $this->database->getConnection()->transactionLevel());
+            self::assertSame(Order::STATUS_COMPLETED, Order::first()->status);
+            $completed++;
+        });
+        $connection = $this->database->getConnection();
+        $connection->beginTransaction();
+        self::assertSame('success', $this->notify($this->callbackPayload()));
+        self::assertSame(0, $completed);
+        $connection->rollBack();
+        self::assertSame(Order::STATUS_PENDING, Order::first()->status);
+        self::assertSame(0, $completed);
+        $connection->beginTransaction();
+        self::assertSame('success', $this->notify($this->callbackPayload()));
+        self::assertSame(0, $completed);
+        $connection->commit();
+        self::assertSame(1, $completed);
     }
 
     private function expectDispatches(int $count): void

@@ -12,7 +12,7 @@ class OrderServicePaymentSnapshotTest extends TestCase
 {
     public function test_build_payment_snapshot_prefers_callback_metadata_over_payment_defaults(): void
     {
-        $payment = new Payment([
+        $payment = (new Payment())->forceFill([
             'name' => 'TokenPay 收银台',
             'payment' => 'TokenPay',
             'config' => ['token_pay_currency' => 'USDT_TRC20'],
@@ -36,7 +36,7 @@ class OrderServicePaymentSnapshotTest extends TestCase
 
     public function test_build_payment_snapshot_falls_back_to_payment_config_when_callback_method_missing(): void
     {
-        $payment = new Payment([
+        $payment = (new Payment())->forceFill([
             'name' => 'TokenPay 收银台',
             'payment' => 'TokenPay',
             'config' => ['token_pay_currency' => 'USDT_TRC20'],
@@ -55,7 +55,7 @@ class OrderServicePaymentSnapshotTest extends TestCase
 
     public function test_build_payment_snapshot_ignores_invalid_amount_and_blank_ip(): void
     {
-        $payment = new Payment([
+        $payment = (new Payment())->forceFill([
             'payment' => 'TokenPay',
             'config' => [],
         ]);

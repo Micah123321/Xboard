@@ -96,13 +96,17 @@ class OrderService
     public function open(): void
     {
         $order = $this->order;
-        $plan = Plan::find($order->plan_id);
+        $opened = DB::transaction(function () use (&$order) {
+            // Serialize purchases for the same user before checking their purchase history.
+            $this->user = User::lockForUpdate()->findOrFail($order->user_id);
+            $order = Order::lockForUpdate()->findOrFail($order->id);
+            $this->order = $order;
+            if ((int) $order->status !== Order::STATUS_PROCESSING) {
+                return false;
+            }
 
-        HookManager::call('order.open.before', $order);
-
-
-        DB::transaction(function () use ($order, $plan) {
-            $this->user = User::lockForUpdate()->find($order->user_id);
+            $plan = Plan::findOrFail($order->plan_id);
+            HookManager::call('order.open.before', $order);
 
             if ($order->refund_amount) {
                 $this->user->balance += $order->refund_amount;
@@ -115,13 +119,30 @@ class OrderService
 
             match ((string) $order->period) {
                 Plan::PERIOD_ONETIME => $this->buyByOneTime($plan),
-                Plan::PERIOD_RESET_TRAFFIC => app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER),
+                Plan::PERIOD_RESET_TRAFFIC => $this->resetOrderTraffic(),
                 default => $this->buyByPeriod($order, $plan),
             };
 
             $this->setSpeedLimit($plan->speed_limit);
             $this->setDeviceLimit($plan->device_limit);
 
+            $eventId = match ((int) $order->type) {
+                Order::TYPE_NEW_PURCHASE => admin_setting('new_order_event_id', 0),
+                Order::TYPE_RENEWAL => admin_setting('renew_order_event_id', 0),
+                Order::TYPE_UPGRADE => admin_setting('change_order_event_id', 0),
+                default => 0,
+            };
+
+            if ($eventId) {
+                if (!$this->user->save()) {
+                    throw new \RuntimeException('用户信息保存失败');
+                }
+                $this->openEvent($eventId);
+                $this->user->refresh();
+            }
+
+            // Apply the one-time bonus after resets so opening the plan cannot clear it.
+            $this->grantInviteFirstPurchaseTraffic($order, $plan);
             if (!$this->user->save()) {
                 throw new \RuntimeException('用户信息保存失败');
             }
@@ -130,20 +151,43 @@ class OrderService
             if (!$order->save()) {
                 throw new \RuntimeException('订单信息保存失败');
             }
+
+            return true;
         });
 
-        $eventId = match ((int) $order->type) {
-            Order::STATUS_PROCESSING => admin_setting('new_order_event_id', 0),
-            Order::TYPE_RENEWAL => admin_setting('renew_order_event_id', 0),
-            Order::TYPE_UPGRADE => admin_setting('change_order_event_id', 0),
-            default => 0,
-        };
+        if ($opened) {
+            DB::afterCommit(fn () => HookManager::call('order.open.after', $order));
+        }
+    }
 
-        if ($eventId) {
-            $this->openEvent($eventId);
+    private function grantInviteFirstPurchaseTraffic(Order $order, Plan $plan): void
+    {
+        if (!$order->invite_user_id
+            || (int) $order->invite_user_id === (int) $order->user_id
+            || $order->period === Plan::PERIOD_RESET_TRAFFIC
+            || (int) $order->total_amount + (int) $order->balance_amount <= 0
+            || !User::whereKey($order->invite_user_id)->exists()) {
+            return;
         }
 
-        HookManager::call('order.open.after', $order);
+        $hasPaidPurchase = Order::where('user_id', $order->user_id)
+            ->where('id', '!=', $order->id)
+            ->whereIn('status', [Order::STATUS_COMPLETED, Order::STATUS_DISCOUNTED])
+            ->where('period', '!=', Plan::PERIOD_RESET_TRAFFIC)
+            ->where(function ($query) {
+                $query->where('total_amount', '>', 0)->orWhere('balance_amount', '>', 0);
+            })
+            // A callback may already have a REPEATABLE READ snapshot; locking reads see the latest commit.
+            ->lockForUpdate()
+            ->first(['id']);
+        if ($hasPaidPurchase) {
+            return;
+        }
+
+        $bonusBytes = intdiv((int) ($plan->transfer_enable * 1073741824), 10);
+        if ($bonusBytes > 0) {
+            app(UserService::class)->addTemporaryTraffic($this->user, $bonusBytes);
+        }
     }
 
 
@@ -287,14 +331,22 @@ class OrderService
     public function paid(string $callbackNo, array $paymentSnapshot = [])
     {
         $order = $this->order;
-        if ($order->status !== Order::STATUS_PENDING)
+        if ((int) $order->status !== Order::STATUS_PENDING)
             return true;
-        $order->status = Order::STATUS_PROCESSING;
-        $order->paid_at = time();
-        $order->callback_no = $callbackNo;
-        $order->fill($this->buildPaymentSnapshot($paymentSnapshot));
-        if (!$order->save())
-            return false;
+
+        // Only the callback that claims the pending row may open the order.
+        $updated = Order::whereKey($order->id)
+            ->where('status', Order::STATUS_PENDING)
+            ->update([
+                'status' => Order::STATUS_PROCESSING,
+                'paid_at' => time(),
+                'callback_no' => $callbackNo,
+                ...$this->buildPaymentSnapshot($paymentSnapshot),
+            ]);
+        $order->refresh();
+        if (!$updated) {
+            return true;
+        }
         try {
             OrderHandleJob::dispatchSync($order->trade_no);
         } catch (\Exception $e) {
@@ -426,7 +478,7 @@ class OrderService
         $this->user->temporary_transfer_enable = 0;
         // 从一次性转换到循环或者新购的时候，重置流量
         if ($this->user->expired_at === NULL || $order->type === Order::TYPE_NEW_PURCHASE)
-            app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER);
+            $this->resetOrderTraffic();
         $this->user->plan_id = $plan->id;
         $this->user->group_id = $plan->group_id;
         $this->user->expired_at = $this->getTime($order->period, $this->user->expired_at);
@@ -434,7 +486,7 @@ class OrderService
 
     private function buyByOneTime(Plan $plan)
     {
-        app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER);
+        $this->resetOrderTraffic();
         $this->user->transfer_enable = $plan->transfer_enable * 1073741824;
         $this->user->temporary_transfer_enable = 0;
         $this->user->plan_id = $plan->id;
@@ -462,13 +514,20 @@ class OrderService
         throw new ApiException('无效的套餐周期');
     }
 
+    private function resetOrderTraffic(): void
+    {
+        if (!app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER)) {
+            throw new \RuntimeException('Order traffic reset failed');
+        }
+    }
+
     private function openEvent($eventId)
     {
         switch ((int) $eventId) {
             case 0:
                 break;
             case 1:
-                app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER);
+                $this->resetOrderTraffic();
                 break;
         }
     }
