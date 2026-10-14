@@ -557,7 +557,8 @@ class AccessTrafficTest extends TestCase
         $horizon = require __DIR__ . '/../../config/horizon.php';
         self::assertSame(['access_traffic'], $horizon['environments']['production']['access-traffic']['queue']);
         self::assertNotContains('access_traffic', $horizon['environments']['production']['data-pipeline']['queue']);
-        self::assertContains('access_traffic', $horizon['environments']['local']['Xboard']['queue']);
+        self::assertSame(['access_traffic'], $horizon['environments']['local']['access-traffic']['queue']);
+        self::assertNotContains('access_traffic', $horizon['environments']['local']['Xboard']['queue']);
     }
 
     public function test_node_scoped_capture_setting_respects_allowlist(): void
