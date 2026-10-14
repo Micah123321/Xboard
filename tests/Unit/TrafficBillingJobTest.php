@@ -60,6 +60,8 @@ class TrafficBillingJobTest extends TestCase
             $table->bigInteger('received_at');
             $table->unique(['node_id', 'report_id']);
         });
+        $app->instance('db.schema', $schema);
+        (require __DIR__ . '/../../database/migrations/2026_09_01_000001_create_access_traffic_tables.php')->up();
         foreach (['v2_stat_user', 'v2_stat_server'] as $name) {
             $schema->create($name, function (Blueprint $table) use ($name): void {
                 $table->increments('id');

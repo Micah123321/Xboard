@@ -1,0 +1,585 @@
+<?php
+
+namespace Tests\Unit;
+
+use App\Http\Controllers\V2\Admin\AccessTrafficController;
+use App\Jobs\TrafficBillingJob;
+use App\Services\AccessTrafficClassifier;
+use App\Services\AccessTrafficQueryService;
+use App\Services\AccessTrafficService;
+use App\Services\Plugin\HookManager;
+use App\Support\Setting;
+use Illuminate\Config\Repository;
+use Illuminate\Container\Container;
+use Illuminate\Database\Capsule\Manager;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Events\Dispatcher;
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Facade;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redis;
+use Illuminate\Translation\ArrayLoader;
+use Illuminate\Translation\Translator;
+use Illuminate\Validation\DatabasePresenceVerifier;
+use Illuminate\Validation\Factory as ValidationFactory;
+use Illuminate\View\Compilers\BladeCompiler;
+use Illuminate\View\Engines\CompilerEngine;
+use Illuminate\View\Engines\EngineResolver;
+use Illuminate\View\Factory as ViewFactory;
+use Illuminate\View\FileViewFinder;
+use Mockery;
+use PHPUnit\Framework\TestCase;
+
+class AccessTrafficTest extends TestCase
+{
+    private Manager $db;
+    private Container $app;
+    private AccessTrafficService $service;
+    private int $now;
+    private array $settings = [];
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->app = new Container();
+        Container::setInstance($this->app);
+        $this->app->instance('app', $this->app);
+        $this->app->instance('config', new Repository([
+            'app' => ['timezone' => 'Asia/Shanghai', 'key' => 'access-test-key'],
+            'access_traffic' => require __DIR__ . '/../../config/access_traffic.php',
+        ]));
+        $this->db = new Manager($this->app);
+        $this->db->addConnection(['driver' => 'sqlite', 'database' => ':memory:', 'foreign_key_constraints' => true]);
+        $this->db->setAsGlobal();
+        $this->db->bootEloquent();
+        $this->app->instance('db', $this->db->getDatabaseManager());
+        $this->app->instance('db.schema', $this->db->schema());
+        Facade::clearResolvedInstances();
+        Facade::setFacadeApplication($this->app);
+        Log::swap(new \Psr\Log\NullLogger());
+        Redis::swap(Mockery::mock()->shouldReceive('sadd')->andReturn(1)->getMock());
+        $validator = new ValidationFactory(new Translator(new ArrayLoader(), 'en'), $this->app);
+        $validator->setPresenceVerifier(new DatabasePresenceVerifier($this->db->getDatabaseManager()));
+        $this->app->instance('validator', $validator);
+        $setting = Mockery::mock(Setting::class);
+        $setting->shouldReceive('get')->andReturnUsing(fn ($key) => $this->settings[$key] ?? null);
+        $setting->shouldReceive('save')->andReturnUsing(function ($values): bool {
+            $this->settings = array_replace($this->settings, $values);
+            return true;
+        });
+        $this->app->instance(Setting::class, $setting);
+        $bus = Mockery::mock(\Illuminate\Contracts\Bus\Dispatcher::class);
+        $bus->shouldReceive('dispatch')->andReturn(null);
+        $this->app->instance(\Illuminate\Contracts\Bus\Dispatcher::class, $bus);
+        foreach (['v2_user', 'v2_server'] as $name) {
+            $this->db->schema()->create($name, function (Blueprint $table): void {
+                $table->integer('id')->primary();
+                $table->string('name')->nullable();
+                $table->bigInteger('u')->default(0);
+                $table->bigInteger('d')->default(0);
+                $table->bigInteger('t')->nullable();
+                $table->string('updated_at')->nullable();
+            });
+        }
+        (require __DIR__ . '/../../database/migrations/2026_08_28_000001_create_traffic_reports_table.php')->up();
+        (require __DIR__ . '/../../database/migrations/2026_09_01_000001_create_access_traffic_tables.php')->up();
+        foreach (['v2_stat_user', 'v2_stat_server'] as $name) {
+            $this->db->schema()->create($name, function (Blueprint $table) use ($name): void {
+                $table->increments('id');
+                $table->integer('server_id');
+                $table->string('server_type');
+                $table->bigInteger('record_at');
+                $table->string('record_type');
+                $table->bigInteger('u');
+                $table->bigInteger('d');
+                $table->bigInteger('created_at');
+                $table->bigInteger('updated_at');
+                if ($name === 'v2_stat_user') {
+                    $table->integer('user_id');
+                    $table->double('server_rate');
+                    $table->unique(['user_id', 'server_rate', 'server_id', 'server_type', 'record_at', 'record_type'], 'user_stat_unique');
+                } else $table->unique(['server_id', 'server_type', 'record_at']);
+            });
+        }
+        DB::table('v2_user')->insert([['id' => 1], ['id' => 2]]);
+        DB::table('v2_server')->insert([['id' => 1, 'name' => 'Node one'], ['id' => 2, 'name' => 'Node two']]);
+        $this->service = new AccessTrafficService();
+        $this->app->instance(AccessTrafficService::class, $this->service);
+        $this->now = time();
+    }
+
+    protected function tearDown(): void
+    {
+        HookManager::reset();
+        Mockery::close();
+        $this->db->getDatabaseManager()->disconnect();
+        Facade::clearResolvedInstances();
+        Facade::setFacadeApplication(null);
+        Container::setInstance(null);
+        parent::tearDown();
+    }
+
+    private function entry(string $domain = 'r1.googlevideo.com', int $u = 1, int $d = 2, int $uid = 1): array
+    {
+        return ['user_id' => $uid, 'domain' => $domain, 'ip' => '', 'port' => 443, 'network' => 'tcp',
+            'domain_source' => 'request', 'bucket_at' => intdiv($this->now, 300) * 300,
+            'first_seen' => $this->now, 'last_seen' => $this->now, 'u' => $u, 'd' => $d, 'connections' => 1];
+    }
+
+    private function payload(string $id = 'batch', array $entries = [], ?array $totals = null): array
+    {
+        return ['version' => 1, 'report_id' => 'access-' . $id, 'billing_report_id' => $id,
+            'kernel' => 'sing-box', 'observed_at' => $this->now, 'coverage' => 'complete', 'dropped_entries' => 0,
+            'totals' => $totals ?? [1 => [3, 5]], 'entries' => $entries ?: [$this->entry()]];
+    }
+
+    private function bill(string $id = 'batch', array $data = [1 => [3, 5]], float $rate = 1.5, int $node = 1, ?string $rawHash = null): void
+    {
+        (new TrafficBillingJob(['id' => $node, 'type' => 'vmess', 'rate' => $rate], $data, 'vmess', $this->now, $id, $rawHash))->handle();
+    }
+
+    private function queryResult(array $filters = []): array
+    {
+        $query = new AccessTrafficQueryService();
+        return $query->index($query->filters(['start_time' => $this->now - 1000, 'end_time' => $this->now + 1] + $filters));
+    }
+
+    public function test_durable_receipt_both_arrival_orders_and_duplicate_do_not_charge(): void
+    {
+        $id = $this->service->receive(1, $this->payload(), $this->now);
+        self::assertSame(0, (int) DB::table('v2_user')->sum('u'));
+        self::assertSame(0, DB::table('v2_access_traffic')->count());
+        $this->service->process($id);
+        self::assertNull(DB::table('v2_access_traffic')->value('billed_u'));
+        $this->bill();
+        $this->service->repair();
+        self::assertSame(4, (int) DB::table('v2_access_traffic')->sum('billed_u'));
+        self::assertSame(7, (int) DB::table('v2_access_traffic')->sum('billed_d'));
+        self::assertSame($id, $this->service->receive(1, $this->payload(), $this->now));
+        $reordered = array_reverse($this->payload(), true);
+        $reordered['entries'] = [array_reverse($reordered['entries'][0], true)];
+        $reordered['token'] = 'synthetic-auth-field';
+        self::assertSame($id, $this->service->receive(1, $reordered, $this->now));
+        $this->service->process($id);
+        $this->bill();
+        self::assertSame(4, DB::table('v2_user')->where('id', 1)->value('u'));
+        self::assertSame(2, DB::table('v2_access_traffic')->count());
+        $this->bill('second', [1 => [3, 5]], 0.5);
+        $id = $this->service->receive(1, $this->payload('second'), $this->now);
+        $this->service->process($id);
+        self::assertSame(1, (int) DB::table('v2_access_traffic')->where('report_id', $id)->sum('billed_u'));
+        self::assertSame(2, (int) DB::table('v2_access_traffic')->where('report_id', $id)->sum('billed_d'));
+    }
+
+    public function test_payload_conflicts_and_second_detail_for_billing_report_are_errors(): void
+    {
+        $this->service->receive(1, $this->payload(), $this->now);
+        foreach ([array_replace($this->payload(), ['kernel' => 'xray']), array_replace($this->payload(), ['report_id' => 'other'])] as $payload) {
+            try {
+                $this->service->receive(1, $payload, $this->now);
+                self::fail('Expected receipt conflict');
+            } catch (\Symfony\Component\HttpKernel\Exception\ConflictHttpException) {
+                self::assertSame(1, DB::table('v2_access_report')->count());
+            }
+        }
+        $this->service->receive(2, $this->payload(), $this->now);
+        self::assertSame(2, DB::table('v2_access_report')->count());
+    }
+
+    public function test_exact_largest_remainder_per_direction_including_large_integers(): void
+    {
+        self::assertSame([2, 1, 1], AccessTrafficService::allocate([1, 1, 1], 4));
+        self::assertSame([0, 0], AccessTrafficService::allocate([1, 1], 0));
+        self::assertSame([7, 0], AccessTrafficService::allocate([0, 0], 7));
+        $large = AccessTrafficService::allocate([PHP_INT_MAX - 2, 1, 1], PHP_INT_MAX - 1);
+        self::assertSame(PHP_INT_MAX - 1, array_sum($large));
+        self::assertSame([PHP_INT_MAX - 3, 1, 1], $large);
+        $entries = [$this->entry('a.googlevideo.com', 1, 0), $this->entry('b.googlevideo.com', 1, 1), $this->entry('c.googlevideo.com', 1, 4)];
+        $id = $this->service->receive(1, $this->payload('round', $entries), $this->now);
+        $this->bill('round');
+        $this->service->process($id);
+        self::assertSame([2, 1, 1], DB::table('v2_access_traffic')->orderBy('id')->pluck('billed_u')->all());
+        self::assertSame([0, 1, 6], DB::table('v2_access_traffic')->orderBy('id')->pluck('billed_d')->all());
+    }
+
+    public function test_final_hooks_change_bytes_and_rate_but_original_hash_still_links(): void
+    {
+        $node = new \App\Models\Server();
+        $node->setRawAttributes(['id' => 1, 'type' => 'vmess', 'rate' => 9, 'rate_time_enable' => true,
+            'rate_time_ranges' => json_encode([['start' => '00:00', 'end' => '23:59', 'rate' => 0.5]])]);
+        HookManager::registerFilter('traffic.process.before', function ($payload) {
+            $payload[2] = [1 => [7, 9], 2 => [2, 4]];
+            return $payload;
+        });
+        HookManager::registerFilter('traffic.before_process', function ($payload) {
+            $payload[0]['rate'] = 1.25;
+            $payload[0]['id'] = 99;
+            return $payload;
+        });
+        $bus = Mockery::mock(\Illuminate\Contracts\Bus\Dispatcher::class);
+        $bus->shouldReceive('dispatch')->once()->andReturnUsing(function ($job): void { $job->handle(); });
+        $this->app->instance(\Illuminate\Contracts\Bus\Dispatcher::class, $bus);
+        (new \App\Services\UserService())->trafficFetch($node, 'vmess', [1 => [3, 5]], 'hooks', $this->now);
+        $id = $this->service->receive(1, $this->payload('hooks'), $this->now);
+        $this->service->process($id);
+        $snapshot = json_decode(DB::table('v2_traffic_report')->value('billing_snapshot'), true);
+        self::assertSame(7, $snapshot['users'][1]['final_u']);
+        self::assertSame(8, (int) DB::table('v2_access_traffic')->where('user_id', 1)->sum('billed_u'));
+        self::assertSame(11, (int) DB::table('v2_access_traffic')->where('user_id', 1)->sum('billed_d'));
+        self::assertSame(2, (int) DB::table('v2_access_traffic')->where('user_id', 2)->sum('billed_u'));
+        self::assertSame(5, (int) DB::table('v2_access_traffic')->where('user_id', 2)->sum('billed_d'));
+        self::assertSame(0, (int) DB::table('v2_access_traffic')->where('user_id', 2)->sum('raw_u'));
+        self::assertSame(1.25, DB::table('v2_access_traffic')->value('rate'));
+    }
+
+    public function test_hook_created_direction_is_unattributed_and_removed_or_deleted_users_bill_zero(): void
+    {
+        $payload = $this->payload('direction', [$this->entry('r.googlevideo.com', 0, 5)], [1 => [0, 5]]);
+        $id = $this->service->receive(1, $payload, $this->now);
+        $this->bill('direction', [1 => [4, 5]], 1, 1, TrafficBillingJob::fingerprint($payload['totals']));
+        $this->service->process($id);
+        self::assertSame(0, DB::table('v2_access_traffic')->where('domain', 'r.googlevideo.com')->value('billed_u'));
+        self::assertSame(4, DB::table('v2_access_traffic')->where('domain_source', 'unknown')->value('billed_u'));
+        $payload = $this->payload('removed', [$this->entry('r.googlevideo.com', 3, 5)], [1 => [3, 5]]);
+        $id = $this->service->receive(1, $payload, $this->now);
+        $this->bill('removed', [], 2, 1, TrafficBillingJob::fingerprint($payload['totals']));
+        $this->service->process($id);
+        self::assertSame(0, DB::table('v2_access_traffic')->where('report_id', $id)->value('billed_u'));
+        $payload = $this->payload('deleted', [$this->entry('r.googlevideo.com', 3, 5, 2)], [2 => [3, 5]]);
+        $id = $this->service->receive(1, $payload, $this->now);
+        DB::table('v2_user')->where('id', 2)->delete();
+        $this->bill('deleted', [2 => [3, 5]]);
+        $this->service->process($id);
+        self::assertSame(0, DB::table('v2_access_traffic')->where('report_id', $id)->value('billed_d'));
+    }
+
+    public function test_detail_processing_failure_rolls_back_then_retries_cleanly(): void
+    {
+        $id = $this->service->receive(1, $this->payload('retry'), $this->now);
+        $this->bill('retry');
+        DB::unprepared("CREATE TRIGGER fail_allocation BEFORE UPDATE ON v2_access_traffic BEGIN SELECT RAISE(ABORT, 'allocation failure'); END");
+        try { $this->service->process($id); self::fail('Expected detail failure'); }
+        catch (\Illuminate\Database\QueryException) {
+            self::assertSame(0, DB::table('v2_access_traffic')->count());
+            self::assertNotNull(DB::table('v2_access_report')->value('payload'));
+            self::assertSame(4, DB::table('v2_user')->where('id', 1)->value('u'));
+        }
+        DB::unprepared('DROP TRIGGER fail_allocation');
+        $this->service->repair();
+        self::assertSame(2, DB::table('v2_access_traffic')->count());
+        self::assertSame(4, (int) DB::table('v2_access_traffic')->sum('billed_u'));
+        self::assertNull(DB::table('v2_access_report')->value('payload'));
+    }
+
+    public function test_timed_rate_is_retained_when_current_settings_change(): void
+    {
+        $node = new \App\Models\Server();
+        $node->setRawAttributes(['id' => 1, 'type' => 'vmess', 'rate' => 9, 'rate_time_enable' => true,
+            'rate_time_ranges' => json_encode([['start' => '00:00', 'end' => '23:59', 'rate' => 0.5]])]);
+        $bus = Mockery::mock(\Illuminate\Contracts\Bus\Dispatcher::class);
+        $bus->shouldReceive('dispatch')->once()->andReturnUsing(fn ($job) => $job->handle());
+        $this->app->instance(\Illuminate\Contracts\Bus\Dispatcher::class, $bus);
+        (new \App\Services\UserService())->trafficFetch($node, 'vmess', [1 => [3, 5]], 'timed', $this->now);
+        $node->rate = 99;
+        $node->rate_time_ranges = [];
+        $id = $this->service->receive(1, $this->payload('timed'), $this->now);
+        $this->service->process($id);
+        self::assertSame(0.5, DB::table('v2_access_traffic')->value('rate'));
+        self::assertSame(1, (int) DB::table('v2_access_traffic')->sum('billed_u'));
+        self::assertSame(2, (int) DB::table('v2_access_traffic')->sum('billed_d'));
+    }
+
+    public function test_totals_mismatch_never_allocates_or_changes_billing(): void
+    {
+        $this->bill('bad', [1 => [30, 50]]);
+        $id = $this->service->receive(1, $this->payload('bad'), $this->now);
+        $this->service->process($id);
+        self::assertSame('totals_mismatch', DB::table('v2_access_report')->value('settlement_error'));
+        self::assertNull(DB::table('v2_access_traffic')->value('billed_u'));
+        self::assertSame(45, DB::table('v2_user')->where('id', 1)->value('u'));
+        self::assertSame(1, $this->queryResult()['meta']['collection_gaps']['failed_settlement_reports']);
+        $early = $this->service->receive(1, $this->payload('bad-early'), $this->now);
+        $this->service->process($early);
+        $this->bill('bad-early', [1 => [30, 50]]);
+        $this->service->repair();
+        self::assertSame('totals_mismatch', DB::table('v2_access_report')->where('id', $early)->value('settlement_error'));
+    }
+
+    public function test_direction_budgets_validation_and_explicit_unknown_bytes(): void
+    {
+        foreach ([$this->payload('over', [$this->entry('a.example', 4, 0)]), $this->payload('user', [$this->entry('a.example', 1, 1, 2)]),
+            $this->payload('source', [array_replace($this->entry(), ['domain_source' => 'unknown'])])] as $payload) {
+            try { $this->service->receive(1, $payload, $this->now); self::fail('Expected invalid report'); }
+            catch (\Illuminate\Validation\ValidationException) { self::assertSame(0, DB::table('v2_access_report')->count()); }
+        }
+        $id = $this->service->receive(1, $this->payload(), $this->now);
+        $this->service->process($id);
+        $unknown = DB::table('v2_access_traffic')->where('domain_source', 'unknown')->first();
+        self::assertSame(2, $unknown->raw_u);
+        self::assertSame(3, $unknown->raw_d);
+        self::assertSame('', $unknown->domain);
+        self::assertSame('', $unknown->ip);
+        self::assertSame(0, $unknown->port);
+        $summary = $this->queryResult()['summary'];
+        self::assertSame(8, $summary['raw_total']);
+        self::assertSame(3, $summary['identified_bytes']);
+        self::assertSame(5, $summary['unattributed_bytes']);
+        self::assertSame(1, $summary['unsettled_report_count']);
+        self::assertSame(1, $summary['partial_report_count']);
+    }
+
+    public function test_suffix_boundary_and_generic_cdn_do_not_invent_https_contents(): void
+    {
+        $classifier = new AccessTrafficClassifier();
+        foreach (['googlevideo.com', 'R1.GoogleVideo.Com.'] as $domain) self::assertSame('video', $classifier->classify($domain, 'sniff')['category']);
+        foreach (['evilgooglevideo.com', 'googlevideo.com.evil.example'] as $domain) self::assertSame('unknown', $classifier->classify($domain, 'request')['category']);
+        self::assertSame('cdn', $classifier->classify('movie.cloudfront.net', 'request')['category']);
+        self::assertSame('unknown', $classifier->classify('', 'ip')['confidence']);
+        self::assertStringContainsString('具体 HTTPS 内容及用户意图未知', $classifier->classify('googlevideo.com', 'request')['reason']);
+    }
+
+    public function test_full_filter_summary_time_grouping_half_open_window_and_mixed_rates(): void
+    {
+        foreach ([['a', 1, 1, 1.5], ['b', 1, 1, 0.5], ['c', 2, 1, 1.5], ['d', 1, 2, 1.5]] as [$name, $uid, $node, $rate]) {
+            $payload = $this->payload($name, [$this->entry('same.googlevideo.com', 3, 5, $uid)], [$uid => [3, 5]]);
+            $id = $this->service->receive($node, $payload, $this->now);
+            $this->bill($name, [$uid => [3, 5]], $rate, $node);
+            $this->service->process($id);
+        }
+        $all = $this->queryResult(['pageSize' => 1]);
+        self::assertCount(1, $all['data']);
+        self::assertSame(3, $all['total']);
+        self::assertSame(32, $all['summary']['raw_total']);
+        $filtered = $this->queryResult(['user_id' => 1, 'node_id' => 1, 'category' => 'video', 'network' => 'tcp', 'search' => 'same.']);
+        self::assertSame(1, $filtered['total']);
+        self::assertSame(16, $filtered['summary']['raw_total']);
+        self::assertNull($filtered['data'][0]['rate']);
+        self::assertSame(14, $filtered['data'][0]['billed_total']);
+        $firstBucket = intdiv($this->now, 300) * 300;
+        DB::table('v2_access_traffic')->where('report_id', 2)->update([
+            'bucket_at' => $firstBucket - 300, 'first_seen' => $firstBucket - 300, 'last_seen' => $firstBucket - 1,
+        ]);
+        self::assertSame(4, $this->queryResult(['group_by' => 'time'])['total']);
+        $query = new AccessTrafficQueryService();
+        $result = $query->index($query->filters(['start_time' => $firstBucket - 300, 'end_time' => $firstBucket], $this->now));
+        self::assertSame(8, $result['summary']['raw_total']);
+        self::assertSame(0, $this->queryResult(['search' => '%'])['total']);
+        $filters = $query->filters(['start_time' => $this->now - 99999999], $this->now);
+        self::assertSame($this->now + 1 - 30 * 86400, $filters['start_time']);
+    }
+
+    public function test_coverage_exposes_uncollected_reports_and_partial_batches(): void
+    {
+        $this->bill('uncaptured');
+        $payload = array_replace($this->payload('partial'), ['coverage' => 'partial', 'dropped_entries' => 2]);
+        $id = $this->service->receive(1, $payload, $this->now);
+        self::assertSame(1, $this->queryResult()['meta']['collection_gaps']['pending_detail_reports']);
+        $this->service->process($id);
+        $result = $this->queryResult();
+        self::assertSame('partial', $result['meta']['coverage']);
+        self::assertSame(1, $result['summary']['partial_report_count']);
+        self::assertSame(1, $result['meta']['collection_gaps']['node_billing_reports_without_details']);
+        self::assertStringContainsString('覆盖状态仅描述已收到的报告', $result['meta']['reason']);
+    }
+
+    public function test_config_defaults_allowlist_validation_and_authenticated_node_identity(): void
+    {
+        self::assertFalse($this->service->nodeConfig(1)['enabled']);
+        $config = ['enabled' => true, 'bucket_seconds' => 60, 'retention_days' => 7, 'max_entries' => 100, 'node_ids' => [2]];
+        self::assertSame($config, $this->service->saveSettings($config));
+        self::assertFalse($this->service->nodeConfig(1)['enabled']);
+        self::assertTrue($this->service->nodeConfig(2)['enabled']);
+        $config['node_ids'] = [];
+        $this->service->saveSettings($config);
+        self::assertTrue($this->service->nodeConfig(1)['enabled']);
+        try { $this->service->saveSettings(array_replace($config, ['bucket_seconds' => 1])); self::fail('Expected invalid config'); }
+        catch (\Illuminate\Validation\ValidationException) { self::assertSame(60, $this->service->settings()['bucket_seconds']); }
+        $request = Request::create('/api/v2/server/access/report', 'POST', $this->payload() + ['node_id' => 2]);
+        $request->attributes->set('node_info', (object) ['id' => 1]);
+        (new \App\Http\Controllers\V2\Server\AccessTrafficController())->report($request, $this->service);
+        self::assertSame(1, DB::table('v2_access_report')->value('node_id'));
+    }
+
+    public function test_queue_failure_does_not_lose_acknowledged_receipt(): void
+    {
+        $bus = Mockery::mock(\Illuminate\Contracts\Bus\Dispatcher::class);
+        $bus->shouldReceive('dispatch')->andThrow(new \RuntimeException('queue down'));
+        $this->app->instance(\Illuminate\Contracts\Bus\Dispatcher::class, $bus);
+        $id = $this->service->receive(1, $this->payload(), $this->now);
+        $this->service->enqueue($id);
+        self::assertSame(1, DB::table('v2_access_report')->count());
+        $this->service->repair();
+        self::assertSame(2, DB::table('v2_access_traffic')->count());
+    }
+
+    public function test_retention_cleanup_preserves_billing_idempotency_and_rejects_old_replay(): void
+    {
+        $old = $this->now - 31 * 86400;
+        $payload = $this->payload('old');
+        $payload['observed_at'] = $old;
+        $payload['entries'] = [array_replace($this->entry(), ['bucket_at' => intdiv($old, 300) * 300, 'first_seen' => $old, 'last_seen' => $old])];
+        $id = $this->service->receive(1, $payload, $old);
+        $this->now = $old;
+        $this->bill('old');
+        $this->service->process($id);
+        $this->now = time();
+        self::assertSame(1, $this->service->prune($this->now));
+        self::assertSame(0, DB::table('v2_access_traffic')->count());
+        self::assertSame(1, DB::table('v2_traffic_report')->count());
+        self::assertNull(DB::table('v2_traffic_report')->value('billing_snapshot'));
+        $this->bill('old');
+        self::assertSame(4, DB::table('v2_user')->where('id', 1)->value('u'));
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\GoneHttpException::class);
+        $this->service->receive(1, $payload, $this->now);
+    }
+
+    public function test_retention_keeps_valid_activity_in_a_bucket_starting_before_cutoff(): void
+    {
+        $cutoff = intdiv(time(), 300) * 300 - 150;
+        $this->now = $cutoff + 20;
+        $entry = $this->entry('valid.googlevideo.com', 3, 5);
+        $entry['first_seen'] = $cutoff + 10;
+        $entry['last_seen'] = $cutoff + 20;
+        $id = $this->service->receive(1, $this->payload('near-cutoff', [$entry]), $this->now);
+        $this->service->process($id);
+        $this->service->prune($cutoff + 30 * 86400);
+        self::assertSame(1, DB::table('v2_access_traffic')->count());
+        self::assertSame(8, (int) DB::table('v2_access_traffic')->selectRaw('SUM(raw_u + raw_d) AS total')->value('total'));
+        self::assertNull(DB::table('v2_access_report')->value('settlement_error'));
+    }
+
+    public function test_retention_truncated_unsettled_report_is_not_overallocated(): void
+    {
+        $id = $this->service->receive(1, $this->payload(), $this->now);
+        $this->service->process($id);
+        DB::table('v2_access_traffic')->where('domain_source', 'request')->update(['bucket_at' => $this->now - 31 * 86400, 'first_seen' => $this->now - 31 * 86400, 'last_seen' => $this->now - 31 * 86400]);
+        $this->service->prune($this->now);
+        self::assertSame('retention_expired', DB::table('v2_access_report')->value('settlement_error'));
+        $this->bill();
+        $this->service->process($id);
+        self::assertNull(DB::table('v2_access_traffic')->value('billed_u'));
+        self::assertSame(4, DB::table('v2_user')->where('id', 1)->value('u'));
+    }
+
+    public function test_shared_node_config_includes_access_log_without_reading_credentials(): void
+    {
+        $this->settings['access_traffic_config'] = ['enabled' => true];
+        $node = new \App\Models\Server();
+        $node->setRawAttributes(['id' => 1, 'type' => 'vmess', 'server_port' => 443, 'host' => 'node.example',
+            'protocol_settings' => json_encode(['tls' => 0, 'tls_settings' => []])]);
+        $limit = Mockery::mock(\App\Services\ServerTrafficLimitService::class);
+        $limit->shouldReceive('buildNodeConfig')->andReturn(['enabled' => false]);
+        $this->app->instance(\App\Services\ServerTrafficLimitService::class, $limit);
+        $config = \App\Services\ServerService::buildNodeConfig($node);
+        self::assertSame(['enabled' => true, 'bucket_seconds' => 300, 'max_entries' => 2000], $config['access_log']);
+    }
+
+    private function registerViews(): void
+    {
+        $files = new Filesystem();
+        $events = new Dispatcher($this->app);
+        $compiler = new BladeCompiler($files, sys_get_temp_dir() . '/xboard-access-blade');
+        $files->ensureDirectoryExists(sys_get_temp_dir() . '/xboard-access-blade');
+        $engines = new EngineResolver();
+        $engines->register('blade', fn () => new CompilerEngine($compiler, $files));
+        $views = new ViewFactory($engines, new FileViewFinder($files, [__DIR__ . '/../../resources/views']), $events);
+        $views->setContainer($this->app);
+        $views->share('__env', $views);
+        $this->app->instance('view', $views);
+        $this->app->instance(\Illuminate\Contracts\View\Factory::class, $views);
+    }
+
+    public function test_stream_exports_all_rows_with_csv_and_html_escaping_and_limits(): void
+    {
+        $this->registerViews();
+        DB::table('v2_server')->where('id', 1)->update(['name' => '=SUM(1,2)<script>boom</script>']);
+        $id = $this->service->receive(1, $this->payload(), $this->now);
+        $this->service->process($id);
+        $controller = new AccessTrafficController();
+        $query = new AccessTrafficQueryService();
+        foreach (['csv', 'html'] as $format) {
+            $request = Request::create('/export', 'GET', ['format' => $format, 'pageSize' => 1]);
+            $response = $controller->export($request, $query);
+            ob_start();
+            $response->sendContent();
+            $text = ob_get_clean();
+            if ($format === 'csv') {
+                self::assertStringContainsString('raw_total', $text);
+                self::assertStringContainsString('billed_total', $text);
+                self::assertStringStartsWith("\xEF\xBB\xBF", $text);
+            } else {
+                self::assertStringContainsString('原始合计', $text);
+                self::assertStringContainsString('计费分摊', $text);
+            }
+            self::assertStringContainsString('Asia/Shanghai', $text);
+            if ($format === 'csv') {
+                self::assertStringContainsString("'=SUM", $text);
+                self::assertStringContainsString('googlevideo.com', $text);
+            } else {
+                self::assertStringNotContainsString('<script>boom</script>', $text);
+                self::assertStringContainsString('&lt;script&gt;boom&lt;/script&gt;', $text);
+                self::assertStringContainsString('window.print()', $text);
+                self::assertSame(2, substr_count($text, '<tr>') - 1);
+            }
+        }
+        foreach (['=SUM(A1)', ' +cmd', "\t@cmd", '-formula'] as $cell) self::assertStringStartsWith("'", AccessTrafficQueryService::csvCell($cell));
+        $this->app['config']->set('access_traffic.export_max_rows', 1);
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $controller->export(Request::create('/export'), $query);
+    }
+
+    public function test_activity_inside_bucket_is_found_and_historical_node_name_survives(): void
+    {
+        $this->now = intdiv(time(), 300) * 300 - 150;
+        $entry = $this->entry('video.googlevideo.com', 3, 5);
+        $entry['last_seen'] = $this->now + 10;
+        $payload = $this->payload('interval', [$entry]);
+        $payload['observed_at'] = $this->now + 10;
+        $id = $this->service->receive(1, $payload, $this->now + 10);
+        DB::table('v2_server')->where('id', 1)->update(['name' => 'Renamed node']);
+        $this->service->process($id);
+        DB::table('v2_server')->where('id', 1)->delete();
+        $query = new AccessTrafficQueryService();
+        $filters = $query->filters(['start_time' => $this->now + 1, 'end_time' => $this->now + 5], $this->now + 20);
+        $result = $query->index($filters);
+        self::assertSame(8, $result['summary']['raw_total']);
+        self::assertSame('Node one', $result['data'][0]['node_name']);
+        $before = $query->filters(['start_time' => $this->now - 10, 'end_time' => $this->now], $this->now + 20);
+        self::assertSame(0, $query->index($before)['summary']['raw_total']);
+    }
+
+    public function test_detail_jobs_use_a_queue_separate_from_charging(): void
+    {
+        self::assertSame('access_traffic', (new \App\Jobs\AccessTrafficJob(1))->queue);
+        $horizon = require __DIR__ . '/../../config/horizon.php';
+        self::assertSame(['access_traffic'], $horizon['environments']['production']['access-traffic']['queue']);
+        self::assertNotContains('access_traffic', $horizon['environments']['production']['data-pipeline']['queue']);
+        self::assertContains('access_traffic', $horizon['environments']['local']['Xboard']['queue']);
+    }
+
+    public function test_node_scoped_capture_setting_respects_allowlist(): void
+    {
+        $this->service->saveSettings(['enabled' => true, 'bucket_seconds' => 300, 'retention_days' => 30,
+            'max_entries' => 2000, 'node_ids' => [2]]);
+        self::assertFalse($this->queryResult(['node_id' => 1])['meta']['enabled']);
+        self::assertTrue($this->queryResult(['node_id' => 2])['meta']['enabled']);
+    }
+
+    public function test_v2_routes_keep_server_auth_and_admin_log_middleware(): void
+    {
+        $this->settings['secure_path'] = 'test-admin';
+        $router = new Router(new Dispatcher($this->app), $this->app);
+        (new \App\Http\Routes\V2\ServerRoute())->map($router);
+        (new \App\Http\Routes\V2\AdminRoute())->map($router);
+        $routes = [];
+        foreach ($router->getRoutes() as $route) $routes[$route->uri()] = $route;
+        self::assertContains('server.v2', $routes['server/access/report']->middleware());
+        foreach (['getAccessTraffic', 'exportAccessTraffic', 'accessTrafficConfig'] as $action) {
+            self::assertContains('admin', $routes['test-admin/stat/' . $action]->middleware());
+            self::assertContains('log', $routes['test-admin/stat/' . $action]->middleware());
+        }
+    }
+}

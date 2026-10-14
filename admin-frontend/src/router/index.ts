@@ -36,6 +36,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '节点管理', kicker: 'Nodes' },
       },
       {
+        path: 'access-traffic',
+        name: 'AccessTraffic',
+        component: () => import('@/views/traffic/AccessTrafficView.vue'),
+        meta: { title: '节点访问流量', kicker: 'Access Traffic' },
+      },
+      {
         path: 'node-updates',
         name: 'NodeUpdates',
         component: () => import('@/views/node-updates/NodeUpdatesView.vue'),

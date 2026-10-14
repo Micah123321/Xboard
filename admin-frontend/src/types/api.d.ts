@@ -904,6 +904,106 @@ export interface AdminTrafficLogResult extends AdminPaginationResult<AdminTraffi
   summary: TrafficAmount
 }
 
+export type AccessTrafficCategory = 'video' | 'web' | 'download' | 'update' | 'sync' | 'cdn' | 'unknown'
+export type AccessTrafficConfidence = 'high' | 'medium' | 'low' | 'unknown'
+export type AccessTrafficCoverage = 'complete' | 'partial' | 'none'
+
+export interface AccessTrafficFilters {
+  user_id?: number
+  node_id?: number
+  start_time?: number
+  end_time?: number
+  search?: string
+  category?: AccessTrafficCategory
+  network?: 'tcp' | 'udp' | 'unknown'
+  group_by: 'domain' | 'time'
+}
+
+export interface AccessTrafficRow {
+  id: string
+  user_id: number
+  node_id: number
+  node_name: string
+  domain: string
+  ip: string
+  port: number
+  network: 'tcp' | 'udp' | 'unknown'
+  domain_source: 'request' | 'sniff' | 'ip' | 'unknown'
+  first_seen: number
+  last_seen: number
+  raw_u: number
+  raw_d: number
+  raw_total: number
+  billed_u: number | null
+  billed_d: number | null
+  billed_total: number | null
+  rate: number | null
+  service: string
+  category: AccessTrafficCategory
+  confidence: AccessTrafficConfidence
+  reason: string
+  connections: number
+  share: number
+  coverage: AccessTrafficCoverage
+}
+
+export interface AccessTrafficSummary {
+  raw_u: number
+  raw_d: number
+  raw_total: number
+  billed_u: number | null
+  billed_d: number | null
+  billed_total: number | null
+  identified_bytes: number
+  unidentified_bytes: number
+  identified_percent: number
+  unattributed_bytes: number
+  report_count: number
+  partial_report_count: number
+  unsettled_report_count: number
+}
+
+export interface AccessTrafficAnalysis {
+  category: AccessTrafficCategory
+  category_label: string
+  raw_total: number
+  share: number
+  confidence: AccessTrafficConfidence
+  reason: string
+}
+
+export interface AccessTrafficMeta {
+  timezone: string
+  bucket_seconds: number
+  retention_days: number
+  enabled: boolean
+  first_collected_at: number | null
+  last_collected_at: number | null
+  coverage: AccessTrafficCoverage
+  reason: string
+  collection_gaps?: {
+    node_billing_reports_without_details: number
+    pending_detail_reports: number
+    failed_settlement_reports: number
+  }
+}
+
+export interface AccessTrafficResult {
+  data: AccessTrafficRow[]
+  total: number
+  summary: AccessTrafficSummary
+  analysis: AccessTrafficAnalysis[]
+  meta: AccessTrafficMeta
+}
+
+export interface AccessTrafficConfig {
+  enabled: boolean
+  bucket_seconds: number
+  retention_days: number
+  max_entries: number
+  node_ids: number[]
+}
+
 export type AdminNodeRouteAction = 'block' | 'direct' | 'dns' | 'proxy'
 
 export interface AdminNodeRouteItem {

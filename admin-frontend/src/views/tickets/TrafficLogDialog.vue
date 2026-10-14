@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { fetchUserTrafficLogs } from '@/api/admin'
 import type { AdminTrafficLogItem, TrafficAmount } from '@/types/api'
@@ -15,6 +16,18 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:visible': [value: boolean]
 }>()
+
+const router = useRouter()
+function openAccessTraffic() {
+  if (!props.userId) return
+  const query: Record<string, string> = { user_id: String(props.userId) }
+  if (timeRange.value.length === 2) {
+    query.start_time = String(timeRange.value[0])
+    query.end_time = String(timeRange.value[1])
+  }
+  emit('update:visible', false)
+  void router.push({ path: '/access-traffic', query })
+}
 
 const loading = ref(false)
 const records = ref<AdminTrafficLogItem[]>([])
@@ -115,6 +128,7 @@ function handleRangeChange() {
           clearable
           @change="handleRangeChange"
         />
+        <ElButton :disabled="!props.userId" @click="openAccessTraffic">访问目的地与消耗分析</ElButton>
       </div>
 
       <div class="summary-grid">

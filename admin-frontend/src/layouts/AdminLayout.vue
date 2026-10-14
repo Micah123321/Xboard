@@ -51,6 +51,7 @@ const menuItems: MenuItem[] = [
 
 const nodeManagementItems: MenuItem[] = [
   { index: '/nodes', title: '节点管理', icon: Connection },
+  { index: '/access-traffic', title: '节点访问流量', icon: Odometer },
   { index: '/node-groups', title: '权限组管理', icon: Lock },
   { index: '/node-routes', title: '路由管理', icon: Share },
   { index: '/node-updates', title: '节点更新', icon: Box },
@@ -108,7 +109,7 @@ onBeforeUnmount(() => {
 
 <template>
   <ElContainer class="admin-layout">
-    <ElAside :width="sidebarWidth" class="admin-aside">
+    <ElAside :width="sidebarWidth" class="admin-aside" :class="{ 'admin-aside--mobile-hidden': isMobile && app.sidebarCollapsed }">
       <div class="aside-logo">
         <div class="aside-mark">X</div>
         <div v-if="!app.sidebarCollapsed" class="aside-brand">
@@ -451,6 +452,11 @@ onBeforeUnmount(() => {
     z-index: 30;
     height: 100vh;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  }
+
+  .admin-aside--mobile-hidden {
+    transform: translateX(-100%);
+    pointer-events: none;
   }
 
   .admin-header {

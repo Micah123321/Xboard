@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ChatLineRound, MoreFilled, Plus, RefreshRight, Search } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import { formatDateTime, formatTraffic } from '@/utils/dashboard'
 import { getUserStatusMeta, getUserUsagePercent } from '@/utils/users'
 import OrderAssignDrawer from '@/views/subscriptions/OrderAssignDrawer.vue'
@@ -11,6 +12,8 @@ import UserFormDrawer from './UserFormDrawer.vue'
 import UserInviteDialog from './UserInviteDialog.vue'
 import UserTemporaryTrafficDialog from './UserTemporaryTrafficDialog.vue'
 import { useUsersManagement } from './useUsersManagement'
+
+const router = useRouter()
 
 type UserAction =
   | 'edit'
@@ -300,7 +303,7 @@ const {
         </ElTableColumn>
         <ElTableColumn label="操作" width="104" fixed="right">
           <template #default="{ row }">
-            <ElDropdown trigger="click" @command="(command) => handleAction(command as UserAction, row)">
+            <ElDropdown trigger="click" @command="(command) => command === 'view-access-traffic' ? router.push({ path: '/access-traffic', query: { user_id: row.id } }) : handleAction(command as UserAction, row)">
               <ElButton text class="action-trigger">
                 <ElIcon><MoreFilled /></ElIcon>
               </ElButton>
@@ -314,6 +317,7 @@ const {
                   <ElDropdownItem command="view-orders">TA的订单</ElDropdownItem>
                   <ElDropdownItem command="view-invites">TA的邀请</ElDropdownItem>
                   <ElDropdownItem command="view-traffic">TA的流量记录</ElDropdownItem>
+                  <ElDropdownItem command="view-access-traffic">TA的访问流量分析</ElDropdownItem>
                   <ElDropdownItem command="reset-traffic">重置流量</ElDropdownItem>
                   <ElDropdownItem command="toggle-ban">
                     {{ row.banned ? '恢复正常' : '封禁用户' }}

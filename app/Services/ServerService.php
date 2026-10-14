@@ -422,6 +422,7 @@ class ServerService
         }
 
         $response['traffic_limit'] = app(ServerTrafficLimitService::class)->buildNodeConfig($node);
+        $response['access_log'] = app(AccessTrafficService::class)->nodeConfig((int) $node->id);
 
         return $response;
     }

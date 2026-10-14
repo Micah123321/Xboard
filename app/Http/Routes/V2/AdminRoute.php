@@ -171,6 +171,10 @@ class AdminRoute
                 $router->get('/getRanking', [StatController::class, 'getRanking']);
                 $router->get('/getStatRecord', [StatController::class, 'getStatRecord']);
                 $router->get('/getTrafficRank', [StatController::class, 'getTrafficRank']);
+                $access = \App\Http\Controllers\V2\Admin\AccessTrafficController::class;
+                $router->get('/getAccessTraffic', [$access, 'index']);
+                $router->get('/exportAccessTraffic', [$access, 'export']);
+                $router->match(['GET', 'POST'], '/accessTrafficConfig', [$access, 'config']);
             });
 
             // Notice

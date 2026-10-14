@@ -111,16 +111,30 @@ class TrafficBillingJob implements ShouldQueue
                 }
                 return;
             }
-            TrafficReport::create($key + ['payload_hash' => $this->payloadHash, 'received_at' => $this->receivedAt]);
+            $snapshot = ['rate' => (float) $this->server['rate'], 'users' => []];
             foreach ($this->data as $uid => $traffic) {
-                DB::table('v2_user')->where('id', $uid)->incrementEach([
-                    'u' => self::bill($traffic[0], $this->server['rate']),
-                    'd' => self::bill($traffic[1], $this->server['rate']),
+                $u = self::bill($traffic[0], $this->server['rate']);
+                $d = self::bill($traffic[1], $this->server['rate']);
+                $charged = DB::table('v2_user')->where('id', $uid)->incrementEach([
+                    'u' => $u, 'd' => $d,
                 ], ['t' => $this->receivedAt]);
+                $snapshot['users'][$uid] = [
+                    'final_u' => $traffic[0], 'final_d' => $traffic[1],
+                    'billed_u' => $charged ? $u : 0, 'billed_d' => $charged ? $d : 0,
+                ];
             }
+            TrafficReport::create($key + [
+                'payload_hash' => $this->payloadHash, 'received_at' => $this->receivedAt,
+                'billed_at' => time(), 'billing_snapshot' => json_encode($snapshot, JSON_THROW_ON_ERROR),
+            ]);
             (new StatUserJob($this->server, $this->data, $this->protocol, 'd', $this->receivedAt))->handle();
             (new StatServerJob($this->server, $this->data, $this->protocol, 'd', $this->receivedAt))->handle();
         }, 3);
+
+        // Detail processing is separate; durable receipts also have scheduled repair.
+        $accessId = DB::table('v2_access_report')->where('node_id', $this->server['id'])
+            ->where('billing_report_id', $this->reportKey)->whereNull('settled_at')->value('id');
+        if ($accessId) app(\App\Services\AccessTrafficService::class)->enqueue((int) $accessId);
 
         // A failed notification retries the same ledger key without charging again.
         if ($this->data) {

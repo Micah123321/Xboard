@@ -63,7 +63,7 @@ import {
 } from '@/utils/nodes'
 import { sortNodesByOrder } from '@/utils/nodeEditor'
 
-type NodeAction = 'edit' | 'copy' | 'pin-top' | 'delete' | 'check-gfw'
+type NodeAction = 'edit' | 'copy' | 'pin-top' | 'delete' | 'check-gfw' | 'view-access-traffic'
 type NodeDialogMode = 'create' | 'edit'
 type NodeBatchEditPayload = Omit<AdminNodeBatchUpdatePayload, 'ids'>
 type NodeSortField = 'id' | 'show' | 'gfw' | 'autoOnline' | 'name' | 'address' | 'online' | 'rate' | 'groups'
@@ -720,6 +720,11 @@ async function handlePinTop(node: AdminNodeItem) {
 }
 
 async function handleAction(action: NodeAction, node: AdminNodeItem) {
+  if (action === 'view-access-traffic') {
+    await router.push({ path: '/access-traffic', query: { node_id: node.id } })
+    return
+  }
+
   if (action === 'edit') {
     openEditEditor(node)
     return
@@ -1338,6 +1343,7 @@ watch(
               <template #dropdown>
                 <ElDropdownMenu>
                   <ElDropdownItem command="edit">编辑节点</ElDropdownItem>
+                  <ElDropdownItem command="view-access-traffic">访问流量分析</ElDropdownItem>
                   <ElDropdownItem command="check-gfw" :disabled="Boolean(row.parent_id)">
                     检测墙状态
                   </ElDropdownItem>

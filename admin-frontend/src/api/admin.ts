@@ -50,6 +50,9 @@ import type {
   AdminTicketFetchParams,
   AdminTicketListItem,
   AdminTrafficLogResult,
+  AccessTrafficConfig,
+  AccessTrafficFilters,
+  AccessTrafficResult,
   AdminUserBulkBanPayload,
   AdminUserBulkMailPayload,
   AdminUserBulkScopePayload,
@@ -670,6 +673,29 @@ export function replyTicket(id: number, message: string): Promise<ApiResponse<bo
 
 export function closeTicket(id: number): Promise<ApiResponse<boolean>> {
   return unwrapPost<boolean>('/ticket/close', { id })
+}
+
+export function fetchAccessTraffic(
+  params: AccessTrafficFilters & { page: number; pageSize: number },
+): Promise<AccessTrafficResult> {
+  return adminClient.get<AccessTrafficResult>('/stat/getAccessTraffic', { params })
+    .then((res) => res.data)
+}
+
+export function exportAccessTraffic(params: AccessTrafficFilters, format: 'csv' | 'html'): Promise<Blob> {
+  return adminClient.get<Blob>('/stat/exportAccessTraffic', {
+    params: { ...params, format },
+    responseType: 'blob',
+  }).then((res) => res.data)
+}
+
+export function getAccessTrafficConfig(): Promise<AccessTrafficConfig> {
+  return adminClient.get<AccessTrafficConfig | ApiResponse<AccessTrafficConfig>>('/stat/accessTrafficConfig')
+    .then((res) => 'data' in res.data ? res.data.data : res.data)
+}
+
+export function saveAccessTrafficConfig(config: AccessTrafficConfig): Promise<unknown> {
+  return adminClient.post('/stat/accessTrafficConfig', config).then((res) => res.data)
 }
 
 export function fetchUserTrafficLogs(params: {

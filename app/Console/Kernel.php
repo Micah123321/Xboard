@@ -42,6 +42,8 @@ class Kernel extends ConsoleKernel
         // reset
         $schedule->command('reset:traffic')->everyMinute()->onOneServer()->withoutOverlapping(10);
         $schedule->command('reset:log')->daily()->onOneServer();
+        $schedule->command('access-traffic:maintain')->everyMinute()->onOneServer()->withoutOverlapping(10);
+        $schedule->command('access-traffic:maintain', ['--prune'])->dailyAt('0:30')->onOneServer()->withoutOverlapping(30);
         $schedule->command('cleanup:server-gfw-checks')->dailyAt('0:40')->onOneServer()->withoutOverlapping(30);
         // send
         $schedule->command('send:remindMail', ['--force'])->dailyAt('11:30')->onOneServer();
