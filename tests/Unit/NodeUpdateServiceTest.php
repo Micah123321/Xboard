@@ -156,6 +156,42 @@ class NodeUpdateServiceTest extends TestCase
         $this->send($i,$task,$a,3,'installing');
     }
 
+    public function testBatchAndTaskSummariesExposeVersionNodesAndFullCountsWithoutCredentials(): void
+    {
+        [$installations,$release,$batch,$tasks] = $this->prepare(4);
+        DB::table('v2_server')->where('id',1)->update(['name'=>'US fixture node']);
+        $listed = $this->admin('batches', [], 'GET')['items'][0];
+        self::assertSame($release['version'], $listed['release_version']);
+        self::assertSame(4, $listed['installation_count']);
+        self::assertSame(4, $listed['counts']['queued']);
+        self::assertCount(3, $listed['targets']);
+        $detail = $this->admin('batches/'.$batch['id'].'/tasks', [], 'GET');
+        $first = collect($detail['items'])->firstWhere('installation_id',$installations[0]['id']);
+        self::assertSame($release['version'],$first['target_version']);
+        self::assertSame(['kind'=>'machine','machine_id'=>1],$first['installation']['scope']);
+        self::assertSame([['id'=>1,'name'=>'US fixture node']],$first['installation']['nodes']);
+        self::assertTrue($first['installation']['online']);
+        self::assertSame('2026-08-29T12:00:00Z',$first['installation']['last_seen_at']);
+        foreach ($installations as $installation) self::assertStringNotContainsString($installation['token'],json_encode([$listed,$detail]));
+        $this->admin('batches/'.$batch['id'].'/cancel');
+        $canceled = $this->admin('batches/'.$batch['id'], [], 'GET');
+        self::assertSame(4,$canceled['counts']['canceled']);
+        self::assertSame(0,$canceled['counts']['succeeded']);
+        self::assertSame(4,$canceled['installation_count']);
+    }
+
+    public function testInstallationNodePreviewIsBoundedAndOfflineStatusUsesAgentReport(): void
+    {
+        [$installations,$release,$batch] = $this->prepare();
+        for ($id=7; $id<=11; $id++) DB::table('v2_server')->insert(['id'=>$id,'machine_id'=>1,'enabled'=>true,'name'=>'Node '.$id]);
+        Carbon::setTestNow(now()->addSeconds(181));
+        $detail = $this->admin('batches/'.$batch['id'].'/tasks', [], 'GET')['items'][0]['installation'];
+        self::assertSame(6,$detail['node_count']);
+        self::assertCount(3,$detail['nodes']);
+        self::assertFalse($detail['online']);
+        self::assertSame('2026-08-29T12:00:00Z',$detail['last_seen_at']);
+    }
+
     public function testManifestImportIsIdempotentAndNeverRewritesOrUnrevokesARelease(): void
     {
         $release = $this->release();

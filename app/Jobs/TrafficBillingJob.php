@@ -111,8 +111,10 @@ class TrafficBillingJob implements ShouldQueue
                 }
                 return;
             }
-            $snapshot = ['rate' => (float) $this->server['rate'], 'users' => []];
+            $snapshot = ['rate' => (float) $this->server['rate'], 'raw_upload' => 0, 'raw_download' => 0, 'users' => []];
             foreach ($this->data as $uid => $traffic) {
+                $snapshot['raw_upload'] += $traffic[0];
+                $snapshot['raw_download'] += $traffic[1];
                 $u = self::bill($traffic[0], $this->server['rate']);
                 $d = self::bill($traffic[1], $this->server['rate']);
                 $charged = DB::table('v2_user')->where('id', $uid)->incrementEach([

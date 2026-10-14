@@ -31,6 +31,7 @@ import type {
   QueueStats,
   SystemStatus,
   TrafficRankItem,
+  TrafficRankSummary,
 } from '@/types/api'
 import {
   buildTrendChart,
@@ -69,7 +70,11 @@ const app = useAppStore()
 const router = useRouter()
 const booting = ref(true)
 const trendLoading = ref(false)
-const rankLoading = ref(false)
+const nodeRankLoading = ref(false)
+const userRankLoading = ref(false)
+const rankLoading = computed(() => nodeRankLoading.value || userRankLoading.value)
+let nodeRankRequestId = 0
+let userRankRequestId = 0
 const systemLoading = ref(false)
 const lastRefreshedAt = ref<string | null>(null)
 const trendPreset = ref<TimePreset>('30d')
@@ -80,6 +85,9 @@ const overview = ref<DashboardStats | null>(null)
 const trendList = ref<OrderTrendPoint[]>([])
 const trendSummary = ref<OrderTrendSummary | null>(null)
 const nodeRanks = ref<TrafficRankItem[]>([])
+const nodeRankSummary = ref<TrafficRankSummary | null>(null)
+const nodeSearchInput = ref('')
+const nodeSearchKeyword = ref('')
 const userRanks = ref<TrafficRankItem[]>([])
 const systemStatus = ref<SystemStatus | null>(null)
 const queueStats = ref<QueueStats | null>(null)
@@ -137,6 +145,7 @@ const dashboardStats = computed<DashboardStats>(() => overview.value ?? {
     recoveryWindowSeconds: 86400,
     blockedProtocolDistribution: [],
   },
+  last24HoursTraffic: null,
   todayTraffic: { upload: 0, download: 0, total: 0 },
   monthTraffic: { upload: 0, download: 0, total: 0 },
   totalTraffic: { upload: 0, download: 0, total: 0 },
@@ -230,6 +239,18 @@ const metricCards = computed<MetricCard[]>(() => [
     detail: `历史累计 ${formatTraffic(dashboardStats.value.totalTraffic.download)}`,
     tone: 'soft',
     icon: Download,
+  },
+  {
+    key: 'last24HoursTraffic',
+    label: '近24小时总流量（原始）',
+    value: dashboardStats.value.last24HoursTraffic
+      ? formatTraffic(dashboardStats.value.last24HoursTraffic.total)
+      : '—',
+    detail: dashboardStats.value.last24HoursTraffic
+      ? `上传 ${formatTraffic(dashboardStats.value.last24HoursTraffic.upload)} · 下载 ${formatTraffic(dashboardStats.value.last24HoursTraffic.download)}`
+      : '最近24小时的流量记录不完整',
+    tone: 'light',
+    icon: DataAnalysis,
   },
 ])
 
@@ -403,6 +424,7 @@ const queueHealthRows = computed(() => [
   },
 ])
 
+const nodeRankPeriodLabel = computed(() => rankPresetOptions.find((option) => option.value === rankPreset.value)?.label ?? '今日')
 const displayedNodeRanks = computed(() => nodeRanks.value.slice(0, nodeRankLimit.value))
 const displayedUserRanks = computed(() => userRanks.value.slice(0, userRankLimit.value))
 
@@ -468,30 +490,60 @@ async function loadTrend() {
   }
 }
 
-async function loadRankings() {
-  rankLoading.value = true
+async function loadNodeRankings() {
+  const requestId = ++nodeRankRequestId
+  nodeRankLoading.value = true
   try {
     const range = getDateRangeFromPreset(rankPreset.value, overview.value?.timezone)
-    const [nodeResponse, userResponse] = await Promise.all([
-      getTrafficRank({
-        type: 'node',
-        startDate: range.startDate,
-        endDate: range.endDate,
-        limit: nodeRankLimit.value,
-      }),
-      getTrafficRank({
-        type: 'user',
-        startDate: range.startDate,
-        endDate: range.endDate,
-        limit: userRankLimit.value,
-      }),
-    ])
-
-    nodeRanks.value = nodeResponse.data
-    userRanks.value = userResponse.data
+    const response = await getTrafficRank({
+      type: 'node',
+      startDate: range.startDate,
+      endDate: range.endDate,
+      limit: nodeRankLimit.value,
+      keyword: nodeSearchKeyword.value || undefined,
+    })
+    if (requestId !== nodeRankRequestId) return
+    nodeRanks.value = response.data
+    nodeRankSummary.value = response.summary ?? null
+  } catch (error) {
+    if (requestId !== nodeRankRequestId) return
+    nodeRanks.value = []
+    nodeRankSummary.value = null
+    throw error
   } finally {
-    rankLoading.value = false
+    if (requestId === nodeRankRequestId) nodeRankLoading.value = false
   }
+}
+
+async function loadUserRankings() {
+  const requestId = ++userRankRequestId
+  userRankLoading.value = true
+  try {
+    const range = getDateRangeFromPreset(rankPreset.value, overview.value?.timezone)
+    const response = await getTrafficRank({
+      type: 'user',
+      startDate: range.startDate,
+      endDate: range.endDate,
+      limit: userRankLimit.value,
+    })
+    if (requestId !== userRankRequestId) return
+    userRanks.value = response.data
+  } catch (error) {
+    if (requestId !== userRankRequestId) return
+    userRanks.value = []
+    throw error
+  } finally {
+    if (requestId === userRankRequestId) userRankLoading.value = false
+  }
+}
+
+async function loadRankings() {
+  await Promise.all([loadNodeRankings(), loadUserRankings()])
+}
+
+function searchNodeRankings() {
+  nodeSearchKeyword.value = nodeSearchInput.value.trim()
+  void loadNodeRankings().catch(() => ElMessage.error('节点排行搜索失败'))
 }
 
 async function refreshDashboard(options: { silentSuccess?: boolean } = {}) {
@@ -559,8 +611,16 @@ watch(trendPreset, () => {
   void loadTrend().catch(() => ElMessage.error('趋势数据刷新失败'))
 })
 
-watch([rankPreset, nodeRankLimit, userRankLimit], () => {
+watch(rankPreset, () => {
   void loadRankings().catch(() => ElMessage.error('排行数据刷新失败'))
+})
+
+watch(nodeRankLimit, () => {
+  void loadNodeRankings().catch(() => ElMessage.error('节点排行刷新失败'))
+})
+
+watch(userRankLimit, () => {
+  void loadUserRankings().catch(() => ElMessage.error('用户排行刷新失败'))
 })
 
 onMounted(() => {
@@ -619,7 +679,7 @@ onMounted(() => {
         :is="card.action ? 'button' : 'article'"
         :key="card.key"
         class="metric-card"
-        :class="[`tone-${card.tone}`, { 'metric-card--interactive': Boolean(card.action) }]"
+        :class="[`tone-${card.tone}`, { 'metric-card--interactive': Boolean(card.action), 'metric-card--wide': card.key === 'last24HoursTraffic' }]"
         :type="card.action ? 'button' : undefined"
         :aria-label="card.action ? `${card.label}，${card.action.helperText}` : undefined"
         @click="openMetricCard(card)"
@@ -873,7 +933,30 @@ onMounted(() => {
           </div>
         </header>
 
-        <div class="panel-state" v-if="rankLoading">排行数据同步中…</div>
+        <form class="node-rank-search" @submit.prevent="searchNodeRankings">
+          <ElInput
+            v-model="nodeSearchInput"
+            clearable
+            maxlength="255"
+            placeholder="搜索节点名称，例如 12.5x"
+            aria-label="节点名称关键词"
+            @clear="searchNodeRankings"
+          />
+          <ElButton type="primary" native-type="submit">搜索</ElButton>
+        </form>
+        <div v-if="!nodeRankLoading && nodeRankSummary" class="node-rank-summary" aria-live="polite">
+          <div class="node-rank-summary__total">
+            <span>{{ nodeRankPeriodLabel }}{{ nodeSearchKeyword ? '匹配节点' : '全部节点' }}合计</span>
+            <strong>{{ formatTraffic(nodeRankSummary.total) }}</strong>
+          </div>
+          <p v-if="nodeSearchKeyword" class="node-rank-summary__keyword">关键词：{{ nodeSearchKeyword }}</p>
+          <div class="node-rank-summary__details">
+            <span>上传 {{ formatTraffic(nodeRankSummary.upload) }}</span>
+            <span>下载 {{ formatTraffic(nodeRankSummary.download) }}</span>
+            <span>有流量节点 {{ nodeRankSummary.matchedCount }} 个 · 显示前 {{ nodeRankLimit }} 个</span>
+          </div>
+        </div>
+        <div class="panel-state" v-if="nodeRankLoading">排行数据同步中…</div>
         <div
           v-else-if="nodeRanks.length"
           :class="rankScrollClass(nodeRankLimit)"
@@ -961,7 +1044,7 @@ onMounted(() => {
           </div>
         </header>
 
-        <div class="panel-state" v-if="rankLoading">排行数据同步中…</div>
+        <div class="panel-state" v-if="userRankLoading">排行数据同步中…</div>
         <div
           v-else-if="userRanks.length"
           :class="rankScrollClass(userRankLimit)"
@@ -1198,6 +1281,10 @@ onMounted(() => {
   padding: 22px;
   display: grid;
   gap: 10px;
+}
+
+.metric-card--wide {
+  grid-column: 1 / -1;
 }
 
 .metric-card--interactive {
@@ -1569,6 +1656,53 @@ onMounted(() => {
   font-size: 10px;
 }
 
+.node-rank-search {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.node-rank-search :deep(.el-input) {
+  min-width: 0;
+}
+
+.node-rank-summary {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #f5f5f7;
+}
+
+.node-rank-summary__total,
+.node-rank-summary__details {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.node-rank-summary__total {
+  justify-content: space-between;
+}
+
+.node-rank-summary__total strong {
+  color: var(--xboard-text-strong);
+  font-size: 24px;
+}
+
+.node-rank-summary__details,
+.node-rank-summary__keyword {
+  color: var(--xboard-text-secondary);
+  font-size: 13px;
+}
+
+.node-rank-summary__keyword {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .rank-list,
 .status-grid {
   display: grid;
@@ -1771,6 +1905,19 @@ onMounted(() => {
 }
 
 @media (max-width: 767px) {
+  .rank-panel .panel-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rank-panel .panel-actions {
+    justify-items: start;
+  }
+
+  .rank-panel .panel-header h2 {
+    font-size: 26px;
+  }
+
   .dashboard-hero {
     flex-direction: column;
     padding: 28px 24px;

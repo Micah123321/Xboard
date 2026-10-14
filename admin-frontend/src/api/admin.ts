@@ -118,6 +118,7 @@ export function getTrafficRank(params: {
   endDate?: string
   startTime?: number
   endTime?: number
+  keyword?: string
   limit?: 10 | 20
 }): Promise<TrafficRankResponse> {
   return adminClient
@@ -128,6 +129,7 @@ export function getTrafficRank(params: {
         end_date: params.endDate,
         start_time: params.startTime,
         end_time: params.endTime,
+        keyword: params.keyword,
         limit: params.limit,
       },
     })

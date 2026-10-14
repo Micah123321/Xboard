@@ -48,6 +48,11 @@ class StatControllerTrafficRankWindowTest extends TestCase
         Request::macro('validate', function (array $rules) {
             return app('validator')->make($this->all(), $rules)->validate();
         });
+        $this->db->getConnection()->getSchemaBuilder()->create('v2_traffic_report', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->integer('received_at');
+            $table->text('billing_snapshot')->nullable();
+        });
         foreach (['server', 'user'] as $type) {
             $this->db->getConnection()->getSchemaBuilder()->create('v2_stat_' . $type, function (Blueprint $table) use ($type): void {
                 $table->integer($type . '_id');
@@ -204,6 +209,114 @@ class StatControllerTrafficRankWindowTest extends TestCase
         foreach ($stats as $traffic) {
             $this->assertSame(['upload' => 0, 'download' => 0, 'total' => 0], $traffic);
         }
+    }
+
+    public function test_node_keyword_filters_before_limit_and_summary_covers_all_matching_nodes(): void
+    {
+        $today = CarbonImmutable::parse('2026-05-01', 'Asia/Shanghai');
+        for ($id = 1; $id <= 22; $id++) {
+            $name = $id <= 21 ? ($id === 21 ? '12.5X Node' : '12.5x Node') : 'Unrelated Node';
+            if ($id === 1) {
+                $this->db->getConnection()->table('v2_server')->where('id', 1)->update(['name' => $name]);
+            } else {
+                $this->db->getConnection()->table('v2_server')->insert(['id' => $id, 'name' => $name]);
+            }
+            $value = $id <= 21 ? $id : 10000;
+            $this->db->getConnection()->table('v2_stat_server')->insert([
+                'server_id' => $id, 'record_type' => 'd', 'record_at' => $today->timestamp, 'u' => $value, 'd' => $value * 2,
+            ]);
+        }
+        $this->insertBucket('server', $today->timestamp, 99999, 99999, 'm');
+        $this->insertBucket('server', $today->subDay()->timestamp, 3, 6);
+        $this->insertBucket('user', $today->timestamp, 99999, 99999);
+        $controller = new StatController();
+        $params = ['type' => 'node', 'start_date' => '2026-05-01', 'end_date' => '2026-05-01'];
+        foreach ([10, 20] as $limit) {
+            $response = $controller->getTrafficRank(Request::create('/', 'GET', $params + ['keyword' => ' 12.5x ', 'limit' => $limit]));
+            $this->assertCount($limit, $response['data']);
+            $this->assertSame('21', $response['data'][0]['id']);
+            $this->assertSame(['upload' => 231, 'download' => 462, 'total' => 693, 'matchedCount' => 21], $response['summary']);
+        }
+        $unfiltered = $controller->getTrafficRank(Request::create('/', 'GET', $params));
+        $this->assertSame('22', $unfiltered['data'][0]['id']);
+        $this->assertSame(30693, $unfiltered['summary']['total']);
+        $empty = $controller->getTrafficRank(Request::create('/', 'GET', $params + ['keyword' => 'absent']));
+        $this->assertSame([], $empty['data']);
+        $this->assertSame(['upload' => 0, 'download' => 0, 'total' => 0, 'matchedCount' => 0], $empty['summary']);
+    }
+
+    public static function literalKeywords(): array
+    {
+        return ['percent' => ['12.5%'], 'underscore' => ['node_'], 'escape' => ['node!']];
+    }
+
+    #[DataProvider('literalKeywords')]
+    public function test_keyword_metacharacters_are_matched_literally(string $keyword): void
+    {
+        $today = CarbonImmutable::parse('2026-05-01', 'Asia/Shanghai');
+        $this->db->getConnection()->table('v2_server')->where('id', 1)->update(['name' => $keyword . ' literal']);
+        $this->db->getConnection()->table('v2_server')->insert(['id' => 2, 'name' => '12.5x nodeX']);
+        foreach ([1, 2] as $id) {
+            $this->db->getConnection()->table('v2_stat_server')->insert([
+                'server_id' => $id, 'record_type' => 'd', 'record_at' => $today->timestamp, 'u' => 10, 'd' => 20,
+            ]);
+        }
+        $response = (new StatController())->getTrafficRank(Request::create('/', 'GET', [
+            'type' => 'node', 'start_date' => '2026-05-01', 'end_date' => '2026-05-01', 'keyword' => $keyword,
+        ]));
+        $this->assertSame(['1'], array_column($response['data'], 'id'));
+        $this->assertSame(30, $response['summary']['total']);
+    }
+
+    public function test_rolling_24_hours_use_raw_receipts_and_exact_time_boundaries(): void
+    {
+        $now = CarbonImmutable::parse('2026-05-01 12:34:56', 'Asia/Shanghai')->timestamp;
+        $oldSnapshot = ['rate' => 12.5, 'users' => [
+            1 => ['final_u' => 10, 'final_d' => 20, 'billed_u' => 125, 'billed_d' => 250],
+            999 => ['final_u' => 7, 'final_d' => 9, 'billed_u' => 0, 'billed_d' => 0],
+        ]];
+        $newSnapshot = ['rate' => 12.5, 'raw_upload' => 3, 'raw_download' => 5, 'users' => [
+            1 => ['final_u' => 3, 'final_d' => 5, 'billed_u' => 37, 'billed_d' => 62],
+        ]];
+        foreach ([[$now - 86400 - 1, null], [$now - 86400, $oldSnapshot], [$now - 1, $newSnapshot], [$now, null]] as [$receivedAt, $snapshot]) {
+            $this->db->getConnection()->table('v2_traffic_report')->insert([
+                'received_at' => $receivedAt, 'billing_snapshot' => $snapshot === null ? null : json_encode($snapshot),
+            ]);
+        }
+        $this->insertBucket('server', $now - 100, 99999, 99999);
+        $this->assertSame(['upload' => 20, 'download' => 34, 'total' => 54], $this->invoke('queryLast24HoursTraffic', $now));
+    }
+
+    public function test_rolling_24_hours_read_all_legacy_snapshot_batches_and_empty_window(): void
+    {
+        $now = CarbonImmutable::parse('2026-05-01 12:00', 'Asia/Shanghai')->timestamp;
+        $this->assertSame(['upload' => 0, 'download' => 0, 'total' => 0], $this->invoke('queryLast24HoursTraffic', $now));
+        for ($id = 0; $id < 301; $id++) {
+            $this->db->getConnection()->table('v2_traffic_report')->insert([
+                'received_at' => $now - 60,
+                'billing_snapshot' => json_encode(['rate' => 12.5, 'users' => [1 => ['final_u' => 1, 'final_d' => 2]]]),
+            ]);
+        }
+        $this->assertSame(['upload' => 301, 'download' => 602, 'total' => 903], $this->invoke('queryLast24HoursTraffic', $now));
+    }
+
+    public static function incompleteSnapshots(): array
+    {
+        return [
+            'missing' => [null], 'invalid JSON' => ['{'], 'missing users' => ['{}'],
+            'missing direction' => [json_encode(['users' => [1 => ['final_u' => 1]]])],
+            'negative bytes' => [json_encode(['users' => [1 => ['final_u' => -1, 'final_d' => 2]]])],
+        ];
+    }
+
+    #[DataProvider('incompleteSnapshots')]
+    public function test_rolling_24_hours_do_not_present_partial_history_as_a_complete_total(?string $snapshot): void
+    {
+        $now = CarbonImmutable::parse('2026-05-01 12:00', 'Asia/Shanghai')->timestamp;
+        $this->db->getConnection()->table('v2_traffic_report')->insert([
+            'received_at' => $now - 60, 'billing_snapshot' => $snapshot,
+        ]);
+        $this->assertNull($this->invoke('queryLast24HoursTraffic', $now));
     }
 
     private function insertBucket(string $table, int $timestamp, int $upload, int $download, string $type = 'd'): void

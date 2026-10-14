@@ -111,6 +111,9 @@ class TrafficBillingJobTest extends TestCase
         unserialize(serialize($job))->handle();
         $this->job()->handle();
         self::assertSame(1, DB::table('v2_traffic_report')->count());
+        $snapshot = json_decode(DB::table('v2_traffic_report')->value('billing_snapshot'), true);
+        self::assertSame(4, $snapshot['raw_upload']);
+        self::assertSame(6, $snapshot['raw_download']);
         self::assertSame(4, DB::table('v2_user')->where('id', 1)->value('u'));
         self::assertSame(7, DB::table('v2_user')->where('id', 1)->value('d'));
         self::assertSame(5, (int) DB::table('v2_stat_user')->sum('u'));

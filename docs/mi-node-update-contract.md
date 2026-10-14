@@ -133,6 +133,7 @@ A=/api/v2/{实际secure_path}/server/update，沿用admin/log。写操作需Idem
 | POST /enrollments | {scope} | {enrollment_id,enrollment_secret,expires_at} |
 | POST /installations/{id}/revoke | {} | {id,revoked_at} |
 | GET /installations | 分页，machine_id?/node_id?/capability_status? | Installation列表 |
+| PATCH /installations/policies | {enabled,installations:[{id,revision}]} | {items:[{id,policy}],updated_count,global_enabled}；1–1000项全组原子保存，失败附excluded |
 | PATCH /installations/{id}/policy | {enabled,target_release_id,revision,follow_latest?} | Policy；follow_latest=true时可无固定target |
 | POST /installations/{id}/update-latest | {} | 单次manual批次，两个自动开关关闭时亦可执行 |
 | GET /release-source | 无 | {url,checked_at,error,latest} |
@@ -150,8 +151,8 @@ A=/api/v2/{实际secure_path}/server/update，沿用admin/log。写操作需Idem
 | GET /coverage | machine_id或node_id恰选一 | {status,installation_ids,reason} |
 
 Installation={id,scope,versions,installed_sha256,runtime,capability,last_seen_at,online,policy,active_task_id,revoked_at,update}；update={latest_release_id,latest_version,available,status}；online为180秒内poll，非业务在线。
-Batch={id,release_id,state,max_concurrency,fail_pause_after,counts,created_at,finished_at}，counts包括全部Task状态的整数，零也返回。
-Task={id,batch_id,installation_id,state,last_phase,code,message,attempt_id,lease_expires_at,created_at,finished_at}，attempt_id/lease_expires_at可null。
+Batch={id,release_id,release_version,installation_count,targets,manual,state,max_concurrency,fail_pause_after,counts,created_at,finished_at}，counts包括全部Task状态的整数，零也返回。targets最多预览三个安装，格式{id,scope,node_count,nodes:[{id,name}],online,last_seen_at}，每个安装最多三个当前节点名称；完整对象在任务分页中查看。版本来自固定发行，安装总数来自全部状态计数。前端从计数区分全部成功、全部已是目标版本、取消与失败。
+Task={id,batch_id,installation_id,target_version,installation,state,last_phase,code,message,attempt_id,lease_expires_at,created_at,finished_at}，attempt_id/lease_expires_at可null。
 Event={id,task_id,attempt_id,seq,source,payload,received_at}，payload脱敏。
 coverage从登记scope映射：有登记status=registered；无登记bootstrap_required（不能据此推断真实版本），reason=not_enrolled；有登记reason=null，具体unsupported看Installation。
 

@@ -1,7 +1,27 @@
-import type { Artifact, TaskState, BatchState, EnrollmentStatus } from '@/types/nodeUpdates'
+import type { Artifact, TaskState, BatchState, Batch, EnrollmentStatus } from '@/types/nodeUpdates'
 export const taskLabels: Record<TaskState, string> = { queued: '排队中', claimed: '已领取', downloading: '下载中', verifying_artifacts: '校验制品中', installing: '安装中', verifying: '健康验证中', succeeded: '更新成功', failed: '失败', canceled: '已取消', skipped: '已跳过（已是目标版本）', rolling_back: '回滚中', rolled_back: '已回滚', rollback_failed: '回滚失败', uncertain: '结果不确定（持续占用容量，需核验）' }
 export const batchLabels: Record<BatchState, string> = { running: '进行中', paused: '已暂停', canceling: '取消中（等待在途事务结束）', completed: '已结束（不代表全部成功）', canceled: '已取消' }
 const reasons: Record<string, string> = { update_available: '有新版本可安装', no_release: '等待自动构建版本', version_unknown: '尚未识别固定版本号', active_batch: '已有更新批次，请先处理当前批次', release_source_unavailable: '暂未获取到构建清单，请稍后重试', invalid_release_manifest: '构建清单格式错误', invalid_release_source: '版本源配置错误', supported: '支持自动更新', unsupported: '不支持自动更新', docker: 'Docker 不支持，请按镜像部署流程更新', openrc: 'OpenRC 仅支持手工更新', unsupported_os: '操作系统不支持', unsupported_arch: '架构不支持', shared_binary_layout: '共享二进制布局不支持', local_disabled: '本地已禁用', not_reported: '尚未报告能力', not_enrolled: '尚未登记更新执行器', already_current: '已是目标版本且散列一致', version_conflict: '同版本散列冲突', downgrade_forbidden: '禁止降级', binary_version_mismatch: '双二进制版本不一致', download_failed: '下载失败', checksum_mismatch: 'SHA256 不匹配', size_mismatch: '文件大小不匹配', arch_mismatch: '架构不匹配', backup_failed: '备份失败', lease_expired: '租约过期', policy_disabled: '策略已关闭', batch_paused: '批次已暂停', batch_canceled: '批次已取消', release_revoked: '发行已撤销', restart_failed: '重启失败', health_failed: '健康检查失败', rollback_legacy_health: '已回滚，旧版本采用降级健康检查', rollback_failed: '回滚失败', manual_resolution: '已人工核验处理', revision_conflict: '配置已被修改，已刷新，请重新核对后保存', policy_changed: '安装策略已变化', capacity_exhausted: '并发容量已满', scope_conflict: '绑定范围与现有安装冲突', task_terminal: '任务已结束', invalid_credentials: '登录凭据失效', scope_mismatch: '范围不匹配', not_found: '资源不存在', validation_failed: '参数校验失败', idempotency_conflict: '幂等请求冲突', task_claimed: '任务已领取', expected_seq: '事件序号不连续' }
+export function batchMetrics(batch: Batch) {
+ const counts = batch.counts
+ const total = Object.values(counts).reduce((sum, value) => sum + value, 0)
+ const finished = counts.succeeded + counts.failed + counts.rolled_back + counts.rollback_failed + counts.canceled + counts.skipped
+ const active = counts.claimed + counts.downloading + counts.verifying_artifacts + counts.installing + counts.verifying + counts.rolling_back
+ return { total, finished, active, failed: counts.failed + counts.rolled_back + counts.rollback_failed, percent: total ? Math.round(finished * 100 / total) : 0 }
+}
+export function batchResultLabel(batch: Batch) {
+ const metrics = batchMetrics(batch)
+ if (!['completed', 'canceled'].includes(batch.state)) return batchLabels[batch.state]
+ if (!metrics.total) return '已结束，无任务'
+ if (metrics.failed) return '已结束，有失败任务'
+ if (batch.counts.uncertain) return '已结束，仍有结果待核验'
+ if (batch.counts.skipped === metrics.total) return '全部已是目标版本'
+ if (batch.counts.succeeded === metrics.total) return '全部更新成功'
+ if (batch.counts.canceled === metrics.total) return '全部任务已取消'
+ if (batch.counts.canceled) return '已结束，含取消任务'
+ if (batch.counts.succeeded + batch.counts.skipped === metrics.total) return '更新完成，含已是目标版本'
+ return batchLabels[batch.state]
+}
 export function reasonLabel(code: string | null) { return code ? (reasons[code] || '服务端原因：' + code) : '—' }
 export function enrollmentStatusLabel(status?: EnrollmentStatus | null): string {
  if (!status) return '尚未收到接入执行结果'

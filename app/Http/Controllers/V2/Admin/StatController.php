@@ -425,6 +425,7 @@ class StatController extends Controller
 
                 'timezone' => config('app.timezone', 'UTC'),
                 // 流量统计
+                'last24HoursTraffic' => $this->queryLast24HoursTraffic($now),
                 'todayTraffic' => $trafficStats['todayTraffic'],
                 'monthTraffic' => $trafficStats['monthTraffic'],
                 'totalTraffic' => $trafficStats['totalTraffic'],
@@ -578,6 +579,48 @@ class StatController extends Controller
             'monthTraffic' => $monthTraffic,
             'totalTraffic' => ['upload' => $upload, 'download' => $download, 'total' => $upload + $download],
         ];
+    }
+
+    private function queryLast24HoursTraffic(int $now): ?array
+    {
+        $upload = $download = 0;
+        // Daily buckets cannot reconstruct a rolling window. Receipts are deduplicated
+        // in the same transaction as raw node statistics, independently of billing rates.
+        $query = DB::table('v2_traffic_report')
+            ->where('received_at', '>=', $now - 86400)
+            ->where('received_at', '<', $now);
+        if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb', 'sqlite'], true)) {
+            $uploadExpression = "CASE WHEN JSON_VALID(billing_snapshot) THEN JSON_EXTRACT(billing_snapshot, '$.raw_upload') ELSE NULL END";
+            $downloadExpression = "CASE WHEN JSON_VALID(billing_snapshot) THEN JSON_EXTRACT(billing_snapshot, '$.raw_download') ELSE NULL END";
+            // New receipts aggregate in SQL; only older snapshots need decoding in PHP.
+            $totals = (clone $query)
+                ->whereRaw("({$uploadExpression}) IS NOT NULL AND ({$downloadExpression}) IS NOT NULL")
+                ->selectRaw("COALESCE(SUM({$uploadExpression}), 0) as upload, COALESCE(SUM({$downloadExpression}), 0) as download")
+                ->first();
+            $upload = (int) $totals->upload;
+            $download = (int) $totals->download;
+            $query->whereRaw("(({$uploadExpression}) IS NULL OR ({$downloadExpression}) IS NULL)");
+        }
+        $reports = $query->select(['id', 'billing_snapshot'])->lazyById(250);
+
+        foreach ($reports as $report) {
+            $snapshot = json_decode($report->billing_snapshot ?? '', true);
+            if (!is_array($snapshot) || !isset($snapshot['users']) || !is_array($snapshot['users'])) {
+                return null;
+            }
+            foreach ($snapshot['users'] as $traffic) {
+                if (!is_array($traffic)
+                    || !isset($traffic['final_u'], $traffic['final_d'])
+                    || !is_int($traffic['final_u']) || !is_int($traffic['final_d'])
+                    || $traffic['final_u'] < 0 || $traffic['final_d'] < 0) {
+                    return null;
+                }
+                $upload += $traffic['final_u'];
+                $download += $traffic['final_d'];
+            }
+        }
+
+        return ['upload' => $upload, 'download' => $download, 'total' => $upload + $download];
     }
 
     private function countOnlineServers(): int
@@ -823,6 +866,7 @@ class StatController extends Controller
             'end_date' => 'nullable|date_format:Y-m-d',
             'start_time' => 'nullable|integer|min:1000000000|max:9999999999',
             'end_time' => 'nullable|integer|min:1000000000|max:9999999999',
+            'keyword' => 'nullable|string|max:255',
             'limit' => 'nullable|integer|in:10,20'
         ]);
 
@@ -831,10 +875,13 @@ class StatController extends Controller
         $startDate = $window['start'];
         $endDate = $window['end'];
         $limit = (int) $request->input('limit', 10);
+        $keyword = $type === 'node' ? trim((string) $request->input('keyword', '')) : '';
         $comparisonWindow = $this->resolveTrafficRankComparisonWindow($startDate, $endDate);
         $previousStartDate = $comparisonWindow['start'];
         $previousEndDate = $comparisonWindow['end'];
         $cacheKey = CacheKey::get('ADMIN_DASHBOARD_TRAFFIC_RANK', sha1(implode(':', [
+            'v2',
+            $keyword,
             $type,
             $startDate,
             $endDate,
@@ -849,13 +896,14 @@ class StatController extends Controller
             $endDate,
             $previousStartDate,
             $previousEndDate,
-            $limit
+            $limit,
+            $keyword
         ): array {
-            return $this->buildTrafficRank($type, $startDate, $endDate, $previousStartDate, $previousEndDate, $limit);
+            return $this->buildTrafficRank($type, $startDate, $endDate, $previousStartDate, $previousEndDate, $limit, $keyword);
         });
     }
 
-    private function buildTrafficRank(string $type, int $startDate, int $endDate, int $previousStartDate, int $previousEndDate, int $limit): array
+    private function buildTrafficRank(string $type, int $startDate, int $endDate, int $previousStartDate, int $previousEndDate, int $limit, string $keyword): array
     {
         $isNodeRank = $type === 'node';
         $table = $isNodeRank ? 'v2_stat_server' : 'v2_stat_user';
@@ -864,12 +912,34 @@ class StatController extends Controller
         $nameColumn = $isNodeRank ? 'name' : 'email';
         $fallbackName = $isNodeRank ? 'Node' : 'User';
 
-        $currentData = DB::table($table)
-            ->selectRaw("{$idColumn} as id")
-            ->selectRaw('COALESCE(SUM(u + d), 0) as value')
+        $query = DB::table($table)
             ->where('record_type', 'd')
             ->where('record_at', '>=', $startDate)
-            ->where('record_at', '<', $endDate)
+            ->where('record_at', '<', $endDate);
+        if ($isNodeRank && $keyword !== '') {
+            // Escape LIKE wildcards so a keyword is always a literal substring.
+            $pattern = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($keyword)) . '%';
+            $query->whereIn($idColumn, DB::table($nameTable)->select('id')
+                ->whereRaw("LOWER({$nameColumn}) LIKE ? ESCAPE '!'", [$pattern]));
+        }
+
+        $summary = [];
+        if ($isNodeRank) {
+            $totals = (clone $query)
+                ->selectRaw('COALESCE(SUM(u), 0) as upload, COALESCE(SUM(d), 0) as download')
+                ->selectRaw("COUNT(DISTINCT {$idColumn}) as matched_count")
+                ->first();
+            $summary['summary'] = [
+                'upload' => (int) $totals->upload,
+                'download' => (int) $totals->download,
+                'total' => (int) $totals->upload + (int) $totals->download,
+                'matchedCount' => (int) $totals->matched_count,
+            ];
+        }
+
+        $currentData = (clone $query)
+            ->selectRaw("{$idColumn} as id")
+            ->selectRaw('COALESCE(SUM(u + d), 0) as value')
             ->groupBy($idColumn)
             ->orderByDesc('value')
             ->limit($limit)
@@ -879,7 +949,7 @@ class StatController extends Controller
             return [
                 'timestamp' => date('c'),
                 'data' => [],
-            ];
+            ] + $summary;
         }
 
         $ids = $currentData->pluck('id')->map(fn ($id): int => (int) $id)->all();
@@ -916,6 +986,6 @@ class StatController extends Controller
         return [
             'timestamp' => date('c'),
             'data' => $result
-        ];
+        ] + $summary;
     }
 }

@@ -57,6 +57,7 @@ export interface DashboardStats {
   ticketPendingTotal: number
   onlineNodes: number
   nodeGfwStats: DashboardNodeGfwStats
+  last24HoursTraffic: TrafficAmount | null
   todayTraffic: TrafficAmount
   monthTraffic: TrafficAmount
   totalTraffic: TrafficAmount
@@ -100,9 +101,14 @@ export interface TrafficRankItem {
   timestamp: string
 }
 
+export interface TrafficRankSummary extends TrafficAmount {
+  matchedCount: number
+}
+
 export interface TrafficRankResponse {
   timestamp: string
   data: TrafficRankItem[]
+  summary?: TrafficRankSummary
 }
 
 export interface SystemStatus {

@@ -90,6 +90,25 @@ test('latest release source and single install use stable authenticated routes',
  await api.updates.syncReleases('sync-key'); assert.equal(captured.url, '/server/update/releases/sync'); assert.deepEqual(captured.data, {}); assert.equal(captured.headers['Idempotency-Key'], 'sync-key')
  await api.updates.updateLatest('installation', 'install-key'); assert.equal(captured.url, '/server/update/installations/installation/update-latest'); assert.deepEqual(captured.data, {}); assert.equal(captured.headers['Idempotency-Key'], 'install-key')
 })
+test('batch result labels distinguish successful canceled skipped and failed tasks', () => {
+ const states = ['queued','claimed','downloading','verifying_artifacts','installing','verifying','rolling_back','uncertain','succeeded','failed','rolled_back','rollback_failed','canceled','skipped']
+ const batch = (counts, state = 'completed') => ({ state, counts: { ...Object.fromEntries(states.map(key => [key, 0])), ...counts } })
+ assert.equal(model.batchResultLabel(batch({ succeeded: 2 })), '全部更新成功')
+ assert.equal(model.batchResultLabel(batch({ skipped: 2 })), '全部已是目标版本')
+ assert.equal(model.batchResultLabel(batch({ canceled: 2 })), '全部任务已取消')
+ assert.equal(model.batchResultLabel(batch({ succeeded: 1, canceled: 1 })), '已结束，含取消任务')
+ assert.equal(model.batchResultLabel(batch({ succeeded: 1, rolled_back: 1 })), '已结束，有失败任务')
+ assert.equal(model.batchResultLabel(batch({ succeeded: 1, skipped: 1 })), '更新完成，含已是目标版本')
+ assert.deepEqual(model.batchMetrics(batch({ queued: 1, installing: 1, succeeded: 2 }, 'running')), { total: 4, finished: 2, active: 1, failed: 0, percent: 50 })
+ assert.equal(model.batchMetrics(batch({})).percent, 0)
+})
+test('bulk policy API sends selected revisions in one authenticated write', async () => {
+ const data = { enabled: true, installations: [{ id: 'a', revision: 2 }, { id: 'b', revision: 3 }] }
+ response = { status: 200, data: { data: { items: [], updated_count: 2, global_enabled: false } } }
+ const result = await api.updates.bulkPolicy(data, 'bulk-key')
+ assert.equal(captured.url, '/server/update/installations/policies'); assert.equal(captured.method, 'PATCH')
+ assert.deepEqual(captured.data, data); assert.equal(captured.headers['Idempotency-Key'], 'bulk-key'); assert.equal(result.updated_count, 2)
+})
 test('network failure retry keeps the same submission key', async () => {
  const keys = api.createIdempotencyKeys(); const body = { scope: { kind: 'machine', machine_id: 12 } }
  failNetwork = true

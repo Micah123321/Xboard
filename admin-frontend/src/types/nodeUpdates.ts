@@ -22,8 +22,9 @@ export interface Installation {
 }
 export type TaskState = 'queued' | 'claimed' | 'downloading' | 'verifying_artifacts' | 'installing' | 'verifying' | 'succeeded' | 'failed' | 'canceled' | 'skipped' | 'rolling_back' | 'rolled_back' | 'rollback_failed' | 'uncertain'
 export type BatchState = 'running' | 'paused' | 'canceling' | 'completed' | 'canceled'
-export interface Batch { id: string; release_id: string; state: BatchState; max_concurrency: number; fail_pause_after: number; counts: Record<TaskState, number>; created_at: string; finished_at: string | null }
-export interface Task { id: string; batch_id: string; installation_id: string; state: TaskState; last_phase: TaskState | null; code: string | null; message: string | null; attempt_id: string | null; lease_expires_at: string | null; created_at: string; finished_at: string | null }
+export interface InstallationSummary { id: string; scope: Scope; node_count: number; nodes: { id: number; name: string }[]; online: boolean; last_seen_at: string | null }
+export interface Batch { release_version?: string; installation_count?: number; targets?: InstallationSummary[]; manual?: boolean; id: string; release_id: string; state: BatchState; max_concurrency: number; fail_pause_after: number; counts: Record<TaskState, number>; created_at: string; finished_at: string | null }
+export interface Task { target_version?: string | null; installation?: InstallationSummary; id: string; batch_id: string; installation_id: string; state: TaskState; last_phase: TaskState | null; code: string | null; message: string | null; attempt_id: string | null; lease_expires_at: string | null; created_at: string; finished_at: string | null }
 export interface UpdateEvent { id: string; task_id: string; attempt_id: string; seq: number; source: string; payload: unknown; received_at: string }
 export interface Preview { eligible_ids: string[]; excluded: { installation_id: string; code: string }[]; affected_installation_count: number }
 export interface BatchInput { release_id: string; installation_ids: string[]; max_concurrency: number; fail_pause_after: number }
