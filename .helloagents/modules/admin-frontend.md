@@ -91,6 +91,7 @@
 - 动态插件配置按后端返回的 schema 渲染，当前已兼容 `boolean / string / text / json / select / number` 字段类型；未安装插件仅显示配置结构预览，不允许保存
 - 公告管理页使用真实后端 `notice/fetch`、`notice/save`、`notice/show`、`notice/drop` 与 `notice/sort`，支持标题搜索、显隐切换、编辑弹窗、删除与排序模式
 - 公告编辑弹窗继续使用轻量 Markdown/HTML 工具栏，不引入额外富文本依赖；`show / popup / tags` 会在工具层统一归一化后再回填到 UI
+- 弹窗公告依赖 `v2_notice.popup` 布尔字段（迁移 `2026_10_14_000001_add_popup_to_v2_notice_table.php`），模型和保存请求使用布尔类型；旧表缺字段时 Eloquent 会静默丢弃该值。部署须执行此增量迁移并重载后端，此前丢失的开关需重新保存。Micah 用户端按公告 ID 和 `updated_at` 记忆已读版本，只自动显示启用弹窗的未读公告，忽略旧 `noticeShown`；读取后续分页避免遗漏第 6 条及以后的公告，手动按钮保留全部公告查看。
 - 支付配置页使用真实后端 `payment/fetch`、`payment/getPaymentMethods`、`payment/getPaymentForm`、`payment/save`、`payment/show`、`payment/drop` 与 `payment/sort`，支持关键词搜索、启停、删除、新增/编辑与排序模式
 - 支付编辑抽屉根据所选支付接口动态拉取真实配置字段，不在前端写死 EPay / TokenPay 等网关表单；通知地址继续以后端拼接结果为准
 - 知识库管理页使用真实后端 `knowledge/fetch`、`knowledge/getCategory`、`knowledge/save`、`knowledge/show`、`knowledge/drop` 与 `knowledge/sort`，支持标题搜索、分类筛选、显隐切换、编辑弹窗、删除与排序模式
