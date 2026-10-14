@@ -528,6 +528,20 @@ class NodeUpdateService
         return $counts;
     }
 
+    private function installationSummary(Record $installation): array
+    {
+        $scope = $installation->scope;
+        $nodes = Server::query();
+        if ($scope['kind'] === 'machine') $nodes->where('machine_id', $scope['machine_id']);
+        else $nodes->whereIn('id', $scope['node_ids']);
+        $nodeCount = (clone $nodes)->count();
+        $names = $nodes->orderBy('id')->limit(3)->get(['id','name'])
+            ->map(fn ($node) => ['id'=>$node->id,'name'=>$node->name])->all();
+        return ['id'=>$installation->id,'scope'=>$scope,'node_count'=>$nodeCount,'nodes'=>$names,
+            'online'=>$installation->last_seen_at !== null && $installation->last_seen_at->gte(now('UTC')->subSeconds(180)),
+            'last_seen_at'=>Protocol::time($installation->last_seen_at)];
+    }
+
     public function dto(string $type, Record $r): array
     {
         if ($type==='settings') return ['enabled'=>$r->enabled,'max_concurrency'=>$r->max_concurrency,'revision'=>$r->revision];
@@ -535,10 +549,20 @@ class NodeUpdateService
         if ($type==='installations') return ['id'=>$r->id,'scope'=>$r->scope,'versions'=>$r->versions,'installed_sha256'=>$r->installed_sha256,'runtime'=>$r->runtime,'capability'=>$r->capability,
             'last_seen_at'=>Protocol::time($r->last_seen_at),'online'=>$r->last_seen_at!==null && $r->last_seen_at->gte(now('UTC')->subSeconds(180)),
             'policy'=>$this->policy($r),'active_task_id'=>$r->active_task_id,'revoked_at'=>Protocol::time($r->revoked_at),'update'=>$this->updateStatus($r)];
-        if ($type==='batches') return ['id'=>$r->id,'release_id'=>$r->release_id,'manual'=>$r->manual,'state'=>$r->state,'max_concurrency'=>$r->max_concurrency,'fail_pause_after'=>$r->fail_pause_after,'counts'=>$this->counts($r->id),'created_at'=>Protocol::time($r->created_at),'finished_at'=>Protocol::time($r->finished_at)];
+        if ($type==='batches') {
+            $counts = $this->counts($r->id);
+            $ids = $this->q('tasks')->where('batch_id', $r->id)->orderBy('created_at')->orderBy('id')->limit(3)->pluck('installation_id');
+            $targets = $this->q('installations')->whereIn('id', $ids)->orderBy('id')->get()
+                ->map(fn ($installation) => $this->installationSummary($installation))->all();
+            return ['id'=>$r->id,'release_id'=>$r->release_id,'release_version'=>$this->find('releases',$r->release_id)->version,
+                'installation_count'=>array_sum($counts),'targets'=>$targets,'manual'=>$r->manual,'state'=>$r->state,
+                'max_concurrency'=>$r->max_concurrency,'fail_pause_after'=>$r->fail_pause_after,'counts'=>$counts,
+                'created_at'=>Protocol::time($r->created_at),'finished_at'=>Protocol::time($r->finished_at)];
+        }
         if ($type==='tasks') {
             $a=$this->q('attempts')->where('task_id',$r->id)->first();
             return ['id'=>$r->id,'batch_id'=>$r->batch_id,'installation_id'=>$r->installation_id,'state'=>$r->state,'last_phase'=>$r->last_phase,'code'=>$r->code,'message'=>$r->message,
+                'target_version'=>$r->release_snapshot['version'] ?? null,'installation'=>$this->installationSummary($this->find('installations',$r->installation_id)),
                 'attempt_id'=>$a?->id,'lease_expires_at'=>Protocol::time($a?->lease_expires_at),'created_at'=>Protocol::time($r->created_at),'finished_at'=>Protocol::time($r->finished_at)];
         }
         if ($type==='events') return ['id'=>$r->id,'task_id'=>$r->task_id,'attempt_id'=>$r->attempt_id,'seq'=>$r->seq,'source'=>$r->source,'payload'=>$r->payload,'received_at'=>Protocol::time($r->received_at)];
@@ -676,6 +700,48 @@ class NodeUpdateService
             if ($code !== null) Protocol::fail($code, 409);
             if ($this->q('batches')->whereIn('state', ['running','paused','canceling'])->exists()) Protocol::fail('active_batch', 409);
             return $this->dto('batches', $this->queueLatestBatch($admin, $release, $s, [$installation], true));
+        }
+        if ($method === 'PATCH' && $path === 'installations/policies') {
+            Protocol::fields($d, ['enabled','installations']); Protocol::boolean($d['enabled']);
+            if (!is_array($d['installations']) || !array_is_list($d['installations']) || !$d['installations'] || count($d['installations']) > 1000) Protocol::fail();
+            $targets = []; $seen = [];
+            foreach ($d['installations'] as $target) {
+                if (!is_array($target)) Protocol::fail();
+                Protocol::fields($target, ['id','revision']); Protocol::uuid($target['id']); Protocol::integer($target['revision']);
+                $installationId = $target['id']; $identity = strtolower($installationId);
+                if (isset($seen[$identity])) Protocol::fail();
+                $seen[$identity] = true; $targets[$installationId] = $target['revision'];
+            }
+            $installations = $this->q('installations')->whereIn('id', array_keys($targets))->get()->keyBy(fn($i)=>strtolower($i->id));
+            $excluded = [];
+            foreach ($targets as $installationId => $revision) {
+                $installation = $installations->get(strtolower($installationId));
+                $code = null;
+                if (!$installation) $code = 'not_found';
+                elseif ($revision !== $installation->policy_revision) $code = 'revision_conflict';
+                elseif ($d['enabled']) {
+                    $runtime = $installation->runtime;
+                    if (!$this->validInstallation($installation)) $code = 'invalid_credentials';
+                    elseif (($installation->capability['status'] ?? null) !== 'supported'
+                        || ($runtime['os'] ?? null) !== 'linux' || ($runtime['init'] ?? null) !== 'systemd'
+                        || ($runtime['container'] ?? null) !== false || !in_array($runtime['arch'] ?? null, ['amd64','arm64'], true)) $code = 'unsupported';
+                }
+                if ($code !== null) $excluded[] = ['installation_id'=>$installationId,'code'=>$code];
+            }
+            if ($excluded) {
+                $code = in_array('revision_conflict', array_column($excluded, 'code'), true) ? 'revision_conflict' : $excluded[0]['code'];
+                Protocol::fail($code, $code === 'not_found' ? 404 : 409, ['excluded'=>$excluded]);
+            }
+            $items = [];
+            // Validate every target before changing policies or canceling their queued work.
+            foreach ($targets as $installationId => $revision) {
+                $installation = $installations->get(strtolower($installationId));
+                $installation->forceFill(['policy_enabled'=>$d['enabled'],'follow_latest'=>$d['enabled'],
+                    'target_release_id'=>null,'policy_revision'=>$revision + 1])->save();
+                $items[] = ['id'=>$installation->id,'policy'=>$this->policy($installation)];
+            }
+            $this->sweep($s);
+            return ['items'=>$items,'updated_count'=>count($items),'global_enabled'=>$s->enabled];
         }
         if ($type==='installations') {
             Protocol::uuid($id); $i=$this->find('installations',$id);

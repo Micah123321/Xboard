@@ -1,5 +1,5 @@
 import { adminClient } from './client'
-import type { ReleaseSource, Page, Settings, Policy, Release, ReleaseInput, Installation, Batch, BatchInput, Task, TaskState, UpdateEvent, Preview, Scope, Enrollment, Coverage, Discovery, DiscoveryFilters } from '@/types/nodeUpdates'
+import type { ReleaseSource, Page, Settings, Policy, BulkPolicyInput, BulkPolicyResult, Release, ReleaseInput, Installation, Batch, BatchInput, Task, TaskState, UpdateEvent, Preview, Scope, Enrollment, Coverage, Discovery, DiscoveryFilters } from '@/types/nodeUpdates'
 
 export class UpdateError extends Error {
  code: string
@@ -35,6 +35,7 @@ export const updates = {
  installations: (page: number, filters: object, signal?: AbortSignal) => request<Page<Installation>>('GET', '/installations', undefined, undefined, { page, page_size: 20, ...filters }, signal),
  revokeInstallation: (id: string, key: string) => request<{ id: string; revoked_at: string }>('POST', '/installations/' + id + '/revoke', {}, key),
  policy: (id: string, data: Policy, key: string) => request<Policy>('PATCH', '/installations/' + id + '/policy', data, key),
+ bulkPolicy: (data: BulkPolicyInput, key: string) => request<BulkPolicyResult>('PATCH', '/installations/policies', data, key),
  preview: (data: Pick<BatchInput, 'release_id' | 'installation_ids'>) => request<Preview>('POST', '/batches/preview', data),
  createBatch: (data: BatchInput, key: string) => request<Batch>('POST', '/batches', data, key),
  batches: (page: number, signal?: AbortSignal) => request<Page<Batch>>('GET', '/batches', undefined, undefined, { page, page_size: 20 }, signal),

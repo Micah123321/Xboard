@@ -6,7 +6,7 @@ import ts from 'typescript'
 const view = await readFile(new URL('./NodeUpdatesView.vue', import.meta.url), 'utf8')
 const script = view.split('<script setup lang="ts">')[1].split('</script>')[0].replace(/^import .*$/gm, '')
 const compiled = ts.transpileModule(script, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText
-class UpdateError extends Error { constructor(status) { super('http'); this.status = status } }
+class UpdateError extends Error { constructor(status, code = 'request_failed') { super('http'); this.status = status; this.code = code; this.excluded = [] } }
 const page = (items = []) => ({ items, page: 1, page_size: 20, total: items.length })
 const node = { node_id: 7, node_name: 'node', machine_id: null, installation_id: '12345678-1234-4234-8234-123456789abc', version: 'dev-abcdef0123456789', os: 'linux', arch: 'amd64', last_seen_at: '2026-01-01T00:00:00Z' }
 function setup() {
@@ -20,7 +20,7 @@ function setup() {
    settings: async () => ({ enabled: false }), releases: async () => page(), installations: async () => page([{ id: 'managed' }]),
  }
  const bindings = { updates, UpdateError, createIdempotencyKeys: () => ({ get: () => 'stable-key', clear() {} }), ref: value => ({ value }), reactive: value => value, computed: fn => ({ get value() { return fn() } }), watch() {}, onMounted() {}, onBeforeUnmount: fn => { unmount = fn }, document, setTimeout: (fn, delay) => { timers.set(++nextTimer, { fn, delay }); return nextTimer }, clearTimeout: id => timers.delete(id), positiveIds: text => [Number(text)], reasonLabel: code => code, ElMessage: { error() {}, success() {} }, ElMessageBox: { confirm: async () => true } }
- const state = new Function(...Object.keys(bindings), compiled + '\nreturn { refresh, visibility, pageChange, applyFilters, discoveries, discoveryError, installations, pages, filters, tab, installLatest, followLatest, releaseSourceError, openOnlineUpdate, onlineState, onlineInstallation, onlineNode, onlineError, onlineOpen, ticketKind, ticketIds, ticketInstanceId, ticketOpen }')(...Object.values(bindings))
+ const state = new Function(...Object.keys(bindings), compiled + '\nreturn { refresh, visibility, pageChange, applyFilters, discoveries, discoveryError, installations, pages, filters, tab, installLatest, followLatest, releaseSourceError, openOnlineUpdate, onlineState, onlineInstallation, onlineNode, onlineError, onlineOpen, selected, selectedInstallations, pendingBulkPolicy, bulkMessage, toggleSelection, togglePageSelection, clearSelection, setSelectedAutoUpdate, canBulkEnable, pageAllSelected, pagePartlySelected, busy, error, ticketKind, ticketIds, ticketInstanceId, ticketOpen }')(...Object.values(bindings))
  return { ...state, updates, requests, timers, document, unmount: () => unmount() }
 }
 test('discovery survives unavailable management and preserves SHA version', async () => {

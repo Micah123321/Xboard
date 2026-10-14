@@ -5,6 +5,8 @@ export interface Discovery { enrollment_status?: EnrollmentStatus | null; auto_e
 export interface DiscoveryFilters { node_id?: number; machine_id?: number; page_size?: number }
 export interface Settings { enabled: boolean; max_concurrency: number; revision: number }
 export interface Policy { enabled: boolean; target_release_id: string | null; revision: number; follow_latest?: boolean }
+export interface BulkPolicyInput { enabled: boolean; installations: { id: string; revision: number }[] }
+export interface BulkPolicyResult { items: { id: string; policy: Policy }[]; updated_count: number; global_enabled: boolean }
 export interface Artifact { arch: 'amd64' | 'arm64'; component: 'mi-node' | 'xbctl'; https_url: string; sha256: string; size_bytes: number }
 export interface ReleaseInput { version: string; os: 'linux'; min_agent_protocol: number; artifacts: Artifact[] }
 export interface Release extends ReleaseInput { id: string; published_at: string; revoked_at: string | null }

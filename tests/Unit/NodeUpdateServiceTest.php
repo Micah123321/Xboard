@@ -51,7 +51,7 @@ class NodeUpdateServiceTest extends TestCase
             $t->increments('id'); $t->string('token'); $t->boolean('is_active')->default(true); $t->timestamps();
         });
         $schema->create('v2_server',function(Blueprint $t) {
-            $t->increments('id'); $t->unsignedInteger('machine_id')->nullable(); $t->boolean('enabled')->default(true); $t->timestamps();
+            $t->increments('id'); $t->string('name')->default('Fixture node'); $t->unsignedInteger('machine_id')->nullable(); $t->boolean('enabled')->default(true); $t->timestamps();
         });
         $schema->create('v2_settings',function(Blueprint $t) {
             $t->increments('id'); $t->string('name')->unique(); $t->text('value'); $t->timestamps();
@@ -239,6 +239,188 @@ class NodeUpdateServiceTest extends TestCase
         $dto = $this->admin('installations', [], 'GET')['items'][0];
         self::assertSame('downgrade_forbidden', $dto['update']['status']);
         self::assertFalse($dto['update']['available']);
+    }
+
+    public function testBulkPoliciesToggleFollowLatestWithoutChangingGlobalSettingsOrForcingTasks(): void
+    {
+        $release = $this->release(); $installations = [$this->enrollment(1), $this->enrollment(2)];
+        foreach ($installations as $n => $installation) {
+            $runtime = ['os'=>'linux','arch'=>$n ? 'arm64' : 'amd64','init'=>'systemd','container'=>false];
+            $this->service->poll($installation['token'], $this->report($installation, ['runtime'=>$runtime]));
+            $this->admin('installations/'.$installation['id'].'/policy', ['enabled'=>true,'target_release_id'=>$release['id'],'revision'=>1], 'PATCH');
+        }
+        foreach ([false, true] as $global) {
+            if ($global) $this->admin('settings', ['enabled'=>true,'max_concurrency'=>5,'revision'=>1], 'PATCH');
+            $settings = $this->admin('settings', [], 'GET');
+            foreach ([true, false] as $enabled) {
+                $targets = array_map(fn($i)=>['id'=>$i['id'],'revision'=>$this->service->find('installations', $i['id'])->policy_revision], $installations);
+                $result = $this->admin('installations/policies', ['enabled'=>$enabled,'installations'=>$targets], 'PATCH');
+                self::assertSame(2, $result['updated_count']); self::assertSame($global, $result['global_enabled']);
+                self::assertSame(array_column($installations, 'id'), array_column($result['items'], 'id'));
+                foreach ($result['items'] as $n => $item) {
+                    self::assertSame(['enabled'=>$enabled,'target_release_id'=>null,'revision'=>$targets[$n]['revision']+1,'follow_latest'=>$enabled], $item['policy']);
+                    self::assertSame($item['policy'], $this->service->policy($this->service->find('installations', $item['id'])));
+                }
+                self::assertSame($settings, $this->admin('settings', [], 'GET'));
+                self::assertSame(0, $this->service->q('tasks')->count());
+            }
+        }
+    }
+
+    public function testBulkPolicyRevisionConflictsLeaveAllPoliciesAndQueuedWorkUnchanged(): void
+    {
+        [$installations, $release, $batch, $tasks] = $this->prepare(3);
+        $targets = array_map(fn($i)=>['id'=>$i['id'],'revision'=>2], $installations);
+        $before = array_map(fn($i)=>$this->service->policy($this->service->find('installations', $i['id'])), $installations);
+        $targets[1]['revision'] = 1; $targets[2]['revision'] = 1; $key = (string) Str::uuid();
+        $error = $this->error('revision_conflict', fn()=>$this->admin('installations/policies', ['enabled'=>false,'installations'=>$targets], 'PATCH', $key));
+        $excluded = [['installation_id'=>$installations[1]['id'],'code'=>'revision_conflict'], ['installation_id'=>$installations[2]['id'],'code'=>'revision_conflict']];
+        self::assertSame($excluded, $error->extra['excluded']);
+        self::assertSame($excluded, $error->render(null)->getData(true)['error']['excluded']);
+        self::assertSame($before, array_map(fn($i)=>$this->service->policy($this->service->find('installations', $i['id'])), $installations));
+        foreach ($tasks as $task) self::assertSame('queued', $this->service->find('tasks', $task)->state);
+        self::assertSame(0, $this->service->q('requests')->where('key', $key)->count());
+        $targets[1]['revision'] = 2; $targets[2]['revision'] = 2;
+        self::assertSame(3, $this->admin('installations/policies', ['enabled'=>false,'installations'=>$targets], 'PATCH', $key)['updated_count']);
+    }
+
+    public function testBulkPoliciesReplayStoredResponseWithoutIncreasingRevisionsOrAuditCount(): void
+    {
+        $installations = [$this->enrollment(1), $this->enrollment(2)];
+        foreach ($installations as $i) $this->service->poll($i['token'], $this->report($i));
+        $data = ['enabled'=>true,'installations'=>array_map(fn($i)=>['id'=>$i['id'],'revision'=>1], $installations)];
+        $key = (string) Str::uuid(); $result = $this->admin('installations/policies', $data, 'PATCH', $key);
+        self::assertSame($result, $this->admin('installations/policies', $data, 'PATCH', $key));
+        $this->error('idempotency_conflict', fn()=>$this->admin('installations/policies', array_replace($data, ['enabled'=>false]), 'PATCH', $key));
+        foreach ($installations as $i) self::assertSame(2, $this->service->find('installations', $i['id'])->policy_revision);
+        $audit = $this->service->q('requests')->where('key', $key)->first();
+        self::assertSame(1, $this->service->q('requests')->where('key', $key)->count());
+        self::assertSame('PATCH installations/policies', $audit->route);
+        self::assertSame($data, $audit->request_payload); self::assertSame($result, $audit->response);
+    }
+
+    public function testBulkPoliciesPreserveAcceptedUppercaseInstallationIds(): void
+    {
+        $request = $this->automaticRequest(); $request['installation_id'] = strtoupper($request['installation_id']);
+        $this->service->autoEnroll($request);
+        $i = ['id'=>$request['installation_id'],'token'=>$request['agent_token']];
+        $this->service->poll($i['token'], $this->report($i));
+        $result = $this->admin('installations/policies', ['enabled'=>true,'installations'=>[['id'=>$i['id'],'revision'=>1]]], 'PATCH');
+        self::assertSame($i['id'], $result['items'][0]['id']);
+        self::assertTrue($result['items'][0]['policy']['enabled']); self::assertSame(2, $result['items'][0]['policy']['revision']);
+    }
+
+    public function testBulkPoliciesRejectEmptyDuplicateExcessiveAndInvalidSchemas(): void
+    {
+        $i = $this->enrollment(); $target = ['id'=>$i['id'],'revision'=>1];
+        $valid = ['enabled'=>false,'installations'=>[$target]];
+        $bad = [[], ['enabled'=>false], ['installations'=>[$target]], $valid + ['unknown'=>true],
+            array_replace($valid, ['enabled'=>0]), array_replace($valid, ['enabled'=>'true']),
+            array_replace($valid, ['installations'=>null]), array_replace($valid, ['installations'=>[]]),
+            array_replace($valid, ['installations'=>[1=>$target]]), array_replace($valid, ['installations'=>['id'=>$target]]),
+            array_replace($valid, ['installations'=>[$target,$target]]),
+            array_replace($valid, ['installations'=>[$target,['id'=>strtoupper($i['id']),'revision'=>1]]]),
+            array_replace($valid, ['installations'=>array_fill(0,1001,$target)]),
+            array_replace($valid, ['installations'=>[null]]), array_replace($valid, ['installations'=>['invalid']]),
+            array_replace($valid, ['installations'=>[$target + ['unknown'=>true]]]),
+            array_replace($valid, ['installations'=>[['id'=>$i['id']]]]),
+            array_replace($valid, ['installations'=>[['revision'=>1]]])];
+        foreach ([0,-1,'1',1.5,true,null] as $revision) $bad[] = ['enabled'=>false,'installations'=>[array_replace($target, ['revision'=>$revision])]];
+        foreach (['invalid',1,null] as $id) $bad[] = ['enabled'=>false,'installations'=>[array_replace($target, ['id'=>$id])]];
+        foreach ($bad as $data) $this->error('validation_failed', fn()=>$this->admin('installations/policies', $data, 'PATCH'), 422);
+        self::assertSame(1, $this->service->find('installations', $i['id'])->policy_revision);
+        self::assertSame(0, $this->service->q('requests')->where('route', 'PATCH installations/policies')->count());
+    }
+
+    public function testBulkEnableRejectsUnsupportedGroupWhileDisableAllowsUnsupported(): void
+    {
+        $supported = $this->enrollment(1); $unsupported = $this->enrollment(2);
+        $this->service->poll($supported['token'], $this->report($supported));
+        $targets = [['id'=>$supported['id'],'revision'=>1], ['id'=>$unsupported['id'],'revision'=>1]];
+        $error = $this->error('unsupported', fn()=>$this->admin('installations/policies', ['enabled'=>true,'installations'=>$targets], 'PATCH'));
+        self::assertSame([['installation_id'=>$unsupported['id'],'code'=>'unsupported']], $error->extra['excluded']);
+        foreach ([$supported,$unsupported] as $i) self::assertSame(['enabled'=>false,'target_release_id'=>null,'revision'=>1,'follow_latest'=>false], $this->service->policy($this->service->find('installations', $i['id'])));
+        $this->admin('installations/'.$unsupported['id'].'/policy', ['enabled'=>true,'follow_latest'=>true,'target_release_id'=>null,'revision'=>1], 'PATCH');
+        $targets[1]['revision'] = 2;
+        $result = $this->admin('installations/policies', ['enabled'=>false,'installations'=>$targets], 'PATCH');
+        self::assertSame(2, $result['updated_count']);
+        self::assertSame(['enabled'=>false,'target_release_id'=>null,'revision'=>3,'follow_latest'=>false], $result['items'][1]['policy']);
+        self::assertSame('unsupported', $this->service->find('installations', $unsupported['id'])->capability['status']);
+    }
+
+    public function testBulkEnableChecksRuntimeEvenWhenCapabilityClaimsSupport(): void
+    {
+        $installations = [$this->enrollment(1), $this->enrollment(2)];
+        $this->service->poll($installations[0]['token'], $this->report($installations[0]));
+        $targets = array_map(fn($i)=>['id'=>$i['id'],'revision'=>1], $installations);
+        foreach ([['os'=>'windows'],['arch'=>'386'],['init'=>'openrc'],['container'=>true]] as $override) {
+            $report = $this->report($installations[1]); $report['runtime'] = array_replace($report['runtime'], $override);
+            $this->service->poll($installations[1]['token'], $report);
+            $error = $this->error('unsupported', fn()=>$this->admin('installations/policies', ['enabled'=>true,'installations'=>$targets], 'PATCH'));
+            self::assertSame([['installation_id'=>$installations[1]['id'],'code'=>'unsupported']], $error->extra['excluded']);
+            foreach ($installations as $i) self::assertSame(1, $this->service->find('installations', $i['id'])->policy_revision);
+        }
+    }
+
+    public function testBulkPoliciesReportMissingTargetsAndNeverReenableRevokedCredentials(): void
+    {
+        $installations = [$this->enrollment(1), $this->enrollment(2), $this->enrollment(3)];
+        foreach ($installations as $i) {
+            $this->service->poll($i['token'], $this->report($i));
+            $this->admin('installations/'.$i['id'].'/policy', ['enabled'=>true,'follow_latest'=>true,'target_release_id'=>null,'revision'=>1], 'PATCH');
+        }
+        $missing = (string) Str::uuid(); $targets = [['id'=>$installations[0]['id'],'revision'=>2], ['id'=>$missing,'revision'=>1]];
+        $error = $this->error('not_found', fn()=>$this->admin('installations/policies', ['enabled'=>false,'installations'=>$targets], 'PATCH'), 404);
+        self::assertSame([['installation_id'=>$missing,'code'=>'not_found']], $error->extra['excluded']);
+        self::assertTrue($this->service->find('installations', $installations[0]['id'])->policy_enabled);
+        $this->admin('installations/'.$installations[1]['id'].'/revoke');
+        DB::table('v2_server_machine')->where('id',3)->update(['token'=>'rotated-fixture-token']); $this->service->maintain();
+        $targets = array_map(fn($i)=>['id'=>$i['id'],'revision'=>$this->service->find('installations', $i['id'])->policy_revision], $installations);
+        $revocations = array_map(fn($i)=>$this->service->find('installations', $i['id'])->revoked_at?->toISOString(), $installations);
+        $error = $this->error('invalid_credentials', fn()=>$this->admin('installations/policies', ['enabled'=>true,'installations'=>$targets], 'PATCH'));
+        self::assertSame([['installation_id'=>$installations[1]['id'],'code'=>'invalid_credentials'], ['installation_id'=>$installations[2]['id'],'code'=>'invalid_credentials']], $error->extra['excluded']);
+        self::assertSame(2, $this->service->find('installations', $installations[0]['id'])->policy_revision);
+        self::assertSame(3, $this->admin('installations/policies', ['enabled'=>false,'installations'=>$targets], 'PATCH')['updated_count']);
+        foreach ($installations as $n => $i) {
+            $record = $this->service->find('installations', $i['id']);
+            self::assertSame($revocations[$n], $record->revoked_at?->toISOString());
+            self::assertFalse($record->policy_enabled); self::assertFalse($record->follow_latest); self::assertNull($record->target_release_id);
+        }
+        foreach (array_slice($installations, 1) as $i) $this->error('invalid_credentials', fn()=>$this->service->authenticate($i['token']), 401);
+    }
+
+    public function testBulkDisableCancelsAutomaticQueueAndPreservesInstallingRecovery(): void
+    {
+        [$installations, $release, $batch, $tasks] = $this->prepare(2);
+        $attempt = $this->claim($installations[0], $tasks[0]); $this->installing($installations[0], $tasks[0], $attempt);
+        $targets = array_map(fn($i)=>['id'=>$i['id'],'revision'=>2], $installations);
+        $result = $this->admin('installations/policies', ['enabled'=>false,'installations'=>$targets], 'PATCH');
+        self::assertTrue($result['global_enabled']);
+        self::assertSame('canceled', $this->service->find('tasks', $tasks[1])->state);
+        self::assertSame('policy_disabled', $this->service->find('tasks', $tasks[1])->code);
+        self::assertSame('installing', $this->service->find('tasks', $tasks[0])->state);
+        self::assertFalse($this->service->find('tasks', $tasks[0])->cancel_requested);
+        self::assertSame($tasks[0], $this->service->find('installations', $installations[0]['id'])->active_task_id);
+        self::assertNull($this->service->q('attempts')->find($attempt['attempt_id'])->finished_at);
+        $this->send($installations[0], $tasks[0], $attempt, 4, 'rolling_back', 'health_failed');
+        self::assertSame('rolled_back', $this->send($installations[0], $tasks[0], $attempt, 5, 'rolled_back', 'health_failed')['state']);
+        self::assertNull($this->service->find('installations', $installations[0]['id'])->active_task_id);
+    }
+
+    public function testBulkDisableKeepsManualQueueClaimableUnderIndependentSwitchRules(): void
+    {
+        $this->release(); $i = $this->enrollment(); $this->service->poll($i['token'], $this->report($i));
+        $this->admin('installations/'.$i['id'].'/policy', ['enabled'=>true,'follow_latest'=>true,'target_release_id'=>null,'revision'=>1], 'PATCH');
+        $batch = $this->admin('installations/'.$i['id'].'/update-latest');
+        $task = $this->service->q('tasks')->where('batch_id', $batch['id'])->first();
+        $result = $this->admin('installations/policies', ['enabled'=>false,'installations'=>[['id'=>$i['id'],'revision'=>2]]], 'PATCH');
+        self::assertFalse($result['global_enabled']); self::assertSame('queued', $task->fresh()->state);
+        $poll = $this->service->poll($i['token'], $this->report($i));
+        self::assertFalse($poll['policy']['enabled']); self::assertTrue($poll['candidate']['manual']);
+        self::assertSame($task->id, $poll['candidate']['task_id']); self::assertSame(2, $poll['candidate']['policy_revision']);
+        $attempt = $this->service->claim($i['token'], $task->id, ['installation_id'=>$i['id'],'claim_id'=>(string)Str::uuid(),'policy_revision'=>2]);
+        $this->installing($i, $task->id, $attempt); $this->send($i, $task->id, $attempt, 4, 'verifying');
+        self::assertSame('succeeded', $this->send($i, $task->id, $attempt, 5, 'succeeded')['state']);
     }
 
     public function testReleaseSourceFetchesManifestAndKeepsPreviousReleaseOnFailure(): void
