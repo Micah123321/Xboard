@@ -4,6 +4,7 @@ namespace App\Http\Controllers\V2\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\PlanSave;
+use App\Jobs\NodeGroupUserSyncJob;
 use App\Models\Order;
 use App\Models\Plan;
 use App\Models\User;
@@ -47,6 +48,7 @@ class PlanController extends Controller
             DB::beginTransaction();
             try {
                 if ($request->input('force_update')) {
+                    $groupIds = User::where('plan_id', $plan->id)->distinct()->pluck('group_id')->all();
                     User::where('plan_id', $plan->id)->update([
                         'group_id' => $params['group_id'],
                         'transfer_enable' => $params['transfer_enable'] * 1073741824,
@@ -54,6 +56,7 @@ class PlanController extends Controller
                         'speed_limit' => $params['speed_limit'],
                         'device_limit' => $params['device_limit'],
                     ]);
+                    $this->syncNodeUsers([...$groupIds, $params['group_id']]);
                 }
                 $plan->update($params);
                 DB::commit();
@@ -109,7 +112,9 @@ class PlanController extends Controller
                         Order::whereIn('id', $relatedOrderIds)->update(['plan_id' => $replacementPlan->id]);
                     }
                     if ($relatedUserIds->isNotEmpty()) {
+                        $groupIds = User::whereIn('id', $relatedUserIds)->distinct()->pluck('group_id')->all();
                         User::whereIn('id', $relatedUserIds)->update(['plan_id' => $replacementPlan->id]);
+                        $this->syncNodeUsers($groupIds);
                     }
                 }
 
@@ -118,6 +123,14 @@ class PlanController extends Controller
         } catch (\Exception $e) {
             Log::error($e);
             return $this->fail([500, '删除失败']);
+        }
+    }
+
+    private function syncNodeUsers(array $groupIds): void
+    {
+        // Bulk updates skip UserObserver; queue one full refresh per affected group.
+        foreach (array_unique(array_filter($groupIds)) as $groupId) {
+            NodeGroupUserSyncJob::dispatch((int) $groupId);
         }
     }
 

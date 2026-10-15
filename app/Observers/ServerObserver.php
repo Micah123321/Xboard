@@ -16,7 +16,7 @@ class ServerObserver
 
     public function updated(Server $server): void
     {
-        if ($server->wasChanged('group_ids')) {
+        if ($server->wasChanged(['group_ids', 'plan_restriction_enabled', 'allowed_plan_ids'])) {
             NodeSyncService::notifyFullSync($server->id);
         } elseif ($server->wasChanged([
             'server_port',

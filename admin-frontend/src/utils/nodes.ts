@@ -1,4 +1,4 @@
-import type { AdminNodeGfwStatistics, AdminNodeItem, TrafficAmount } from '@/types/api'
+import type { AdminNodeGfwStatistics, AdminNodeItem, AdminPlanListItem, TrafficAmount } from '@/types/api'
 
 export type NodeRelationFilter = 'all' | 'parent' | 'child'
 export type NodeGfwFilter = 'all' | 'normal' | 'blocked' | 'partial' | 'failed' | 'unchecked' | 'checking' | 'inherited'
@@ -76,6 +76,7 @@ const NODE_TYPE_LABELS: Record<string, string> = {
   http: 'HTTP',
   naive: 'Naive',
   mieru: 'Mieru',
+  snell: 'Snell',
 }
 
 const TRAFFIC_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
@@ -466,6 +467,18 @@ function formatTimestamp(value: number): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+export function getNodePlanRestrictionDetail(node: AdminNodeItem, plans: Pick<AdminPlanListItem, 'id' | 'name'>[]) {
+  const enabled = node.plan_restriction_enabled === true
+  const ids = [...new Set(node.allowed_plan_ids ?? [])]
+  const names = ids.map((id) => plans.find((plan) => plan.id === id)?.name ?? `套餐 #${id}（已删除）`)
+  return {
+    enabled,
+    label: enabled ? (ids.length ? `套餐限制 · ${ids.length} 个` : '未配置套餐 · 无人可用') : '沿用权限组',
+    tooltip: enabled ? (names.length ? `仅以下套餐可用：${names.join('、')}` : '已启用套餐限制但未选择套餐，无人可用') : '按权限组分配节点',
+    tagType: enabled && ids.length === 0 ? 'danger' as const : 'info' as const,
+  }
 }
 
 export function getNodeGroupNames(node: AdminNodeItem): string[] {

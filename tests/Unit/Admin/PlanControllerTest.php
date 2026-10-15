@@ -49,6 +49,7 @@ class PlanControllerTest extends TestCase
         $schema->create('v2_user', function ($table) {
             $table->increments('id');
             $table->integer('plan_id')->nullable();
+            $table->integer('group_id')->nullable();
             $table->index('plan_id');
             $table->integer('created_at')->nullable();
             $table->integer('updated_at')->nullable();

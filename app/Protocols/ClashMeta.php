@@ -10,7 +10,7 @@ use App\Support\AbstractProtocol;
 
 class ClashMeta extends AbstractProtocol
 {
-    public $flags = ['meta', 'verge', 'flclash', 'nekobox', 'clashmetaforandroid'];
+    public $flags = ['meta', 'mihomo', 'clash.meta', 'clashparty', 'clash-party', 'clash party', 'verge', 'flclash', 'nekobox', 'clashmetaforandroid'];
     const CUSTOM_TEMPLATE_FILE = 'resources/rules/custom.clashmeta.yaml';
     const CUSTOM_CLASH_TEMPLATE_FILE = 'resources/rules/custom.clash.yaml';
     const DEFAULT_TEMPLATE_FILE = 'resources/rules/default.clash.yaml';
@@ -25,9 +25,14 @@ class ClashMeta extends AbstractProtocol
         Server::TYPE_SOCKS,
         Server::TYPE_HTTP,
         Server::TYPE_MIERU,
+        Server::TYPE_SNELL,
     ];
 
     protected $protocolRequirements = [
+        '*.snell.protocol_settings.version' => [
+            'whitelist' => [4],
+            'strict' => true,
+        ],
         '*.vless.protocol_settings.network' => [
             'whitelist' => [
                 'tcp' => '0.0.0',
@@ -141,6 +146,29 @@ class ClashMeta extends AbstractProtocol
         ],
     ];
 
+    protected function isCompatible($server)
+    {
+        if (($server['type'] ?? null) === Server::TYPE_SNELL) {
+            if (in_array($this->clientName, ['nekobox', 'nekoray'], true)) {
+                return false;
+            }
+
+            $kernelVersion = null;
+            if (preg_match('/\b(?:mihomo|clash[ ._-]?meta)[\/\s]+v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/i', (string) $this->userAgent, $matches)) {
+                $kernelVersion = $matches[1];
+            } elseif (blank($this->userAgent) && in_array($this->clientName, ['meta', 'mihomo'], true)) {
+                $kernelVersion = $this->clientVersion;
+            }
+
+            // Wrapper application versions do not identify the bundled kernel.
+            if ($kernelVersion && version_compare($kernelVersion, '1.19.26', '<')) {
+                return false;
+            }
+        }
+
+        return parent::isCompatible($server);
+    }
+
     public function handle()
     {
         $servers = $this->servers;
@@ -192,6 +220,10 @@ class ClashMeta extends AbstractProtocol
             }
             if ($item['type'] === Server::TYPE_MIERU) {
                 array_push($proxy, self::buildMieru($item['password'], $item));
+                array_push($proxies, $item['name']);
+            }
+            if ($item['type'] === Server::TYPE_SNELL) {
+                array_push($proxy, self::buildSnell($user['uuid'], $item));
                 array_push($proxies, $item['name']);
             }
         }
@@ -352,6 +384,29 @@ class ClashMeta extends AbstractProtocol
         // });
 
         return $config;
+    }
+
+    public static function buildSnell($password, $server): array
+    {
+        $proxy = [
+            'name' => $server['name'],
+            'type' => 'snell',
+            'server' => $server['host'],
+            'port' => $server['port'],
+            'psk' => $password,
+            'version' => 4,
+            'udp' => false,
+        ];
+
+        if (data_get($server, 'protocol_settings.obfs', 'off') === 'http') {
+            $proxy['obfs-opts'] = ['mode' => 'http'];
+            $host = data_get($server, 'protocol_settings.obfs_host', '');
+            if ($host !== '') {
+                $proxy['obfs-opts']['host'] = $host;
+            }
+        }
+
+        return $proxy;
     }
 
     public static function buildShadowsocks($password, $server)

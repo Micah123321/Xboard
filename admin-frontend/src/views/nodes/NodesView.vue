@@ -22,6 +22,7 @@ import {
   fetchNodesPaginated,
   fetchNodeRoutes,
   getServerGroups,
+  getPlans,
   sortNodes,
   updateNode,
 } from '@/api/admin'
@@ -31,6 +32,7 @@ import type {
   AdminNodeItem,
   AdminNodePaginationResult,
   AdminNodeRouteItem,
+  AdminPlanListItem,
   AdminServerGroupItem,
   ApiResponse,
 } from '@/types/api'
@@ -49,6 +51,7 @@ import {
   getNodeGfwStatisticDetails,
   getNodeAddress,
   getNodeGroupNames,
+  getNodePlanRestrictionDetail,
   getNodeIdLabel,
   getNodeStatusMeta,
   getNodeBandwidthDetail,
@@ -101,6 +104,8 @@ const nodes = ref<AdminNodeItem[]>([])
 const allNodes = ref<AdminNodeItem[]>([])
 const totalCount = ref(0)
 const groups = ref<AdminServerGroupItem[]>([])
+const plans = ref<AdminPlanListItem[]>([])
+const planLoadError = ref('')
 const routes = ref<AdminNodeRouteItem[]>([])
 const keyword = ref('')
 const typeFilter = ref('all')
@@ -389,26 +394,34 @@ async function loadNodeBoard(reloadAllNodes = false) {
       paginationParams.sort_direction = nodeSortState.value.direction
     }
 
+    const shouldReloadAllNodes = reloadAllNodes || allNodes.value.length === 0
     const tasks: Array<Promise<unknown>> = [
       fetchNodesPaginated(paginationParams),
       getServerGroups(),
       fetchNodeRoutes(),
+      getPlans().then((result) => {
+        planLoadError.value = ''
+        return result
+      }).catch(() => {
+        planLoadError.value = '套餐列表加载失败，请关闭弹窗后点击刷新数据重试'
+        return { data: plans.value }
+      }),
     ]
     // Fetch lightweight full list only on first mount or after a mutation,
     // not on every filter toggle — it is independent of pagination filters.
-    if (reloadAllNodes || allNodes.value.length === 0) {
+    if (shouldReloadAllNodes) {
       tasks.unshift(loadAllNodes())
     }
 
     const results = await Promise.all(tasks)
-    const hasAllNodes = reloadAllNodes || allNodes.value.length === 0 || tasks.length === 4
-    const offset = hasAllNodes && tasks.length === 4 ? 1 : 0
+    const offset = shouldReloadAllNodes ? 1 : 0
     const paginatedResult = results[offset] as AdminNodePaginationResult
 
     nodes.value = paginatedResult.data ?? []
     totalCount.value = paginatedResult.total ?? 0
     groups.value = (results[offset + 1] as ApiResponse<AdminServerGroupItem[]>)?.data ?? []
     routes.value = (results[offset + 2] as ApiResponse<AdminNodeRouteItem[]>)?.data ?? []
+    plans.value = (results[offset + 3] as ApiResponse<AdminPlanListItem[]>)?.data ?? []
     pruneSelection()
     applyRouteGroupFilter()
     setCurrentPageInRange()
@@ -1302,10 +1315,10 @@ watch(
           </template>
         </ElTableColumn>
 
-        <ElTableColumn label="权限组" min-width="180">
+        <ElTableColumn label="权限组 / 套餐" min-width="180">
           <template #header>
             <NodeSortableHeader
-              label="权限组"
+              label="权限组 / 套餐"
               :active="nodeSortState?.field === 'groups'"
               :state="getSortLabel('groups')"
               :sort-aria-label="getSortAriaLabel('groups')"
@@ -1313,7 +1326,17 @@ watch(
             />
           </template>
           <template #default="{ row }">
+            <ElTooltip
+              v-if="getNodePlanRestrictionDetail(row, plans).enabled"
+              :content="getNodePlanRestrictionDetail(row, plans).tooltip"
+              placement="top"
+            >
+              <ElTag round effect="plain" :type="getNodePlanRestrictionDetail(row, plans).tagType">
+                {{ getNodePlanRestrictionDetail(row, plans).label }}
+              </ElTag>
+            </ElTooltip>
             <div class="group-tags">
+              <span v-if="!row.plan_restriction_enabled" class="muted-copy">沿用权限组</span>
               <ElTag
                 v-for="groupName in getNodeGroupNames(row)"
                 :key="`${row.id}-${groupName}`"
@@ -1398,6 +1421,8 @@ watch(
       v-model:visible="editorVisible"
       :mode="editorMode"
       :node="activeNode"
+      :plans="plans"
+      :plan-load-error="planLoadError"
       :groups="groups"
       :routes="routes"
       :all-nodes="allNodes"

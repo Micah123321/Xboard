@@ -64,7 +64,8 @@ class NodeSyncService
             if (!self::isNodeOnline($server->id))
                 continue;
 
-            if ($user->isAvailable()) {
+            // Visit all group nodes so a downgrade also removes previously allowed users.
+            if ($user->isAvailable() && $server->allowsPlan($user->plan_id)) {
                 self::push($server->id, 'sync.user.delta', [
                     'action' => 'add',
                     'users' => [

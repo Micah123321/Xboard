@@ -123,6 +123,24 @@ class TrafficBillingJobTest extends TestCase
         self::assertSame(Carbon::parse('2026-08-31', 'Asia/Shanghai')->timestamp, DB::table('v2_stat_user')->value('record_at'));
     }
 
+    public function test_snell_retry_bills_users_separately_and_retains_protocol_stats(): void
+    {
+        $server = array_replace($this->server, ['type' => 'snell']);
+        $job = new TrafficBillingJob($server, [1 => [300, 500], 2 => [100, 200]],
+            'snell', $this->receivedAt, 'snell-agent-fixture-report');
+        $job->handle();
+        unserialize(serialize($job))->handle();
+        self::assertSame(1, DB::table('v2_traffic_report')->count());
+        self::assertSame(450, DB::table('v2_user')->where('id', 1)->value('u'));
+        self::assertSame(750, DB::table('v2_user')->where('id', 1)->value('d'));
+        self::assertSame(150, DB::table('v2_user')->where('id', 2)->value('u'));
+        self::assertSame(300, DB::table('v2_user')->where('id', 2)->value('d'));
+        self::assertSame(400, DB::table('v2_server')->where('id', 1)->value('u'));
+        self::assertSame(700, DB::table('v2_server')->where('id', 1)->value('d'));
+        self::assertSame(['snell'], DB::table('v2_stat_user')->distinct()->pluck('server_type')->all());
+        self::assertSame('snell', DB::table('v2_stat_server')->value('server_type'));
+    }
+
     public function test_same_id_with_different_payload_fails_without_writes(): void
     {
         $this->job()->handle();

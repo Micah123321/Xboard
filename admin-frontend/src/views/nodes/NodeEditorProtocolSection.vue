@@ -281,6 +281,7 @@ function fillRandomAnytlsPaddingScheme() {
       <div>
         <h3>协议配置</h3>
         <p>{{ currentProtocolHint }}</p>
+        <p v-if="props.form.type === 'snell'">使用独立 Snell Agent，按节点 ID 接入。</p>
       </div>
     </div>
 
@@ -317,6 +318,21 @@ function fillRandomAnytlsPaddingScheme() {
         </ElFormItem>
         <ElFormItem label="Plugin 参数">
           <ElInput v-model="props.form.shadowsocksPluginOpts" placeholder="server;tls;host=example.com" />
+        </ElFormItem>
+      </template>
+
+      <template v-else-if="props.form.type === 'snell'">
+        <ElFormItem label="版本 / 传输">
+          <ElInput model-value="v4 / TCP" readonly />
+        </ElFormItem>
+        <ElFormItem label="混淆方式">
+          <ElSelect v-model="props.form.snellObfs">
+            <ElOption value="off" label="关闭" />
+            <ElOption value="http" label="HTTP" />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem v-if="props.form.snellObfs === 'http'" label="混淆 Host">
+          <ElInput v-model="props.form.snellObfsHost" clearable maxlength="255" placeholder="可选，例如 example.com" />
         </ElFormItem>
       </template>
 

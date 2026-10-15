@@ -57,6 +57,7 @@ class ServerService
     public static function getAvailableServers(User $user): array
     {
         $servers = Server::whereGroupId($user->group_id)
+            ->forPlan($user->plan_id)
             ->where('show', true)
             ->where(function ($query) {
                 $query->whereNull('transfer_enable')
@@ -115,6 +116,7 @@ class ServerService
         }
         $users = User::toBase()
             ->whereIn('group_id', $groupIds)
+            ->when($node->plan_restriction_enabled, fn ($query) => $query->whereIn('plan_id', $node->allowed_plan_ids ?? []))
             ->whereRaw('u + d < transfer_enable')
             ->where(function ($query) {
                 $query->where('expired_at', '>=', time())
@@ -128,7 +130,16 @@ class ServerService
                 'device_limit'
             ])
             ->get();
-        return HookManager::filter('server.users.get', $users, $node);
+        $users = HookManager::filter('server.users.get', $users, $node);
+        if ($node->type === Server::TYPE_SNELL) {
+            return collect($users)->map(fn ($user) => [
+                'id' => data_get($user, 'id'),
+                'uuid' => data_get($user, 'uuid'),
+                'speed_limit' => data_get($user, 'speed_limit') ?? 0,
+                'device_limit' => data_get($user, 'device_limit') ?? 0,
+            ]);
+        }
+        return $users;
     }
 
     // 获取路由规则
@@ -282,6 +293,20 @@ class ServerService
         $protocolSettings = $node->protocol_settings;
         $serverPort = $node->server_port;
         $host = $node->host;
+
+        if ($nodeType === Server::TYPE_SNELL) {
+            return [
+                'protocol' => Server::TYPE_SNELL,
+                'listen_ip' => '0.0.0.0',
+                'server_port' => (int) $serverPort,
+                'version' => 4,
+                'obfs' => $protocolSettings['obfs'],
+                // HTTP Host is a client header, not a server-side match condition.
+                'obfs_host' => '',
+                'udp' => false,
+                'traffic_limit' => app(ServerTrafficLimitService::class)->buildNodeConfig($node),
+            ];
+        }
 
         $baseConfig = [
             'protocol' => $nodeType,

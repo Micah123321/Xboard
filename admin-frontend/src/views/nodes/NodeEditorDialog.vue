@@ -5,9 +5,10 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { saveNode } from '@/api/admin'
 import { getNodeVisibilityDisabledReason } from '@/utils/nodes'
-import type { AdminNodeItem, AdminNodeRouteItem, AdminNodeType, AdminServerGroupItem } from '@/types/api'
+import type { AdminNodeItem, AdminNodeRouteItem, AdminNodeType, AdminPlanListItem, AdminServerGroupItem } from '@/types/api'
 import NodeEditorProtocolSection from './NodeEditorProtocolSection.vue'
 import {
+  applySnellNodeConstraints,
   createEmptyNodeForm,
   createNodeRateRange,
   getNodeProtocolLabel,
@@ -23,6 +24,8 @@ const props = defineProps<{
   mode: 'create' | 'edit'
   node?: AdminNodeItem | null
   groups: AdminServerGroupItem[]
+  plans: AdminPlanListItem[]
+  planLoadError?: string
   routes: AdminNodeRouteItem[]
   nodes?: AdminNodeItem[] | null
   allNodes: AdminNodeItem[]
@@ -36,6 +39,8 @@ const emit = defineEmits<{
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
 const form = reactive<NodeFormModel>(createEmptyNodeForm())
+
+const missingPlanIds = computed(() => form.allowedPlanIds.filter((id) => !props.plans.some((plan) => plan.id === id)))
 
 const protocolOptions = computed(() => getNodeProtocolOptions())
 const dialogTitle = computed(() => props.mode === 'create' ? '新建节点' : '编辑节点')
@@ -87,6 +92,11 @@ function applyProtocolDefaults(type: AdminNodeType | '') {
     return
   }
 
+  if (type === 'snell') {
+    applySnellNodeConstraints(form)
+    return
+  }
+
   if (['vmess', 'vless', 'trojan'].includes(type) && !form.network) {
     form.network = 'tcp'
   }
@@ -127,7 +137,12 @@ async function handleSubmit() {
     return
   }
 
-  const validationMessage = validateNodeForm(form)
+  if (form.planRestrictionEnabled && props.planLoadError) {
+    ElMessage.warning(props.planLoadError)
+    return
+  }
+
+  const validationMessage = validateNodeForm(form, props.plans)
   if (validationMessage) {
     ElMessage.warning(validationMessage)
     return
@@ -335,6 +350,43 @@ watch(
               </ElSelect>
             </ElFormItem>
 
+            <ElFormItem label="启用套餐限制" class="form-grid--full">
+              <div class="switch-row">
+                <div>
+                  <strong>按套餐指定可使用此节点的用户</strong>
+                  <span>开启后需同时匹配节点权限组和所选套餐；关闭后仅按权限组分配，保留套餐选择。</span>
+                </div>
+                <ElSwitch v-model="form.planRestrictionEnabled" />
+              </div>
+            </ElFormItem>
+            <ElFormItem v-if="form.planRestrictionEnabled" label="允许使用的套餐" required class="form-grid--full">
+              <ElAlert v-if="props.planLoadError" :title="props.planLoadError" type="warning" :closable="false" show-icon />
+              <ElSelect
+                :disabled="Boolean(props.planLoadError)"
+                v-model="form.allowedPlanIds"
+                multiple
+                filterable
+                collapse-tags
+                collapse-tags-tooltip
+                placeholder="搜索套餐名称或 ID，至少选择一个套餐"
+                no-data-text="暂无套餐，请先创建套餐或重新加载"
+                no-match-text="未找到匹配套餐"
+              >
+                <ElOption
+                  v-for="plan in props.plans"
+                  :key="plan.id"
+                  :label="`${plan.name} (#${plan.id})${plan.show ? '' : '（隐藏）'}`"
+                  :value="plan.id"
+                />
+                <ElOption
+                  v-for="id in missingPlanIds"
+                  :key="id"
+                  :label="`套餐 #${id}（已删除）`"
+                  :value="id"
+                />
+              </ElSelect>
+            </ElFormItem>
+
             <ElFormItem label="节点地址" prop="host" class="form-grid--full">
               <ElInput v-model="form.host" placeholder="请输入节点域名或者 IP" />
             </ElFormItem>
@@ -345,7 +397,7 @@ watch(
               <ElInput v-model="form.serverPort" placeholder="请输入服务端口" />
             </ElFormItem>
 
-            <ElFormItem label="路由组" class="form-grid--full">
+            <ElFormItem v-if="form.type !== 'snell'" label="路由组" class="form-grid--full">
               <ElSelect v-model="form.routeIds" multiple collapse-tags collapse-tags-tooltip placeholder="选择路由组">
                 <ElOption
                   v-for="route in props.routes"
@@ -416,7 +468,7 @@ watch(
           <div class="section-head">
             <div>
               <h3>流量限额</h3>
-              <p>按节点月流量控制 mi-node 内核下线与恢复。</p>
+              <p>{{ form.type === 'snell' ? '按节点月流量控制 Snell Agent 的接入与恢复。' : '按节点月流量控制 mi-node 内核下线与恢复。' }}</p>
             </div>
           </div>
 

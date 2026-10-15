@@ -4,7 +4,7 @@ import type {
   AdminNodeSavePayload,
   AdminNodeType,
 } from '@/types/api'
-import { createEmptyNodeForm, type NodeFormModel } from './nodeEditorOptions'
+import { applySnellNodeConstraints, createEmptyNodeForm, type NodeFormModel } from './nodeEditorOptions'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -182,7 +182,10 @@ export function toNodeFormModel(node?: AdminNodeItem | null): NodeFormModel {
   if (form.groupIds.length === 0 && Array.isArray(node.groups)) {
     form.groupIds = toNumberArray(node.groups.map((group) => group.id))
   }
+  form.planRestrictionEnabled = toBooleanValue(node.plan_restriction_enabled)
+  form.allowedPlanIds = toNumberArray(node.allowed_plan_ids)
   form.routeIds = toNumberArray(node.route_ids)
+  form.machineId = node.machine_id ?? null
   form.host = toStringValue(node.host)
   form.port = toStringValue(node.port)
   form.serverPort = toStringValue(node.server_port)
@@ -194,6 +197,13 @@ export function toNodeFormModel(node?: AdminNodeItem | null): NodeFormModel {
   form.autoOnlineCooldownEnabled = toBooleanValue(node.auto_online_cooldown_enabled)
   form.gfwCheckEnabled = toBooleanValue(node.gfw_check_enabled, true)
   form.enabled = toBooleanValue(node.enabled, true)
+  if (form.type === 'snell') {
+    form.snellObfs = protocolSettings.obfs === 'http' ? 'http' : 'off'
+    form.snellObfsHost = form.snellObfs === 'http' ? toStringValue(protocolSettings.obfs_host) : ''
+    applySnellNodeConstraints(form)
+    return form
+  }
+
   form.tlsMode = Number(protocolSettings.tls ?? 0)
   form.tlsServerName = toStringValue(tlsSettings.server_name || tlsObject.server_name)
   form.tlsAllowInsecure = toBooleanValue(tlsSettings.allow_insecure ?? tlsObject.allow_insecure)
@@ -379,6 +389,15 @@ function buildRateRanges(form: NodeFormModel): AdminNodeRateTimeRange[] {
 }
 
 function buildProtocolSettings(form: NodeFormModel): Record<string, unknown> {
+  if (form.type === 'snell') {
+    return {
+      version: 4,
+      obfs: form.snellObfs,
+      obfs_host: form.snellObfs === 'http' ? form.snellObfsHost.trim() : '',
+      udp: false,
+    }
+  }
+
   const preserved = form.type === form.originalType ? cloneProtocolSettings(form.rawProtocolSettings) : {}
   const networkSettings = buildNetworkSettingsPayload(form)
   const tlsSettings = buildTlsSettingsPayload(form)
@@ -501,7 +520,10 @@ export function toNodeSavePayload(form: NodeFormModel): AdminNodeSavePayload {
     code: form.code.trim() || undefined,
     name: form.name.trim(),
     group_ids: toJsonIdArray(form.groupIds),
-    route_ids: toJsonIdArray(form.routeIds),
+    plan_restriction_enabled: form.planRestrictionEnabled,
+    allowed_plan_ids: toNumberArray(form.allowedPlanIds),
+    route_ids: form.type === 'snell' ? [] : toJsonIdArray(form.routeIds),
+    ...(form.type === 'snell' ? { machine_id: null } : {}),
     parent_id: form.parentId ?? undefined,
     enabled: form.enabled,
     host: form.host.trim(),

@@ -172,6 +172,24 @@
   }
 
   @media (max-width: 767px) {
+    display: flex;
+    flex-direction: column;
+    max-height: 92dvh;
+
+    .el-dialog__body {
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    .el-dialog__footer {
+      flex-shrink: 0;
+    }
+
+    .node-editor-shell {
+      max-height: none;
+      overflow: visible;
+    }
+
     .form-grid,
     .rate-item__grid {
       grid-template-columns: 1fr;

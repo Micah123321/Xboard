@@ -20,6 +20,7 @@ class AvailableServerDistributionTest extends TestCase
     {
         if (config('database.default') === 'sqlite') {
             config()->set('database.connections.sqlite.database', ':memory:');
+            \Illuminate\Support\Facades\DB::purge('sqlite');
         }
 
         $this->refreshDatabaseWithConfiguredConnection();
@@ -148,6 +149,49 @@ class AvailableServerDistributionTest extends TestCase
         $this->withHeader('If-None-Match', $recoveredEtag)
             ->getJson('/api/v1/user/server/fetch')
             ->assertNotModified();
+    }
+
+    public function test_subscription_restricts_premium_nodes_to_selected_plans(): void
+    {
+        $user = $this->makeUser();
+        $user->forceFill(['plan_id' => 10])->saveQuietly();
+        $ordinary = $this->makeServer('ordinary-plan-node', 1, Server::TYPE_SOCKS);
+        $premium = $this->makeServer('premium-plan-node', 2, Server::TYPE_SOCKS, [
+            'plan_restriction_enabled' => true,
+            'allowed_plan_ids' => [20, 30],
+        ]);
+        $this->putRuntimeCache($ordinary, 'LAST_CHECK_AT', time());
+        $this->putRuntimeCache($premium, 'LAST_CHECK_AT', time());
+        $url = '/api/v1/client/subscribe?' . http_build_query(['token' => $user->token, 'flag' => 'general']);
+        $response = $this->get($url)->assertOk();
+        $subscription = base64_decode($response->getContent(), true);
+        $this->assertStringContainsString('ordinary-plan-node', $subscription);
+        $this->assertStringNotContainsString('premium-plan-node', $subscription);
+        $user->forceFill(['plan_id' => 20])->saveQuietly();
+        $response = $this->get($url)->assertOk();
+        $subscription = base64_decode($response->getContent(), true);
+        $this->assertStringContainsString('ordinary-plan-node', $subscription);
+        $this->assertStringContainsString('premium-plan-node', $subscription);
+    }
+
+    public function test_fetch_revokes_premium_node_and_changes_etag_after_same_group_downgrade(): void
+    {
+        $user = $this->makeUser();
+        $user->forceFill(['plan_id' => 20])->saveQuietly();
+        $ordinary = $this->makeServer('ordinary-api-node', 1);
+        $premium = $this->makeServer('premium-api-node', 2, Server::TYPE_VMESS, [
+            'plan_restriction_enabled' => true,
+            'allowed_plan_ids' => [20, 30],
+        ]);
+        $this->putRuntimeCache($ordinary, 'LAST_CHECK_AT', time());
+        $this->putRuntimeCache($premium, 'LAST_CHECK_AT', time());
+        $this->actingAs($user, 'sanctum');
+        $before = $this->getJson('/api/v1/user/server/fetch')->assertOk()->assertJsonCount(2, 'data');
+        $etag = $before->headers->get('ETag');
+        $user->forceFill(['plan_id' => 10])->saveQuietly();
+        $after = $this->withHeader('If-None-Match', $etag)->getJson('/api/v1/user/server/fetch');
+        $after->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $ordinary->id);
+        $this->assertNotSame($etag, $after->headers->get('ETag'));
     }
 
     private function makeUser(): User

@@ -1,4 +1,4 @@
-import type { AdminNodeType } from '@/types/api'
+import type { AdminNodeType, AdminPlanListItem } from '@/types/api'
 
 export interface NodeOption<T extends string | number = string> {
   value: T
@@ -30,7 +30,10 @@ export interface NodeFormModel {
   rateTimeRanges: NodeRateRangeForm[]
   tags: string[]
   groupIds: number[]
+  planRestrictionEnabled: boolean
+  allowedPlanIds: number[]
   routeIds: number[]
+  machineId: number | null
   host: string
   port: string
   serverPort: string
@@ -97,6 +100,8 @@ export interface NodeFormModel {
   mieruTransport: string
   mieruTrafficPattern: string
   anytlsPaddingSchemeText: string
+  snellObfs: 'off' | 'http'
+  snellObfsHost: string
   multiplexEnabled: boolean
   multiplexProtocol: string
   multiplexMaxConnections: number | null
@@ -118,6 +123,7 @@ export const NODE_PROTOCOL_OPTIONS: Array<NodeOption<AdminNodeType>> = [
   { value: 'http', label: 'HTTP', dotColor: '#ff5c2b' },
   { value: 'mieru', label: 'Mieru', dotColor: '#4caf50' },
   { value: 'anytls', label: 'AnyTLS', dotColor: '#8e59d1' },
+  { value: 'snell', label: 'Snell', dotColor: '#0f766e' },
 ]
 
 export const NODE_TLS_MODE_OPTIONS: Array<NodeOption<number>> = [
@@ -250,7 +256,10 @@ export function createEmptyNodeForm(): NodeFormModel {
     rateTimeRanges: [createRateRange()],
     tags: [],
     groupIds: [],
+    planRestrictionEnabled: false,
+    allowedPlanIds: [],
     routeIds: [],
+    machineId: null,
     host: '',
     port: '',
     serverPort: '',
@@ -327,6 +336,8 @@ export function createEmptyNodeForm(): NodeFormModel {
       '6=500-1000',
       '7=500-1000',
     ].join('\n'),
+    snellObfs: 'off',
+    snellObfsHost: '',
     multiplexEnabled: false,
     multiplexProtocol: 'yamux',
     multiplexMaxConnections: null,
@@ -335,6 +346,29 @@ export function createEmptyNodeForm(): NodeFormModel {
     multiplexBrutalUpMbps: null,
     multiplexBrutalDownMbps: null,
   }
+}
+
+export function applySnellNodeConstraints(form: NodeFormModel): void {
+  form.rawProtocolSettings = {}
+  form.machineId = null
+  form.routeIds = []
+  form.network = ''
+  form.tlsMode = 0
+  form.tlsServerName = ''
+  form.tlsAllowInsecure = false
+  form.echEnabled = false
+  form.echConfig = ''
+  form.echQueryServerName = ''
+  form.echKey = ''
+  form.utlsEnabled = false
+  form.utlsFingerprint = 'chrome'
+  form.realityServerName = ''
+  form.realityServerPort = ''
+  form.realityPublicKey = ''
+  form.realityPrivateKey = ''
+  form.realityShortId = ''
+  form.multiplexEnabled = false
+  form.multiplexBrutalEnabled = false
 }
 
 export function createNodeRateRange(): NodeRateRangeForm {
@@ -401,11 +435,19 @@ export function getNodeProtocolHint(type: AdminNodeType | '' | string): string {
     http: '配置 HTTP 节点与可选 TLS。',
     mieru: '配置传输方式、流量模式与多路复用。',
     anytls: '配置 AnyTLS 的 TLS 信息与 Padding Scheme。',
+    snell: 'Snell v4，仅 TCP。每位用户使用独立密钥，客户端需 Mihomo 1.19.26+。',
   }
   return hints[type] ?? '请选择协议后继续配置。'
 }
 
-export function validateNodeForm(form: NodeFormModel): string | null {
+export function validateNodeForm(form: NodeFormModel, plans: readonly Pick<AdminPlanListItem, 'id'>[] = []): string | null {
+  if (form.planRestrictionEnabled) {
+    if (form.allowedPlanIds.length === 0) return '启用套餐限制后，请至少选择一个套餐'
+    const planIds = new Set(plans.map((plan) => plan.id))
+    if (form.allowedPlanIds.some((id) => !Number.isInteger(id) || !planIds.has(id))) {
+      return '所选套餐已不存在，请重新选择允许使用的套餐'
+    }
+  }
   if (!form.type) {
     return '请选择协议类型'
   }
@@ -424,6 +466,14 @@ export function validateNodeForm(form: NodeFormModel): string | null {
     }
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(form.trafficLimitResetTime)) {
       return '重置时间格式需为 HH:mm'
+    }
+  }
+  if (form.type === 'snell') {
+    if (form.machineId !== null) return 'Snell 请使用独立 Agent，按节点 ID 接入'
+    if (form.routeIds.length > 0) return 'Snell 不支持路由组'
+    if (!['off', 'http'].includes(form.snellObfs)) return '请选择 Snell 混淆方式'
+    if (form.snellObfs === 'http' && (form.snellObfsHost.trim().length > 255 || /[\r\n]/.test(form.snellObfsHost))) {
+      return '混淆 Host 最长为 255 个字符，且需保持单行'
     }
   }
   if (form.type === 'shadowsocks' && !form.shadowsocksCipher.trim()) {

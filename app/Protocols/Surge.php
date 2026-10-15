@@ -21,10 +21,20 @@ class Surge extends AbstractProtocol
         Server::TYPE_ANYTLS,
         Server::TYPE_SOCKS,
         Server::TYPE_HTTP,
+        Server::TYPE_SNELL,
     ];
     protected $protocolRequirements = [
         'surge.hysteria.protocol_settings.version' => [2 => '2398'],
     ];
+
+    protected function filterByAllowedProtocols(): void
+    {
+        parent::filterByAllowedProtocols();
+        $this->servers = array_values(array_filter($this->servers, fn ($server) =>
+            $server['type'] !== Server::TYPE_SNELL
+            || in_array(data_get($server, 'protocol_settings.version'), [4, '4'], true)
+        ));
+    }
 
     public function handle()
     {
@@ -75,6 +85,10 @@ class Surge extends AbstractProtocol
                 $proxies .= self::buildHttp($item['password'], $item);
                 $proxyGroup .= $item['name'] . ', ';
             }
+            if ($item['type'] === Server::TYPE_SNELL) {
+                $proxies .= self::buildSnell($user['uuid'], $item);
+                $proxyGroup .= $item['name'] . ', ';
+            }
         }
 
 
@@ -103,6 +117,27 @@ class Surge extends AbstractProtocol
             ->header('content-disposition', "attachment;filename*=UTF-8''" . rawurlencode($appName) . ".conf");
     }
 
+
+    public static function buildSnell($password, $server): string
+    {
+        $config = [
+            "{$server['name']} = snell",
+            $server['host'],
+            $server['port'],
+            "psk={$password}",
+            'version=4',
+        ];
+
+        if (data_get($server, 'protocol_settings.obfs', 'off') === 'http') {
+            $config[] = 'obfs=http';
+            $host = data_get($server, 'protocol_settings.obfs_host', '');
+            if ($host !== '') {
+                $config[] = "obfs-host={$host}";
+            }
+        }
+
+        return implode(',', $config) . "\r\n";
+    }
 
     public static function buildShadowsocks($password, $server)
     {

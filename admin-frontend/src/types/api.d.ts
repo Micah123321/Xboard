@@ -1047,6 +1047,7 @@ export type AdminNodeType =
   | 'http'
   | 'mieru'
   | 'anytls'
+  | 'snell'
 
 export interface AdminNodeMetrics {
   active_connections?: number
@@ -1112,6 +1113,8 @@ export interface AdminNodeItem {
   port: number | string | null
   server_port?: number | null
   group_ids?: Array<number | string> | null
+  plan_restriction_enabled?: boolean
+  allowed_plan_ids?: number[]
   route_ids?: Array<number | string> | null
   tags?: string[] | null
   show: boolean
@@ -1205,6 +1208,8 @@ export interface AdminNodeGfwCheckResult {
 
 export interface AdminNodeUpdatePayload {
   id: number
+  plan_restriction_enabled?: boolean
+  allowed_plan_ids?: number[]
   show?: boolean | number
   auto_online?: boolean
   auto_online_cooldown_enabled?: boolean
@@ -1228,9 +1233,12 @@ export interface AdminNodeBatchUpdatePayload {
 
 export interface AdminNodeSavePayload {
   id?: number
+  machine_id?: number | null
   type: AdminNodeType
   code?: string
   name: string
+  plan_restriction_enabled: boolean
+  allowed_plan_ids: number[]
   group_ids?: string[]
   route_ids?: string[]
   parent_id?: number | null

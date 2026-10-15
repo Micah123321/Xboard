@@ -40,6 +40,7 @@
   - `plan/fetch`
   - `traffic-reset/reset-user`
 - 管理端用户管理可分配一次性临时流量：后端使用 `v2_user.temporary_transfer_enable` 记录管理员分配的临时额度，分配时同步增加 `transfer_enable`；套餐流量重置会扣除并清空临时额度，套餐升级、新购、一次性套餐购买和套餐强制同步也会清空临时额度，确保该额度不进入新套餐或新周期
+- 节点支持套餐白名单：`plan_restriction_enabled` 默认关闭，`allowed_plan_ids` 多选当前套餐；开启时权限组与套餐必须同时匹配。订阅、用户节点列表、节点全量与增量用户同步统一执行限制；套餐批量变更通过提交后 `NodeGroupUserSyncJob` 在 `node_sync` 队列刷新受影响组。上线需先执行 `2026_10_15_000001_add_plan_restrictions_to_v2_server_table` 增量迁移。
 - 管理端节点管理现已接入:
   - `server/manage/getNodes`
   - `server/manage/save`

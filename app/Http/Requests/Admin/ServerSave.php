@@ -4,6 +4,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Models\Server;
+use App\Models\Plan;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ServerSave extends FormRequest
@@ -42,6 +43,12 @@ class ServerSave extends FormRequest
     ];
 
     private const PROTOCOL_RULES = [
+        'snell' => [
+            'version' => 'sometimes|required|integer|in:4',
+            'obfs' => 'sometimes|required|string|in:off,http',
+            'obfs_host' => ['nullable', 'string', 'max:255', 'regex:/\A[^\s,]*\z/'],
+            'udp' => 'sometimes|required|boolean|declined',
+        ],
         'shadowsocks' => [
             'cipher' => 'required|string',
             'obfs' => 'nullable|string',
@@ -123,6 +130,9 @@ class ServerSave extends FormRequest
             'bandwidth_check_enabled' => 'sometimes|boolean',
             'name' => 'required|string',
             'group_ids' => 'nullable|array',
+            'plan_restriction_enabled' => 'sometimes|boolean',
+            'allowed_plan_ids' => 'sometimes|array',
+            'allowed_plan_ids.*' => 'required|integer|min:1|distinct',
             'route_ids' => 'nullable|array',
             'parent_id' => 'nullable|integer',
             'machine_id' => 'nullable|integer',
@@ -245,12 +255,46 @@ class ServerSave extends FormRequest
             $rules['protocol_settings.' . $field] = $rule;
         }
 
+        if ($type === Server::TYPE_SNELL) {
+            $rules['protocol_settings'] = 'array:version,obfs,obfs_host,udp';
+            $rules['machine_id'] = 'nullable|integer|prohibited';
+            foreach (['route_ids', 'custom_outbounds', 'custom_routes', 'cert_config', 'psk', 'password', 'shared_psk', 'server_key'] as $field) {
+                $rules[$field] = 'prohibited';
+            }
+        }
+
         return $rules;
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            if ($validator->errors()->isNotEmpty() || !$this->hasAny(['plan_restriction_enabled', 'allowed_plan_ids'])) {
+                return;
+            }
+
+            $server = $this->input('id') ? Server::find($this->input('id')) : null;
+            $enabled = $this->has('plan_restriction_enabled')
+                ? $this->boolean('plan_restriction_enabled')
+                : (bool) $server?->plan_restriction_enabled;
+            $planIds = $this->has('allowed_plan_ids')
+                ? $this->input('allowed_plan_ids')
+                : ($server?->allowed_plan_ids ?? []);
+
+            if ($enabled && (!is_array($planIds) || count($planIds) === 0)) {
+                $validator->errors()->add('allowed_plan_ids', '启用套餐限制时，请至少选择一个允许使用的套餐');
+            } elseif ($enabled && Plan::whereIn('id', $planIds)->count() !== count(array_unique($planIds))) {
+                $validator->errors()->add('allowed_plan_ids', '所选套餐已不存在，请重新选择允许使用的套餐');
+            }
+        });
     }
 
     public function attributes(): array
     {
         return [
+            'plan_restriction_enabled' => '套餐限制',
+            'allowed_plan_ids' => '允许使用的套餐',
+            'allowed_plan_ids.*' => '允许使用的套餐',
             'protocol_settings.cipher' => '加密方式',
             'protocol_settings.obfs' => '混淆类型',
             'protocol_settings.network' => '传输协议',

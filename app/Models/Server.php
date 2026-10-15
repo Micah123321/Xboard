@@ -21,6 +21,8 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property string|int $port 端口
  * @property int|null $server_port 服务器端口
  * @property array|null $group_ids 分组IDs
+ * @property bool $plan_restriction_enabled 是否限制可用套餐
+ * @property array|null $allowed_plan_ids 允许使用的套餐IDs
  * @property array|null $route_ids 路由IDs
  * @property array|null $tags 标签
  * @property boolean $show 是否显示
@@ -87,6 +89,7 @@ class Server extends Model
     public const TYPE_NAIVE = 'naive';
     public const TYPE_HTTP = 'http';
     public const TYPE_MIERU = 'mieru';
+    public const TYPE_SNELL = 'snell';
     public const STATUS_OFFLINE = 0;
     public const STATUS_ONLINE_NO_PUSH = 1;
     public const STATUS_ONLINE = 2;
@@ -131,6 +134,7 @@ class Server extends Model
         self::TYPE_NAIVE,
         self::TYPE_HTTP,
         self::TYPE_MIERU,
+        self::TYPE_SNELL,
     ];
 
     protected $table = 'v2_server';
@@ -138,6 +142,8 @@ class Server extends Model
     protected $guarded = ['id'];
     protected $casts = [
         'group_ids' => 'array',
+        'plan_restriction_enabled' => 'boolean',
+        'allowed_plan_ids' => 'array',
         'route_ids' => 'array',
         'tags' => 'array',
         'protocol_settings' => 'array',
@@ -172,6 +178,24 @@ class Server extends Model
         'machine_id' => 'integer',
     ];
 
+    protected static function booted(): void
+    {
+        static::saving(function (self $server): void {
+            if ($server->type !== self::TYPE_SNELL) {
+                return;
+            }
+
+            // Also enforce isolation for quick updates and protocol conversions.
+            foreach (['machine_id', 'route_ids', 'custom_outbounds', 'custom_routes', 'cert_config'] as $field) {
+                if (!blank($server->{$field})) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        $field => 'Snell uses a standalone agent; this setting is unsupported.',
+                    ]);
+                }
+            }
+        });
+    }
+
     private function normalizeJsonIdList($value): array
     {
         if (is_string($value)) {
@@ -192,6 +216,34 @@ class Server extends Model
     public function setGroupIdsAttribute($value): void
     {
         $this->attributes['group_ids'] = json_encode($this->normalizeJsonIdList($value));
+    }
+
+    public function setAllowedPlanIdsAttribute($value): void
+    {
+        $ids = array_filter($this->normalizeJsonIdList($value), fn ($id) => ctype_digit($id) && (int) $id > 0);
+        $this->attributes['allowed_plan_ids'] = json_encode(array_values(array_unique(array_map('intval', $ids))));
+    }
+
+    public function allowsPlan(?int $planId): bool
+    {
+        return !$this->plan_restriction_enabled
+            || ($planId > 0 && in_array($planId, array_map('intval', $this->allowed_plan_ids ?? []), true));
+    }
+
+    public function scopeForPlan($query, ?int $planId)
+    {
+        return $query->where(function ($query) use ($planId) {
+            $query->where('plan_restriction_enabled', false);
+            if ($planId > 0) {
+                $query->orWhere(function ($query) use ($planId) {
+                    $query->where('plan_restriction_enabled', true)
+                        ->where(function ($query) use ($planId) {
+                            $query->whereJsonContains('allowed_plan_ids', $planId)
+                                ->orWhereJsonContains('allowed_plan_ids', (string) $planId);
+                        });
+                });
+            }
+        });
     }
 
     public function setRouteIdsAttribute($value): void
@@ -291,6 +343,12 @@ class Server extends Model
     ];
 
     private const PROTOCOL_CONFIGURATIONS = [
+        self::TYPE_SNELL => [
+            'version' => ['type' => 'integer', 'default' => 4],
+            'obfs' => ['type' => 'string', 'default' => 'off'],
+            'obfs_host' => ['type' => 'string', 'default' => ''],
+            'udp' => ['type' => 'boolean', 'default' => false],
+        ],
         self::TYPE_TROJAN => [
             'tls' => ['type' => 'integer', 'default' => 1],
             'network' => ['type' => 'string', 'default' => null],
@@ -430,7 +488,7 @@ class Server extends Model
 
     public function getProtocolSettingsAttribute($value)
     {
-        $settings = json_decode($value, true) ?? [];
+        $settings = json_decode($value ?? '{}', true) ?? [];
         $configs = self::PROTOCOL_CONFIGURATIONS[$this->type] ?? [];
         return $this->castSettingsWithConfig($settings, $configs);
     }

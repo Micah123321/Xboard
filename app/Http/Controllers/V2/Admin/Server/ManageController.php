@@ -144,7 +144,7 @@ class ManageController extends Controller
     {
         return $this->success(
             Server::orderBy('sort', 'ASC')
-                ->get(['id', 'name', 'type', 'host', 'port', 'server_port', 'parent_id', 'group_ids', 'route_ids', 'show', 'sort', 'auto_online', 'gfw_check_enabled', 'tcp_check_enabled', 'bandwidth_check_enabled', 'enabled', 'rate', 'machine_id'])
+                ->get(['id', 'name', 'type', 'host', 'port', 'server_port', 'parent_id', 'group_ids', 'plan_restriction_enabled', 'allowed_plan_ids', 'route_ids', 'show', 'sort', 'auto_online', 'gfw_check_enabled', 'tcp_check_enabled', 'bandwidth_check_enabled', 'enabled', 'rate', 'machine_id'])
                 ->toArray()
         );
     }
@@ -561,6 +561,12 @@ class ManageController extends Controller
     public function save(ServerSave $request)
     {
         $params = $request->validated();
+        if (($params['type'] ?? null) === Server::TYPE_SNELL) {
+            $params = array_merge($params, [
+                'machine_id' => null, 'route_ids' => [],
+                'custom_outbounds' => null, 'custom_routes' => null, 'cert_config' => null,
+            ]);
+        }
         if ($request->input('id')) {
             $server = Server::find($request->input('id'));
             if (!$server) {
@@ -624,6 +630,12 @@ class ManageController extends Controller
         $server = Server::find($request->id);
         if (!$server) {
             return $this->fail([400202, '服务器不存在']);
+        }
+
+        if ($server->type === Server::TYPE_SNELL && !empty($params['machine_id'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'machine_id' => 'Snell 节点使用独立 Agent，请使用节点 ID 对接。',
+            ]);
         }
 
         if (array_key_exists('show', $params)) {
@@ -803,6 +815,12 @@ class ManageController extends Controller
         $ids = $params['ids'];
         if (empty($ids)) {
             return $this->fail([400, '请选择要更新的节点']);
+        }
+
+        if (!empty($params['machine_id']) && Server::whereIn('id', $ids)->where('type', Server::TYPE_SNELL)->exists()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'machine_id' => 'Snell 节点使用独立 Agent，请使用节点 ID 对接。',
+            ]);
         }
 
         $update = [];
