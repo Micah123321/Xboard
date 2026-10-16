@@ -8,6 +8,7 @@ use App\Protocols\General;
 use App\Services\Plugin\HookManager;
 use App\Services\ServerService;
 use App\Services\UserService;
+use App\Services\SubscriptionPolicyService;
 use App\Utils\Helper;
 use Illuminate\Http\Request;
 
@@ -27,7 +28,9 @@ class ClientController extends Controller
         'trojan' => '[trojan]',
         'tuic' => '[tuic]',
         'socks' => '[socks]',
-        'anytls' => '[anytls]'
+        'anytls' => '[anytls]',
+        'mieru' => '[mieru]',
+        'snell' => '[snell]'
     ];
 
 
@@ -59,6 +62,7 @@ class ClientController extends Controller
         }
 
         $clientInfo = $this->getClientInfo($request);
+        $servers = app(SubscriptionPolicyService::class)->filter($servers, $request);
 
         $requestedTypes = $this->parseRequestedTypes($request->input('types'));
         $filterKeywords = $this->parseFilterKeywords($request->input('filter'));
@@ -81,7 +85,8 @@ class ClientController extends Controller
             'servers' => $serversFiltered,
             'clientName' => $clientInfo['name'] ?? null,
             'clientVersion' => $clientInfo['version'] ?? null,
-            'userAgent' => $clientInfo['flag'] ?? null
+            // Keep the real kernel version visible when flag only selects the output format.
+            'userAgent' => trim(strtolower($request->header('User-Agent', '')) . ' ' . $clientInfo['flag'])
         ]);
 
         return $protocolInstance->handle();
@@ -126,7 +131,7 @@ class ClientController extends Controller
     {
         return collect($servers)->filter(function ($server) use ($allowedTypes, $filterKeywords) {
             // Condition 1: Server type must be in the list of allowed types
-            if ($allowedTypes && !in_array($server['type'], $allowedTypes)) {
+            if (!in_array($server['type'], $allowedTypes, true)) {
                 return false; // Filter out (don't keep)
             }
 

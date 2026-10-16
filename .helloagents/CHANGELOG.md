@@ -2,6 +2,8 @@
 
 ## 2026-10-15
 
+- **[subscription-policy]**: 新增独立订阅下发策略页与管理员接口，按12种协议配置默认下发、允许URL参数覆盖及唯一参数名；Snell默认隐藏，通过snell=1显式开启，0排除，保留套餐/权限与客户端兼容过滤，并防止flag掩盖真实旧版Mihomo内核。Surge/Surfboard托管刷新保留有效策略参数及格式/筛选参数。沿用现有设置表，无新增迁移；说明见docs/subscription-policy.md。隔离PHP回归99项399断言、前端8项专项、独立生产构建和9项桌面/手机模拟接口浏览器交互通过；截图与构建位于output/subscription-policy-*；生产发布采用数据库备份与固定镜像，验收记录位于output/releases/subscription-policy-deployment。
+
 - **[node-plan-restriction]**: 节点新增套餐白名单开关与多选配置，沿用现有权限组并执行权限组与当前套餐的交集；订阅、用户节点列表和节点全量/增量用户同步统一过滤，支持同组套餐升降级撤权。套餐强制更新与删除迁移通过事务提交后分组队列刷新；兼容旧客户端保留字段。管理端包含隐藏老套餐、已删除套餐移除、加载失败提示与手机端完整保存按钮。新增可回滚增量迁移，使用与部署说明见 docs/node-plan-restrictions.md；PHP 26 项 116 断言、前端 20 项脚本、生产构建及 8 项模拟接口浏览器交互通过。测试数据库为隔离 SQLite；生产部署先备份并执行指定增量迁移，记录位于 output/releases/plan-snell-deployment，构建和截图位于 output/node-plan-restriction-*。
 
 ## 2026-10-14

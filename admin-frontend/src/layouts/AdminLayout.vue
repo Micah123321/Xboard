@@ -64,6 +64,7 @@ const managementItems: MenuItem[] = [
 
 const subscriptionItems: MenuItem[] = [
   { index: '/subscriptions/plans', title: '套餐管理', icon: CollectionTag },
+  { index: '/subscriptions/distribution', title: '订阅下发策略', icon: Share },
   { index: '/subscriptions/orders', title: '订单管理', icon: Document },
   { index: '/subscriptions/coupons', title: '优惠券管理', icon: Discount },
   { index: '/subscriptions/gift-cards', title: '礼品卡管理', icon: Present },

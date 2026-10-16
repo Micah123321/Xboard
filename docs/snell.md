@@ -12,7 +12,16 @@ Snell 按节点 ID 对接独立 Agent，不绑定机器，不配置面板路由�
 
 ## 独立 Agent
 
-在独立模块目录构建：
+Linux systemd 服务器的一键安装入口（新版安装器推送到 dev 并完成 Snell 发布后生效）：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Micah123321/mi-node/refs/heads/dev/snell-agent/install.sh) \
+  -a https://panel.example.com -t PANEL_SERVER_TOKEN -n 41
+```
+
+脚本自动下载对应架构的完整 Snell Release 并校验 SHA256；无需上传程序或安装 Go。-a 支持 HTTP / HTTPS，Snell 无需 --cert-* 参数。重复使用相同参数保留配置和计费队列；也可在本地独立模块目录运行 sudo bash install.sh，或以 --build 从源码安装。完整参数见独立模块 README。
+
+手工构建与运行方式：
 
 ```bash
 go build -trimpath -o snell-agent ./cmd/snell-agent
@@ -36,7 +45,7 @@ go build -trimpath -o snell-agent ./cmd/snell-agent
 ./snell-agent -config /etc/snell-agent/config.json
 ```
 
-panel_url 为面板根地址，远端面板使用 HTTPS，HTTP 仅接受 localhost 或回环 IP。Agent 自动追加 /api/v2/server 路径。node_id 使用面板实际节点 ID。state_dir 保存待确认的流量上报；重启应复用原目录，避免丢失重试状态。可选 pull_interval、report_interval 均为 Go 时长字符串；省略时使用面板同步周期。
+panel_url 为面板根地址，按所填协议支持 HTTP / HTTPS。Agent 自动追加 /api/v2/server 路径。node_id 使用面板实际节点 ID。state_dir 保存待确认的流量上报；重启应复用原目录，避免丢失重试状态。可选 pull_interval、report_interval 均为 Go 时长字符串；省略时使用面板同步周期。
 
 面板接口沿用 GET /api/v2/server/config、GET /api/v2/server/user 和 POST /api/v2/server/report。上报使用稳定 report_id 重试，用户流量分别记入各自 ID。用户列表异常不作为空列表处理；超过 stale_after 未获得有效同步时停止提供代理。
 

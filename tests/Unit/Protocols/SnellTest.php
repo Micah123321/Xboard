@@ -361,7 +361,7 @@ class SnellTest extends TestCase
         $node = $this->payload(['version' => 4]);
         foreach (['mihomo/1.19.25' => 0, 'mihomo/1.19.26' => 1, 'Clash.Meta/1.19.26' => 1,
             'ClashParty/1.7.0' => 1, 'Clash Party/1.7.0 mihomo/1.19.25' => 0] as $ua => $count) {
-            $request = Request::create('https://panel.example.test/api/v1/client/subscribe', 'GET', [], [], [], ['HTTP_USER_AGENT' => $ua]);
+            $request = Request::create('https://panel.example.test/api/v1/client/subscribe', 'GET', ['snell' => '1'], [], [], ['HTTP_USER_AGENT' => $ua]);
             $this->app->instance('request', $request);
             self::assertSame(ClashMeta::class, $manager->matchProtocolClassName($ua));
             $response = (new ClientController())->doSubscribe($request, $user, [$node]);

@@ -40,6 +40,8 @@ import type {
   AdminPaginationResult,
   AdminPlanListItem,
   AdminPlanSavePayload,
+  AdminSubscribePolicyConfig,
+  AdminSubscribePolicySavePayload,
   AdminThemeConfigRecord,
   AdminThemeListResult,
   AdminPluginItem,
@@ -156,6 +158,14 @@ export function getHorizonFailedJobs(params: {
       },
     })
     .then((res) => res.data)
+}
+
+export function fetchSubscribePolicy(): Promise<ApiResponse<AdminSubscribePolicyConfig>> {
+  return unwrap<AdminSubscribePolicyConfig>('/subscribe-policy/fetch')
+}
+
+export function saveSubscribePolicy(payload: AdminSubscribePolicySavePayload): Promise<ApiResponse<AdminSubscribePolicyConfig>> {
+  return unwrapPost<AdminSubscribePolicyConfig>('/subscribe-policy/save', { rules: payload.rules })
 }
 
 export function getPlans(): Promise<ApiResponse<AdminPlanListItem[]>> {

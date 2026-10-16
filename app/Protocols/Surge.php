@@ -96,7 +96,8 @@ class Surge extends AbstractProtocol
 
         // Subscription link
         $subsDomain = request()->header('Host');
-        $subsURL = Helper::getSubscribeUrl($user['token'], $subsDomain ? 'https://' . $subsDomain : null);
+        $query = app(\App\Services\SubscriptionPolicyService::class)->queryForRefresh(request());
+        $subsURL = Helper::getSubscribeUrl($user['token'], $subsDomain ? 'https://' . $subsDomain : null, $query);
 
         $config = str_replace('$subs_link', $subsURL, $config);
         $config = str_replace('$subs_domain', $subsDomain, $config);

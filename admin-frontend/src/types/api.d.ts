@@ -6,6 +6,27 @@ export interface ApiResponse<T = unknown> {
   code?: number
 }
 
+export interface AdminSubscribePolicyRule {
+  protocol: string
+  label: string
+  default_enabled: boolean
+  allow_override: boolean
+  parameter: string
+  requirement: string
+}
+
+export interface AdminSubscribePolicyConfig {
+  rules: AdminSubscribePolicyRule[]
+  reserved_parameters: string[]
+}
+
+export type AdminSubscribePolicySaveRule = Pick<AdminSubscribePolicyRule,
+  'protocol' | 'default_enabled' | 'allow_override' | 'parameter'>
+
+export interface AdminSubscribePolicySavePayload {
+  rules: AdminSubscribePolicySaveRule[]
+}
+
 export interface LoginRequest {
   email: string
   password: string

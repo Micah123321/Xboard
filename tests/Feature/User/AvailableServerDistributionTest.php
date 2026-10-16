@@ -194,6 +194,75 @@ class AvailableServerDistributionTest extends TestCase
         $this->assertNotSame($etag, $after->headers->get('ETag'));
     }
 
+    public function test_subscription_policy_applies_to_path_and_legacy_urls_without_bypassing_plan_access(): void
+    {
+        config()->set('cache.stores.redis', ['driver' => 'array']);
+        app('cache')->purge('redis');
+        app()->forgetInstance(\App\Support\Setting::class);
+        Cache::store('redis')->forever('admin_settings', []);
+        Cache::store('redis')->forever('subscribe_template:clashmeta', "proxies: []\nproxy-groups: []\nrules: []\n");
+        $user = $this->makeUser();
+        $user->forceFill(['plan_id' => 10])->saveQuietly();
+        $ordinary = $this->makeServer('ordinary-policy-node', 1, Server::TYPE_SOCKS);
+        $snell = $this->makeServer('premium-snell-policy-node', 2, Server::TYPE_SNELL, [
+            'plan_restriction_enabled' => true, 'allowed_plan_ids' => [20],
+        ]);
+        $this->putRuntimeCache($ordinary, 'LAST_CHECK_AT', time());
+        $this->putRuntimeCache($snell, 'LAST_CHECK_AT', time());
+        $path = route('client.subscribe', ['token' => $user->token], false);
+        $this->withHeader('User-Agent', 'mihomo/1.19.26');
+        $denied = $this->get($path . '?snell=1')->assertOk();
+        $this->assertStringNotContainsString('premium-snell-policy-node', $denied->getContent());
+        $user->forceFill(['plan_id' => 20])->saveQuietly();
+        foreach ([$path . '?flag=meta', '/api/v1/client/subscribe?token=' . $user->token . '&flag=meta'] as $url) {
+            $default = $this->get($url)->assertOk();
+            $this->assertStringContainsString('ordinary-policy-node', $default->getContent());
+            $this->assertStringNotContainsString('premium-snell-policy-node', $default->getContent());
+            $enabled = $this->get($url . '&snell=1')->assertOk();
+            $this->assertStringContainsString('premium-snell-policy-node', $enabled->getContent());
+            $this->assertStringContainsString('ordinary-policy-node', $enabled->getContent());
+            $disabled = $this->get($url . '&snell=0')->assertOk();
+            $this->assertStringNotContainsString('premium-snell-policy-node', $disabled->getContent());
+        }
+        $old = $this->withHeader('User-Agent', 'mihomo/1.19.25')->get($path . '?flag=meta&snell=1')->assertOk();
+        $this->assertStringNotContainsString('premium-snell-policy-node', $old->getContent());
+    }
+
+    public function test_policy_admin_api_checks_identity_and_saves_custom_query_parameters(): void
+    {
+        config()->set('cache.stores.redis', ['driver' => 'array']);
+        app('cache')->purge('redis');
+        app()->forgetInstance(\App\Support\Setting::class);
+        Cache::store('redis')->forever('admin_settings', []);
+        $fetch = null;
+        foreach (app('router')->getRoutes() as $route) {
+            if (str_ends_with($route->uri(), 'subscribe-policy/fetch')) {
+                $fetch = '/' . $route->uri();
+                break;
+            }
+        }
+        $this->assertNotNull($fetch);
+        $save = substr($fetch, 0, -strlen('fetch')) . 'save';
+        $this->getJson($fetch)->assertForbidden();
+        $user = $this->makeUser();
+        $this->actingAs($user, 'sanctum');
+        $this->getJson($fetch)->assertForbidden();
+        $this->postJson($save, ['rules' => []])->assertForbidden();
+        $user->forceFill(['is_admin' => true])->saveQuietly();
+        $response = $this->getJson($fetch)->assertOk();
+        $rules = array_map(fn ($rule) => array_intersect_key($rule, array_flip(['protocol', 'default_enabled', 'allow_override', 'parameter'])), $response->json('data.rules'));
+        foreach ($rules as &$rule) {
+            if ($rule['protocol'] === 'snell') $rule['parameter'] = 'include_snell';
+        }
+        unset($rule);
+        $this->postJson($save, ['rules' => $rules])->assertOk();
+        $saved = $this->getJson($fetch)->assertOk()->json('data.rules');
+        $snell = array_values(array_filter($saved, fn ($rule) => $rule['protocol'] === 'snell'))[0];
+        $this->assertSame('include_snell', $snell['parameter']);
+        $this->assertFalse($snell['default_enabled']);
+        $this->postJson($save, ['rules' => []])->assertUnprocessable();
+    }
+
     private function makeUser(): User
     {
         return User::create([

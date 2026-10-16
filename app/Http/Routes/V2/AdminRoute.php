@@ -4,6 +4,7 @@ namespace App\Http\Routes\V2;
 use App\Http\Controllers\V2\Admin\ConfigController;
 use App\Http\Controllers\V2\Admin\MailTemplateController;
 use App\Http\Controllers\V2\Admin\PlanController;
+use App\Http\Controllers\V2\Admin\SubscriptionPolicyController;
 use App\Http\Controllers\V2\Admin\Server\GroupController;
 use App\Http\Controllers\V2\Admin\Server\RouteController;
 use App\Http\Controllers\V2\Admin\Server\ManageController;
@@ -65,6 +66,9 @@ class AdminRoute
                 $router->post('/reset', [MailTemplateController::class, 'reset']);
                 $router->post('/test', [MailTemplateController::class, 'test']);
             });
+
+            $router->get('/subscribe-policy/fetch', [SubscriptionPolicyController::class, 'fetch']);
+            $router->post('/subscribe-policy/save', [SubscriptionPolicyController::class, 'save']);
 
             // Plan
             $router->group([

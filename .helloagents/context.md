@@ -108,6 +108,7 @@
 - 管理端系统配置页的站点设置包含“开放用户前端”开关，保存后写入 `frontend_enable`
 - 订单支付成功后会额外快照保存 `payment_channel / payment_method / payment_amount / payment_ip`，管理端订单详情优先展示真实支付成功信息，再回退当前支付配置
 - 客户端订阅导出入口位于 `app/Http/Controllers/V1/Client/ClientController.php`，会根据 `flag` / `User-Agent` 匹配 `app/Protocols/*` 导出器
+- 订阅下发策略由 `app/Services/SubscriptionPolicyService.php` 管理，配置保存在现有设置 `subscribe_protocol_policies`；Snell 默认不下发，通过默认参数 `snell=1` 开启、`snell=0` 排除，支持按协议更名参数、调整默认值和禁止参数覆盖。管理页为 `#/subscriptions/distribution`，API 为管理前缀下的 `subscribe-policy/fetch`、`subscribe-policy/save`。真实 User-Agent 中的 Mihomo 旧版本检查不受 `flag` 覆盖，Surge/Surfboard 刷新链接保留有效参数；详见 `docs/subscription-policy.md`。
 - `Stash` 订阅导出位于 `app/Protocols/Stash.php`，当前对 `AnyTLS` 采用保守兼容：仅客户端版本 `>= 3.3.0` 时导出
 - 用户主题源代码当前不在仓内，仅保留 `theme/Xboard/assets/umi.js` 编译产物；涉及用户侧工单交互时，优先通过后端语义修复保证前后台一致
 
