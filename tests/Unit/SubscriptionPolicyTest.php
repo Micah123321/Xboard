@@ -302,9 +302,41 @@ class SubscriptionPolicyTest extends TestCase
         admin_setting(['show_protocol_to_server_enable' => true]);
 
         $yaml = Yaml::parse($this->subscribe(['snell' => '1', 'types' => 'socks'], 'mihomo/1.19.26', $nodes));
-        $expected = ['[socks]过滤掉1条线路', '[socks]1.5x SOCKS Node'];
+        $expected = ['[socks]1.5x 过滤掉1条线路', '[socks]1.5x SOCKS Node'];
         self::assertSame($expected, array_column($yaml['proxies'], 'name'));
         self::assertSame($expected, $yaml['proxy-groups'][0]['proxies']);
+    }
+
+    public function test_subscription_info_nodes_include_rate_prefix(): void
+    {
+        $this->app->instance('translator', new Translator(new ArrayLoader(), 'en'));
+        $user = (new \App\Models\User())->forceFill([
+            'uuid' => 'fixture-uuid', 'token' => 'fixture-token',
+            'u' => 0, 'd' => 0, 'transfer_enable' => 2147483648, 'expired_at' => null,
+        ]);
+        $user->setRelation('plan', null);
+        $node = array_merge($this->nodes()[1], [
+            'name' => '4x SOCKS Node', 'rate' => 1.5,
+            'subscription_label_id' => 2, 'subscription_label' => ['id' => 2, 'name' => 'Premium'],
+        ]);
+
+        foreach ([false, true] as $showProtocol) {
+            admin_setting(['show_info_to_server_enable' => true, 'show_protocol_to_server_enable' => $showProtocol]);
+            $request = Request::create('https://panel.example.test/s/fixture-token', 'GET', [], [], [], [
+                'HTTP_USER_AGENT' => 'mihomo/1.19.26',
+            ]);
+            $this->app->instance('request', $request);
+            $response = (new ClientController())->doSubscribe($request, $user, [$node]);
+            $yaml = Yaml::parse($response->getContent());
+            $prefix = $showProtocol ? '[socks]' : '';
+            $expected = [
+                $prefix . '1.5x 剩余流量：2 GB',
+                $prefix . '1.5x 套餐到期：长期有效',
+                $prefix . '4x (Premium) SOCKS Node',
+            ];
+            self::assertSame($expected, array_column($yaml['proxies'], 'name'));
+            self::assertSame($expected, $yaml['proxy-groups'][0]['proxies']);
+        }
     }
 
     public static function subscriptionLabelNameCases(): array

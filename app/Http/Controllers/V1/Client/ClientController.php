@@ -78,6 +78,7 @@ class ClientController extends Controller
 
         $serversFiltered = ServerService::formatSubscriptionServerNames($serversFiltered);
         $this->setSubscribeInfoToServers($serversFiltered, $user, count($servers) - count($serversFiltered));
+        $serversFiltered = ServerService::addRateToServerNames($serversFiltered);
         $serversFiltered = $this->addPrefixToServerName($serversFiltered);
 
         // Instantiate the protocol class with filtered servers and client info

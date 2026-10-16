@@ -1329,10 +1329,10 @@ watch(
           </template>
         </ElTableColumn>
 
-        <ElTableColumn label="权限组 / 套餐" min-width="180">
+        <ElTableColumn label="权限组 / 订阅标签" min-width="180">
           <template #header>
             <NodeSortableHeader
-              label="权限组 / 套餐"
+              label="权限组 / 订阅标签"
               :active="nodeSortState?.field === 'groups'"
               :state="getSortLabel('groups')"
               :sort-aria-label="getSortAriaLabel('groups')"
@@ -1349,8 +1349,7 @@ watch(
                 {{ getPlanDetail(row).label }}
               </ElTag>
             </ElTooltip>
-            <div v-if="getPlanDetail(row).planNames.length" class="muted-copy" data-testid="node-label-plan-details">{{ getPlanDetail(row).planNames.join('、') }}</div>
-            <div v-if="row.subscription_label_id == null && !row.subscription_label" class="group-tags">
+            <div class="group-tags" data-testid="node-access-groups" aria-label="权限组">
               <span v-if="!getPlanDetail(row).enabled" class="muted-copy">沿用权限组</span>
               <ElTag
                 v-for="groupName in getNodeGroupNames(row)"
