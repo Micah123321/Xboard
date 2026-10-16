@@ -1,30 +1,34 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { AdminServerGroupItem } from '@/types/api'
+import type { AdminNodeBatchUpdatePayload, AdminPlanListItem, AdminServerGroupItem, AdminSubscriptionLabel } from '@/types/api'
+import { buildNodeBatchEditPayload, type NodeBatchEditForm } from '@/utils/nodeBatchEditor'
+import SubscriptionLabelPicker from './SubscriptionLabelPicker.vue'
 
-interface NodeBatchEditPayload {
-  host?: string
-  rate?: number
-  group_ids?: string[]
-  auto_online?: boolean
-  gfw_check_enabled?: boolean
-  bandwidth_check_enabled?: boolean
-}
+type NodeBatchEditPayload = Omit<AdminNodeBatchUpdatePayload, 'ids'>
 
 const props = defineProps<{
   visible: boolean
   groups: AdminServerGroupItem[]
   selectedCount: number
   loading?: boolean
+  labels: AdminSubscriptionLabel[]
+  plans: AdminPlanListItem[]
+  labelLoadError?: string
+  planLoadError?: string
+  optionsLoading?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   submit: [payload: NodeBatchEditPayload]
+  retryOptions: []
 }>()
 
-const form = reactive({
+const form = reactive<NodeBatchEditForm>({
+  updateSubscriptionLabel: false,
+  labelAction: 'assign',
+  subscriptionLabelId: null,
   updateHost: false,
   host: '',
   updateRate: false,
@@ -46,9 +50,13 @@ const hasEnabledField = computed(() => (
   || form.updateAutoOnline
   || form.updateGfwCheck
   || form.updateBandwidthCheck
+  || form.updateSubscriptionLabel
 ))
 
 function resetForm() {
+  form.updateSubscriptionLabel = false
+  form.labelAction = 'assign'
+  form.subscriptionLabelId = null
   form.updateHost = false
   form.host = ''
   form.updateRate = false
@@ -83,14 +91,17 @@ function handleSubmit() {
     return
   }
 
-  emit('submit', {
-    host: form.updateHost ? form.host.trim() : undefined,
-    rate: form.updateRate ? Number(form.rate) : undefined,
-    group_ids: form.updateGroups ? [...new Set(form.groupIds.map((item) => String(item)))] : undefined,
-    auto_online: form.updateAutoOnline ? form.autoOnline : undefined,
-    gfw_check_enabled: form.updateGfwCheck ? form.gfwCheckEnabled : undefined,
-    bandwidth_check_enabled: form.updateBandwidthCheck ? form.bandwidthCheckEnabled : undefined,
-  })
+  if (form.updateSubscriptionLabel && form.labelAction === 'assign') {
+    if (props.optionsLoading || props.labelLoadError || props.planLoadError) {
+      ElMessage.warning('请重试加载标签与套餐后再绑定订阅标签')
+      return
+    }
+    if (form.subscriptionLabelId == null || !props.labels.some((label) => label.id === form.subscriptionLabelId)) {
+      ElMessage.warning('请选择订阅标签，或明确选择清除标签并恢复原节点规则')
+      return
+    }
+  }
+  emit('submit', buildNodeBatchEditPayload(form))
 }
 
 watch(
@@ -123,6 +134,22 @@ watch(
         </ElTag>
       </header>
 
+      <section class="batch-section" data-testid="batch-subscription-label">
+        <ElCheckbox v-model="form.updateSubscriptionLabel" data-testid="enable-batch-subscription-label">修改订阅标签</ElCheckbox>
+        <template v-if="form.updateSubscriptionLabel">
+          <ElRadioGroup v-model="form.labelAction" class="batch-label-actions">
+            <ElRadio value="assign">绑定订阅标签</ElRadio>
+            <ElRadio value="clear" data-testid="clear-batch-subscription-label">清除标签并恢复原节点规则</ElRadio>
+          </ElRadioGroup>
+          <SubscriptionLabelPicker
+            v-if="form.labelAction === 'assign'"
+            v-model="form.subscriptionLabelId" :labels="props.labels" :plans="props.plans"
+            :label-load-error="props.labelLoadError" :plan-load-error="props.planLoadError"
+            :loading="props.optionsLoading" @retry="emit('retryOptions')"
+          />
+          <ElAlert v-else title="仅清除已选节点的订阅标签；各节点原手动白名单字段和值保留，并恢复原节点规则。" type="warning" :closable="false" show-icon />
+        </template>
+      </section>
       <section class="batch-section">
         <label class="batch-switch-card">
           <div>

@@ -72,6 +72,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '订阅套餐', kicker: 'Plans' },
       },
       {
+        path: 'subscriptions/labels',
+        name: 'SubscriptionLabels',
+        component: () => import('@/views/subscriptions/LabelsView.vue'),
+        meta: { title: '订阅标签', kicker: 'Subscription Labels' },
+      },
+      {
         path: 'subscriptions/distribution',
         name: 'SubscriptionDistribution',
         component: () => import('@/views/subscriptions/DistributionView.vue'),

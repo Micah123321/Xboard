@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadRequestOptions } from 'element-plus'
@@ -245,22 +246,7 @@ onMounted(() => {
 
 <template>
   <div class="plugins-page">
-    <section class="plugins-hero">
-      <div class="hero-copy">
-        <p class="hero-kicker">System Management</p>
-        <h1>插件管理。</h1>
-        <span>
-          在同一个工作台里查看插件状态、执行安装 / 启停 / 升级动作，并补齐 README 与动态配置编辑。
-        </span>
-      </div>
-
-      <div class="hero-stats">
-        <article v-for="item in heroStats" :key="item.label">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </article>
-      </div>
-    </section>
+    <PageHeader title="插件管理" :stats="heroStats" />
 
     <section class="toolbar-shell">
       <div class="toolbar-main">

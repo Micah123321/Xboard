@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { TableColumnCtx } from 'element-plus'
@@ -168,22 +169,9 @@ onMounted(() => {
 
 <template>
   <div class="coupons-page">
-    <section class="coupons-hero">
-      <div class="coupons-copy">
-        <p class="coupons-kicker">Promotions</p>
-        <h1>优惠券管理</h1>
-        <span>
-          维护金额减免与比例减免券。比例值表示「减免百分比」，不是“几折”；例如 20 = 减免 20%（约 8 折），85 = 减免 85%（实付 15%）。
-        </span>
-      </div>
-
-      <div class="hero-stats">
-        <article v-for="item in heroStats" :key="item.label">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </article>
-      </div>
-    </section>
+    <PageHeader title="优惠券管理" :stats="heroStats">
+      比例值表示减免百分比，例如 20 = 减免 20%（约 8 折）。
+    </PageHeader>
 
     <section class="table-shell">
       <header class="table-toolbar">

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -215,20 +216,7 @@ onMounted(() => {
 
 <template>
   <div class="plans-page">
-    <section class="plans-hero">
-      <div class="plans-copy">
-        <p class="plans-kicker">Subscriptions</p>
-        <h1>订阅套餐</h1>
-        <span>在这里可以配置订阅计划，包括添加、删除、编辑、排序与价格维护。</span>
-      </div>
-
-      <div class="hero-stats">
-        <article v-for="item in heroStats" :key="item.label">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </article>
-      </div>
-    </section>
+    <PageHeader title="套餐管理" :stats="heroStats" />
 
     <section class="table-shell">
       <header class="table-toolbar">

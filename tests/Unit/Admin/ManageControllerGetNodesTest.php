@@ -18,7 +18,19 @@ use Tests\TestCase;
 
 class ManageControllerGetNodesTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase {
+        refreshDatabase as private refreshDatabaseWithConfiguredConnection;
+    }
+
+    public function refreshDatabase(): void
+    {
+        if (config('database.default') === 'sqlite') {
+            config()->set('database.connections.sqlite.database', ':memory:');
+            DB::purge('sqlite');
+        }
+
+        $this->refreshDatabaseWithConfiguredConnection();
+    }
 
     private string $securePath;
 
@@ -361,6 +373,105 @@ class ManageControllerGetNodesTest extends TestCase
         $this->assertContains('alpha-node', $names);
         $this->assertContains('alpha-v2', $names);
         $this->assertNotContains('beta-node', $names);
+    }
+
+    public static function relatedNodeKeywords(): array
+    {
+        return [
+            'parent IP' => ['188.253.125.48'],
+            'partial parent IP' => ['188.253.125'],
+            'parent name' => ['bv sg hy2'],
+            'parent port' => ['30525'],
+            'parent ID' => ['296'],
+            'trimmed parent IP' => [' 188.253.125.48 '],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('relatedNodeKeywords')]
+    public function test_get_nodes_paginated_keyword_includes_children_before_pagination(string $keyword): void
+    {
+        $parent = $this->makeServer([
+            'id' => 296,
+            'name' => '4x bv sg hy2',
+            'host' => '188.253.125.48',
+            'port' => 30525,
+            'server_port' => 30525,
+        ]);
+        $this->makeServer(['id' => 463, 'host' => '120.253.251.139', 'parent_id' => $parent->id]);
+        $this->makeServer(['id' => 464, 'host' => '120.253.251.139', 'parent_id' => $parent->id]);
+        $unrelated = $this->makeServer(['id' => 500, 'host' => '203.0.113.1']);
+        $this->makeServer(['id' => 501, 'host' => '203.0.113.2', 'parent_id' => $unrelated->id]);
+
+        foreach ([1 => [296, 463], 2 => [464]] as $page => $expectedIds) {
+            $response = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?' . http_build_query([
+                'keyword' => $keyword,
+                'current' => $page,
+                'page_size' => 2,
+            ]));
+            $response->assertOk();
+
+            $this->assertSame(3, $response->json('total'));
+            $this->assertSame(2, $response->json('last_page'));
+            $this->assertSame($expectedIds, array_column($response->json('data'), 'id'));
+        }
+    }
+
+    public function test_get_nodes_paginated_related_keyword_respects_other_filters(): void
+    {
+        $groupA = ServerGroup::create(['name' => 'Parent Group']);
+        $groupB = ServerGroup::create(['name' => 'Child Group']);
+        $parent = $this->makeServer([
+            'host' => '188.253.125.48',
+            'show' => false,
+            'group_ids' => [$groupA->id],
+        ]);
+        $childAttributes = [
+            'host' => '120.253.251.139',
+            'parent_id' => $parent->id,
+            'type' => Server::TYPE_VLESS,
+            'group_ids' => [$groupB->id],
+        ];
+        $expected = $this->makeServer($childAttributes);
+        $this->putRuntimeCache($expected, 'LAST_CHECK_AT', time());
+        $this->makeServer($childAttributes);
+        foreach ([
+            ['type' => Server::TYPE_VMESS],
+            ['group_ids' => [$groupA->id]],
+            ['show' => false],
+            ['parent_id' => null],
+        ] as $overrides) {
+            $excluded = $this->makeServer(array_merge($childAttributes, $overrides));
+            $this->putRuntimeCache($excluded, 'LAST_CHECK_AT', time());
+        }
+
+        $response = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?' . http_build_query([
+            'keyword' => $parent->host,
+            'type' => Server::TYPE_VLESS,
+            'group_id' => $groupB->id,
+            'visibility' => 'visible',
+            'relation' => 'child',
+            'status' => 'online',
+            'page_size' => 1,
+        ]));
+        $response->assertOk();
+
+        $this->assertSame(1, $response->json('total'));
+        $this->assertSame([$expected->id], array_column($response->json('data'), 'id'));
+    }
+
+    public function test_get_nodes_paginated_child_keyword_does_not_include_parent_or_siblings(): void
+    {
+        $parent = $this->makeServer(['host' => '188.253.125.48']);
+        $child = $this->makeServer(['host' => '120.253.251.139', 'parent_id' => $parent->id]);
+        $this->makeServer(['host' => '203.0.113.1', 'parent_id' => $parent->id]);
+
+        foreach (['120.253.251.139' => [$child->id], 'no-such-node' => []] as $keyword => $expectedIds) {
+            $response = $this->getJson($this->url('/server/manage/getNodesPaginated') . '?keyword=' . $keyword);
+            $response->assertOk();
+
+            $this->assertSame(count($expectedIds), $response->json('total'));
+            $this->assertSame($expectedIds, array_column($response->json('data'), 'id'));
+        }
     }
 
     public function test_get_nodes_paginated_filters_by_type(): void

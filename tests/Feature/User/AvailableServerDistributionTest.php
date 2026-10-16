@@ -263,6 +263,127 @@ class AvailableServerDistributionTest extends TestCase
         $this->postJson($save, ['rules' => []])->assertUnprocessable();
     }
 
+    public function test_subscription_labels_share_membership_across_nodes_and_refresh_visibility_after_edit(): void
+    {
+        config()->set('cache.stores.redis', ['driver' => 'array']);
+        app('cache')->purge('redis');
+        app()->forgetInstance(\App\Support\Setting::class);
+        Cache::store('redis')->forever('admin_settings', []);
+        $label = \App\Models\SubscriptionLabel::create(['name' => 'Premium', 'plan_ids' => [20, 30]]);
+        $user = $this->makeUser();
+        $user->forceFill(['plan_id' => 10])->saveQuietly();
+        $ordinary = $this->makeServer('ordinary-label-node', 1, Server::TYPE_SOCKS);
+        $premium = $this->makeServer('premium-label-node', 2, Server::TYPE_SOCKS, ['subscription_label_id' => $label->id]);
+        $second = $this->makeServer('second-label-node', 3, Server::TYPE_SOCKS, ['subscription_label_id' => $label->id]);
+        foreach ([$ordinary, $premium, $second] as $node) $this->putRuntimeCache($node, 'LAST_CHECK_AT', time());
+        $path = route('client.subscribe', ['token' => $user->token], false) . '?flag=general';
+        $response = $this->get($path)->assertOk();
+        $this->assertStringNotContainsString('premium-label-node', base64_decode($response->getContent(), true));
+        $user->forceFill(['plan_id' => 20])->saveQuietly();
+        $response = $this->get($path)->assertOk();
+        $this->assertStringContainsString('premium-label-node', base64_decode($response->getContent(), true));
+        $this->assertStringContainsString('second-label-node', base64_decode($response->getContent(), true));
+        $this->actingAs($user, 'sanctum');
+        $before = $this->getJson('/api/v1/user/server/fetch')->assertOk()->assertJsonCount(3, 'data');
+        $label->update(['plan_ids' => [30]]);
+        $after = $this->withHeader('If-None-Match', $before->headers->get('ETag'))->getJson('/api/v1/user/server/fetch')->assertOk()->assertJsonCount(1, 'data');
+        $this->assertNotSame($before->headers->get('ETag'), $after->headers->get('ETag'));
+        $response = $this->get($path)->assertOk();
+        $this->assertStringNotContainsString('premium-label-node', base64_decode($response->getContent(), true));
+        $user->forceFill(['plan_id' => 30])->saveQuietly();
+        $this->withHeader('If-None-Match', '')->getJson('/api/v1/user/server/fetch')->assertOk()->assertJsonCount(3, 'data');
+    }
+
+    public function test_admin_subscription_label_crud_and_node_batch_binding_preserve_existing_rules(): void
+    {
+        config()->set('cache.stores.redis', ['driver' => 'array']);
+        app('cache')->purge('redis');
+        app()->forgetInstance(\App\Support\Setting::class);
+        Cache::store('redis')->forever('admin_settings', []);
+        \Illuminate\Support\Facades\Queue::fake();
+        $fetch = null;
+        foreach (app('router')->getRoutes() as $route) {
+            if (str_ends_with($route->uri(), 'subscription-label/fetch')) {
+                $fetch = '/' . $route->uri();
+                break;
+            }
+        }
+        $this->assertNotNull($fetch);
+        $base = substr($fetch, 0, -strlen('subscription-label/fetch'));
+        $save = $base . 'subscription-label/save';
+        $drop = $base . 'subscription-label/drop';
+        $this->getJson($fetch)->assertForbidden();
+        $user = $this->makeUser();
+        $this->actingAs($user, 'sanctum');
+        $this->postJson($save, ['name' => 'Premium', 'plan_ids' => [20]])->assertForbidden();
+        $user->forceFill(['is_admin' => true])->saveQuietly();
+        \App\Models\Plan::forceCreate(['id' => 20, 'name' => 'Premium plan', 'group_id' => 1, 'transfer_enable' => 10, 'show' => false]);
+        \App\Models\Plan::forceCreate(['id' => 30, 'name' => 'Annual plan', 'group_id' => 1, 'transfer_enable' => 10]);
+        $created = $this->postJson($save, ['name' => 'Premium', 'plan_ids' => [20, 30]])->assertOk();
+        $id = $created->json('data.id');
+        $this->getJson($fetch)->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.plan_ids', [20, 30]);
+        $node = $this->makeServer('label-admin-node', 1, Server::TYPE_SOCKS, ['plan_restriction_enabled' => true, 'allowed_plan_ids' => [20]]);
+        $other = $this->makeServer('not-selected-node', 2, Server::TYPE_SOCKS);
+        $payload = ['id' => $node->id, 'type' => 'socks', 'name' => $node->name, 'host' => $node->host, 'port' => 443, 'server_port' => 443, 'rate' => 1];
+        $this->postJson($base . 'server/manage/save', $payload + ['subscription_label_id' => $id])->assertOk();
+        $this->assertSame($id, $node->fresh()->subscription_label_id);
+        $this->assertSame([20], $node->fresh()->allowed_plan_ids);
+        $this->postJson($base . 'server/manage/save', $payload)->assertOk();
+        $this->assertSame($id, $node->fresh()->subscription_label_id);
+        $this->postJson($drop, ['id' => $id])->assertUnprocessable();
+        $this->postJson($base . 'server/manage/batchUpdate', ['ids' => [$node->id], 'subscription_label_id' => null])->assertOk();
+        $this->assertNull($node->fresh()->subscription_label_id);
+        $this->assertNull($other->fresh()->subscription_label_id);
+        $this->assertTrue($node->fresh()->plan_restriction_enabled);
+        $this->postJson($base . 'server/manage/batchUpdate', ['ids' => [$node->id, $other->id], 'subscription_label_id' => $id])->assertOk();
+        $this->getJson($fetch)->assertOk()->assertJsonPath('data.0.servers_count', 2);
+        $this->getJson($base . 'server/manage/getAllNodes')->assertOk()
+            ->assertJsonPath('data.0.subscription_label_id', $id)->assertJsonPath('data.0.subscription_label.name', 'Premium');
+        $this->getJson($base . 'server/manage/getNodesPaginated')->assertOk()
+            ->assertJsonPath('data.0.subscription_label_id', $id)->assertJsonPath('data.0.subscription_label.plan_ids', [20, 30]);
+        $this->postJson($save, ['id' => $id, 'name' => 'Premium changed', 'plan_ids' => [30]])->assertOk();
+        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\SubscriptionLabelSyncJob::class, fn ($job) => $job->labelId === $id && $job->afterCommit);
+        $this->postJson($base . 'server/manage/batchUpdate', ['ids' => [$node->id], 'subscription_label_id' => 99999])->assertUnprocessable();
+        $this->postJson($save, ['name' => 'Empty', 'plan_ids' => []])->assertUnprocessable();
+        $this->postJson($base . 'server/manage/batchUpdate', ['ids' => [$node->id, $other->id], 'subscription_label_id' => null])->assertOk();
+        $this->postJson($drop, ['id' => $id])->assertOk();
+        $this->assertDatabaseMissing('v2_subscription_labels', ['id' => $id]);
+    }
+
+    public function test_subscription_names_use_current_rate_and_label_without_overwriting_node_name(): void
+    {
+        config()->set('cache.stores.redis', ['driver' => 'array']);
+        app('cache')->purge('redis');
+        app()->forgetInstance(\App\Support\Setting::class);
+        Cache::store('redis')->forever('admin_settings', []);
+        $label = \App\Models\SubscriptionLabel::create(['name' => '高级', 'plan_ids' => [20]]);
+        $user = $this->makeUser();
+        $user->forceFill(['plan_id' => 20])->saveQuietly();
+        $name = '台湾mhy 京粤闽苏专线';
+        $node = $this->makeServer($name, 1, Server::TYPE_SOCKS, ['subscription_label_id' => $label->id, 'rate' => 4]);
+        $this->putRuntimeCache($node, 'LAST_CHECK_AT', time());
+        $url = route('client.subscribe', ['token' => $user->token], false) . '?flag=general';
+        $response = $this->get($url)->assertOk();
+        $this->assertStringContainsString(rawurlencode('4x (高级) ' . $name), base64_decode($response->getContent(), true));
+        $this->assertSame($name, $node->fresh()->name);
+        $label->update(['name' => '旗舰']);
+        $node->update(['rate_time_enable' => true, 'rate_time_ranges' => [['start' => '00:00', 'end' => '23:59', 'rate' => 1.5]]]);
+        $response = $this->get($url)->assertOk();
+        $this->assertStringContainsString(rawurlencode('1.5x (旗舰) ' . $name), base64_decode($response->getContent(), true));
+        $this->assertSame($name, $node->fresh()->name);
+        $vmess = $this->makeServer('App 专线', 2, Server::TYPE_VMESS, ['subscription_label_id' => $label->id, 'rate' => 4]);
+        $this->putRuntimeCache($vmess, 'LAST_CHECK_AT', time());
+        $appResponse = $this->get('/api/v1/client/app/getConfig?token=' . $user->token)->assertOk();
+        $appConfig = \Symfony\Component\Yaml\Yaml::parse($appResponse->getContent());
+        $this->assertContains('4x (旗舰) App 专线', array_column($appConfig['proxies'], 'name'));
+        $this->assertContains('4x (旗舰) App 专线', array_merge(...array_column($appConfig['proxy-groups'], 'proxies')));
+        $node->update(['subscription_label_id' => null]);
+        $response = $this->get($url)->assertOk();
+        $content = base64_decode($response->getContent(), true);
+        $this->assertStringContainsString(rawurlencode('1.5x ' . $name), $content);
+        $this->assertStringNotContainsString(rawurlencode('1.5x (旗舰) ' . $name), $content);
+    }
+
     private function makeUser(): User
     {
         return User::create([

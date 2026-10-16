@@ -40,7 +40,7 @@ class NodeSyncService
     public static function notifyUsersUpdatedByGroup(int $groupId): void
     {
         $servers = Server::whereGroupId($groupId)
-            ->get();
+            ->with('subscriptionLabel')->get();
 
         foreach ($servers as $server) {
             if (!self::isNodeOnline($server->id))
@@ -54,12 +54,23 @@ class NodeSyncService
     /**
      * Push user changes (add/remove) to affected nodes
      */
+    public static function notifyUsersUpdatedByLabel(int $labelId): void
+    {
+        Server::where('subscription_label_id', $labelId)->with('subscriptionLabel')->chunkById(100, function ($servers): void {
+            foreach ($servers as $server) {
+                if (self::isNodeOnline($server->id)) {
+                    self::push($server->id, 'sync.users', ['users' => ServerService::getAvailableUsers($server)->toArray()]);
+                }
+            }
+        });
+    }
+
     public static function notifyUserChanged(User $user): void
     {
         if (!$user->group_id)
             return;
 
-        $servers = Server::whereGroupId($user->group_id)->get();
+        $servers = Server::whereGroupId($user->group_id)->with('subscriptionLabel')->get();
         foreach ($servers as $server) {
             if (!self::isNodeOnline($server->id))
                 continue;
@@ -92,7 +103,7 @@ class NodeSyncService
     public static function notifyUserRemovedFromGroup(int $userId, int $groupId): void
     {
         $servers = Server::whereGroupId($groupId)
-            ->get();
+            ->with('subscriptionLabel')->get();
 
         foreach ($servers as $server) {
             if (!self::isNodeOnline($server->id))

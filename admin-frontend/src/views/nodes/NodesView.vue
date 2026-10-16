@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -23,6 +24,7 @@ import {
   fetchNodeRoutes,
   getServerGroups,
   getPlans,
+  fetchSubscriptionLabels,
   sortNodes,
   updateNode,
 } from '@/api/admin'
@@ -34,6 +36,7 @@ import type {
   AdminNodeRouteItem,
   AdminPlanListItem,
   AdminServerGroupItem,
+  AdminSubscriptionLabel,
   ApiResponse,
 } from '@/types/api'
 import NodeBatchEditDialog from './NodeBatchEditDialog.vue'
@@ -106,6 +109,10 @@ const totalCount = ref(0)
 const groups = ref<AdminServerGroupItem[]>([])
 const plans = ref<AdminPlanListItem[]>([])
 const planLoadError = ref('')
+const labels = ref<AdminSubscriptionLabel[]>([])
+const labelsLoaded = ref(false)
+const labelLoadError = ref('')
+const optionsLoading = ref(false)
 const routes = ref<AdminNodeRouteItem[]>([])
 const keyword = ref('')
 const typeFilter = ref('all')
@@ -138,9 +145,9 @@ const GFW_AUTO_CHECK_INTERVAL_MINUTES = 30
 
 const displayNodes = computed(() => nodes.value)
 
-const selectedNodes = computed(() => nodes.value.filter((node) => selectedNodeIds.value.includes(node.id)))
+const selectedNodes = computed(() => allNodes.value.filter((node) => selectedNodeIds.value.includes(node.id)))
 const typeOptions = computed(() => buildNodeTypeOptions(allNodes.value))
-const hasSelectedNodes = computed(() => selectedNodes.value.length > 0)
+const hasSelectedNodes = computed(() => selectedNodeIds.value.length > 0)
 const hasActiveFilters = computed(() => (
   keyword.value !== ''
   || typeFilter.value !== 'all'
@@ -373,6 +380,34 @@ async function loadAllNodes() {
   allNodes.value = allNodesResponse.data ?? []
 }
 
+function getPlanDetail(node: AdminNodeItem) {
+  return getNodePlanRestrictionDetail(node, plans.value, labelsLoaded.value ? labels.value : undefined, {
+    labels: labelLoadError.value || (!labelsLoaded.value && optionsLoading.value ? '加载中' : ''),
+    plans: planLoadError.value || (optionsLoading.value ? '加载中' : ''),
+  })
+}
+
+async function loadSubscriptionOptions() {
+  if (optionsLoading.value) return
+  optionsLoading.value = true
+  const results = await Promise.allSettled([
+    getPlans().then((response) => {
+      if (response.status === 'fail' || response.error || !Array.isArray(response.data)) throw new Error(response.message || response.error || '套餐响应格式异常')
+      plans.value = response.data
+      planLoadError.value = ''
+    }),
+    fetchSubscriptionLabels().then((response) => {
+      if (response.status === 'fail' || response.error || !Array.isArray(response.data)) throw new Error(response.message || response.error || '标签响应格式异常')
+      labels.value = response.data
+      labelsLoaded.value = true
+      labelLoadError.value = ''
+    }),
+  ])
+  if (results[0].status === 'rejected') planLoadError.value = '套餐列表加载失败，请重试'
+  if (results[1].status === 'rejected') labelLoadError.value = '订阅标签加载失败，请重试'
+  optionsLoading.value = false
+}
+
 async function loadNodeBoard(reloadAllNodes = false) {
   loading.value = true
   errorMessage.value = ''
@@ -399,13 +434,7 @@ async function loadNodeBoard(reloadAllNodes = false) {
       fetchNodesPaginated(paginationParams),
       getServerGroups(),
       fetchNodeRoutes(),
-      getPlans().then((result) => {
-        planLoadError.value = ''
-        return result
-      }).catch(() => {
-        planLoadError.value = '套餐列表加载失败，请关闭弹窗后点击刷新数据重试'
-        return { data: plans.value }
-      }),
+      loadSubscriptionOptions(),
     ]
     // Fetch lightweight full list only on first mount or after a mutation,
     // not on every filter toggle — it is independent of pagination filters.
@@ -421,7 +450,6 @@ async function loadNodeBoard(reloadAllNodes = false) {
     totalCount.value = paginatedResult.total ?? 0
     groups.value = (results[offset + 1] as ApiResponse<AdminServerGroupItem[]>)?.data ?? []
     routes.value = (results[offset + 2] as ApiResponse<AdminNodeRouteItem[]>)?.data ?? []
-    plans.value = (results[offset + 3] as ApiResponse<AdminPlanListItem[]>)?.data ?? []
     pruneSelection()
     applyRouteGroupFilter()
     setCurrentPageInRange()
@@ -476,12 +504,7 @@ function openBatchEditor() {
 async function handleBatchSubmit(payload: NodeBatchEditPayload) {
   const updatePayload: AdminNodeBatchUpdatePayload = {
     ids: [...selectedNodeIds.value],
-    host: payload.host,
-    rate: payload.rate,
-    group_ids: payload.group_ids,
-    auto_online: payload.auto_online,
-    bandwidth_check_enabled: payload.bandwidth_check_enabled,
-    gfw_check_enabled: payload.gfw_check_enabled,
+    ...payload,
   }
 
   try {
@@ -850,22 +873,7 @@ watch(
 
 <template>
   <div class="nodes-page">
-    <section class="nodes-hero">
-      <div class="nodes-copy">
-        <p class="nodes-kicker">Nodes</p>
-        <h1>节点管理</h1>
-        <span>
-          现在可以在同一页完成节点筛选、在线 / 离线排查、分页浏览、单行置顶、批量修改与批量删除，以及新增、编辑、显隐和删除等运营动作。
-        </span>
-      </div>
-
-      <div class="hero-stats">
-        <article v-for="item in summaryCards" :key="item.label">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </article>
-      </div>
-    </section>
+    <PageHeader title="节点管理" :stats="summaryCards" />
 
     <section class="nodes-board">
       <header class="board-toolbar">
@@ -885,55 +893,6 @@ watch(
               <ElIcon><Search /></ElIcon>
             </template>
           </ElInput>
-
-          <ElSelect v-model="typeFilter" class="toolbar-select" placeholder="类型">
-            <ElOption label="全部类型" value="all" />
-            <ElOption
-              v-for="option in typeOptions"
-              :key="option.value"
-              :label="option.label"
-              :value="option.value"
-            />
-          </ElSelect>
-
-          <ElSelect v-model="groupFilter" class="toolbar-select" placeholder="权限组">
-            <ElOption label="全部权限组" value="all" />
-            <ElOption
-              v-for="group in groups"
-              :key="group.id"
-              :label="group.name"
-              :value="String(group.id)"
-            />
-          </ElSelect>
-
-          <ElSelect v-model="statusFilter" class="toolbar-select" placeholder="状态">
-            <ElOption label="全部节点" value="all" />
-            <ElOption label="在线节点" value="online" />
-            <ElOption label="离线节点" value="offline" />
-          </ElSelect>
-
-          <ElSelect v-model="visibilityFilter" class="toolbar-select" placeholder="显隐">
-            <ElOption label="全部显隐" value="all" />
-            <ElOption label="显示中" value="visible" />
-            <ElOption label="已隐藏" value="hidden" />
-          </ElSelect>
-
-          <ElSelect v-model="relationFilter" class="toolbar-select" placeholder="节点关系">
-            <ElOption label="全部节点" value="all" />
-            <ElOption label="父节点" value="parent" />
-            <ElOption label="子节点" value="child" />
-          </ElSelect>
-
-          <ElSelect v-model="gfwFilter" class="toolbar-select" placeholder="墙状态">
-            <ElOption label="全部墙状态" value="all" />
-            <ElOption label="正常" value="normal" />
-            <ElOption label="疑似被墙" value="blocked" />
-            <ElOption label="部分异常" value="partial" />
-            <ElOption label="检测失败" value="failed" />
-            <ElOption label="等待/检测中" value="checking" />
-            <ElOption label="未检测" value="unchecked" />
-            <ElOption label="随父节点" value="inherited" />
-          </ElSelect>
         </div>
 
         <div class="toolbar-actions">
@@ -973,8 +932,59 @@ watch(
         </div>
       </header>
 
+      <div class="toolbar-filters">
+        <ElSelect v-model="typeFilter" class="toolbar-select" placeholder="类型">
+          <ElOption label="全部类型" value="all" />
+          <ElOption
+            v-for="option in typeOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </ElSelect>
+
+        <ElSelect v-model="groupFilter" class="toolbar-select" placeholder="权限组">
+          <ElOption label="全部权限组" value="all" />
+          <ElOption
+            v-for="group in groups"
+            :key="group.id"
+            :label="group.name"
+            :value="String(group.id)"
+          />
+        </ElSelect>
+
+        <ElSelect v-model="statusFilter" class="toolbar-select" placeholder="状态">
+          <ElOption label="全部节点" value="all" />
+          <ElOption label="在线节点" value="online" />
+          <ElOption label="离线节点" value="offline" />
+        </ElSelect>
+
+        <ElSelect v-model="visibilityFilter" class="toolbar-select" placeholder="显隐">
+          <ElOption label="全部显隐" value="all" />
+          <ElOption label="显示中" value="visible" />
+          <ElOption label="已隐藏" value="hidden" />
+        </ElSelect>
+
+        <ElSelect v-model="relationFilter" class="toolbar-select" placeholder="节点关系">
+          <ElOption label="全部节点" value="all" />
+          <ElOption label="父节点" value="parent" />
+          <ElOption label="子节点" value="child" />
+        </ElSelect>
+
+        <ElSelect v-model="gfwFilter" class="toolbar-select" placeholder="墙状态">
+          <ElOption label="全部墙状态" value="all" />
+          <ElOption label="正常" value="normal" />
+          <ElOption label="疑似被墙" value="blocked" />
+          <ElOption label="部分异常" value="partial" />
+          <ElOption label="检测失败" value="failed" />
+          <ElOption label="等待/检测中" value="checking" />
+          <ElOption label="未检测" value="unchecked" />
+          <ElOption label="随父节点" value="inherited" />
+        </ElSelect>
+      </div>
+
       <div v-if="hasSelectedNodes" class="selection-summary">
-        <span class="selection-summary__label">已勾选 {{ selectedNodes.length }} 个节点</span>
+        <span class="selection-summary__label">已勾选 {{ selectedNodeIds.length }} 个节点</span>
         <ElButton text @click="clearSelection">清空勾选</ElButton>
       </div>
 
@@ -989,6 +999,10 @@ watch(
         <template #default>
           <ElButton text @click="loadNodeBoard(true)">重新加载</ElButton>
         </template>
+      </ElAlert>
+
+      <ElAlert v-if="labelLoadError || planLoadError" type="warning" :closable="false" show-icon class="board-alert" :title="[labelLoadError, planLoadError].filter(Boolean).join('；') + '；已有绑定与选择已保留'">
+        <ElButton text :loading="optionsLoading" @click="loadSubscriptionOptions">重试加载标签与套餐</ElButton>
       </ElAlert>
 
       <ElTable
@@ -1327,16 +1341,17 @@ watch(
           </template>
           <template #default="{ row }">
             <ElTooltip
-              v-if="getNodePlanRestrictionDetail(row, plans).enabled"
-              :content="getNodePlanRestrictionDetail(row, plans).tooltip"
+              v-if="getPlanDetail(row).enabled"
+              :content="getPlanDetail(row).tooltip"
               placement="top"
             >
-              <ElTag round effect="plain" :type="getNodePlanRestrictionDetail(row, plans).tagType">
-                {{ getNodePlanRestrictionDetail(row, plans).label }}
+              <ElTag round effect="plain" :type="getPlanDetail(row).tagType">
+                {{ getPlanDetail(row).label }}
               </ElTag>
             </ElTooltip>
-            <div class="group-tags">
-              <span v-if="!row.plan_restriction_enabled" class="muted-copy">沿用权限组</span>
+            <div v-if="getPlanDetail(row).planNames.length" class="muted-copy" data-testid="node-label-plan-details">{{ getPlanDetail(row).planNames.join('、') }}</div>
+            <div v-if="row.subscription_label_id == null && !row.subscription_label" class="group-tags">
+              <span v-if="!getPlanDetail(row).enabled" class="muted-copy">沿用权限组</span>
               <ElTag
                 v-for="groupName in getNodeGroupNames(row)"
                 :key="`${row.id}-${groupName}`"
@@ -1423,6 +1438,10 @@ watch(
       :node="activeNode"
       :plans="plans"
       :plan-load-error="planLoadError"
+      :labels="labels"
+      :label-load-error="labelLoadError"
+      :options-loading="optionsLoading"
+      @retry-options="loadSubscriptionOptions"
       :groups="groups"
       :routes="routes"
       :all-nodes="allNodes"
@@ -1438,7 +1457,11 @@ watch(
     <NodeBatchEditDialog
       v-model:visible="batchEditVisible"
       :groups="groups"
-      :selected-count="selectedNodes.length"
+      :selected-count="selectedNodeIds.length"
+      :labels="labels" :plans="plans"
+      :label-load-error="labelLoadError" :plan-load-error="planLoadError"
+      :options-loading="optionsLoading"
+      @retry-options="loadSubscriptionOptions"
       :loading="batchSubmitting"
       @submit="handleBatchSubmit"
     />
@@ -1448,73 +1471,16 @@ watch(
 <style scoped>
 .nodes-page {
   display: grid;
-  gap: 24px;
-}
-
-.nodes-hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 30px 32px;
-  border-radius: 28px;
-  background: #000000;
-}
-
-.nodes-copy {
-  display: grid;
-  gap: 10px;
-  max-width: 680px;
-}
-
-.nodes-kicker {
-  font-size: 11px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.68);
-}
-
-.nodes-copy h1 {
-  font-size: clamp(36px, 5vw, 52px);
-  line-height: 1.08;
-  letter-spacing: -0.28px;
-  color: #ffffff;
-}
-
-.nodes-copy span {
-  color: rgba(255, 255, 255, 0.72);
-  line-height: 1.47;
-}
-
-.hero-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  min-width: 320px;
-}
-
-.hero-stats article {
-  display: grid;
-  gap: 6px;
-  padding: 18px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.hero-stats span {
-  color: rgba(255, 255, 255, 0.64);
-  font-size: 12px;
-}
-
-.hero-stats strong {
-  color: #ffffff;
-  font-size: 22px;
+  gap: 16px;
 }
 
 .nodes-board {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
-  padding: 24px;
-  border-radius: 26px;
+  min-width: 0;
+  padding: 20px;
+  border-radius: 16px;
   background: #ffffff;
   box-shadow: var(--xboard-shadow);
 }
@@ -1535,17 +1501,44 @@ watch(
   justify-content: space-between;
 }
 
-.toolbar-fields {
-  flex: 1;
+.board-toolbar {
   flex-wrap: wrap;
+  gap: 12px;
+}
+
+.toolbar-fields {
+  flex: 1 1 340px;
+  min-width: 0;
+}
+
+.toolbar-fields > .el-button {
+  flex-shrink: 0;
+}
+
+.toolbar-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.toolbar-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.toolbar-filters {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .toolbar-input {
-  width: min(320px, 100%);
+  flex: 1;
+  max-width: 280px;
+  min-width: 0;
 }
 
 .toolbar-select {
-  width: 150px;
+  width: 100%;
+  min-width: 0;
 }
 
 .board-alert {
@@ -1573,8 +1566,8 @@ watch(
 }
 
 .nodes-table :deep(.el-table__row td.el-table__cell) {
-  padding-top: 16px;
-  padding-bottom: 16px;
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 
 .switch-shell :deep(.el-switch) {
@@ -1863,17 +1856,10 @@ watch(
 }
 
 @media (max-width: 1180px) {
-  .nodes-hero,
-  .board-toolbar,
   .board-footer,
   .selection-summary {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .hero-stats {
-    min-width: 0;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .toolbar-actions {
@@ -1883,8 +1869,31 @@ watch(
 }
 
 @media (max-width: 767px) {
-  .hero-stats {
-    grid-template-columns: 1fr;
+  .nodes-board {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .toolbar-fields {
+    flex-basis: 100%;
+  }
+
+  .toolbar-input {
+    max-width: none;
+  }
+
+  .toolbar-actions {
+    justify-content: flex-start;
+  }
+
+  .toolbar-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .footer-pagination {
+    margin-left: 0;
+    max-width: 100%;
+    overflow-x: auto;
   }
 
   .footer-hint {

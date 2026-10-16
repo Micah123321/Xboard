@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -206,19 +207,7 @@ onMounted(() => {
 
 <template>
   <div class="knowledge-page">
-    <section class="knowledge-hero">
-      <div class="knowledge-copy">
-        <h1>知识库管理</h1>
-        <p>在这里可以配置知识库，包括添加、删除、编辑、显隐与排序等操作。</p>
-      </div>
-
-      <div class="hero-stats">
-        <article v-for="item in heroStats" :key="item.label">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </article>
-      </div>
-    </section>
+    <PageHeader title="知识库管理" :stats="heroStats" />
 
     <section class="table-shell">
       <header class="table-toolbar">

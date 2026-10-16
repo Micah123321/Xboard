@@ -6,6 +6,21 @@ export interface ApiResponse<T = unknown> {
   code?: number
 }
 
+export interface AdminSubscriptionLabel {
+  id: number
+  name: string
+  plan_ids: number[]
+  servers_count: number
+  created_at?: string
+  updated_at?: string
+}
+
+export interface AdminSubscriptionLabelSavePayload {
+  id?: number
+  name: string
+  plan_ids: number[]
+}
+
 export interface AdminSubscribePolicyRule {
   protocol: string
   label: string
@@ -1136,6 +1151,8 @@ export interface AdminNodeItem {
   group_ids?: Array<number | string> | null
   plan_restriction_enabled?: boolean
   allowed_plan_ids?: number[]
+  subscription_label_id?: number | null
+  subscription_label?: AdminSubscriptionLabel | null
   route_ids?: Array<number | string> | null
   tags?: string[] | null
   show: boolean
@@ -1243,6 +1260,7 @@ export interface AdminNodeUpdatePayload {
 
 export interface AdminNodeBatchUpdatePayload {
   ids: number[]
+  subscription_label_id?: number | null
   host?: string
   rate?: number
   group_ids?: string[]
@@ -1260,6 +1278,7 @@ export interface AdminNodeSavePayload {
   name: string
   plan_restriction_enabled: boolean
   allowed_plan_ids: number[]
+  subscription_label_id?: number | null
   group_ids?: string[]
   route_ids?: string[]
   parent_id?: number | null

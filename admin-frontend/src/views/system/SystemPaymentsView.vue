@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -196,20 +197,7 @@ onMounted(() => {
 
 <template>
   <div class="payments-page">
-    <section class="payments-hero">
-      <div class="payments-copy">
-        <p class="payments-kicker">System Management</p>
-        <h1>支付配置</h1>
-        <span>在这里可以配置支付方式，包括添加、编辑、启停、排序与通知地址管理。</span>
-      </div>
-
-      <div class="hero-stats">
-        <article v-for="item in summaryCards" :key="item.label">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </article>
-      </div>
-    </section>
+    <PageHeader title="支付配置" :stats="summaryCards" />
 
     <section class="table-shell">
       <ElAlert

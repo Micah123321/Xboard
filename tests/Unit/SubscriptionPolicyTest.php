@@ -12,6 +12,7 @@ use App\Protocols\General;
 use App\Protocols\Surge;
 use App\Protocols\Surfboard;
 use App\Services\SubscriptionPolicyService;
+use App\Services\ServerService;
 use App\Support\ProtocolManager;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Config\Repository;
@@ -257,6 +258,107 @@ class SubscriptionPolicyTest extends TestCase
         self::assertSame(2, $found);
     }
 
+    public static function rateNameCases(): array
+    {
+        return [
+            'integer' => ['Node', 4, '4x Node'],
+            'decimal' => ['Node', 1.5, '1.5x Node'],
+            'fraction' => ['Node', 0.25, '0.25x Node'],
+            'unit rate' => ['Node', 1, '1x Node'],
+            'zero rate' => ['Node', 0, '0x Node'],
+            'trailing zeros' => ['Node', '4.00', '4x Node'],
+            'existing integer' => ['4x Node', 1.5, '4x Node'],
+            'existing decimal' => ['1.25x Node', 4, '1.25x Node'],
+            'existing uppercase' => ['1.5X Node', 4, '1.5X Node'],
+            'existing spacing' => [' 1.5 x Node', 4, ' 1.5 x Node'],
+            'existing fraction' => ['.5x Node', 4, '.5x Node'],
+            'embedded rate' => ['Node 4x', 1.5, '1.5x Node 4x'],
+            'numeric name' => ['2026 Node', 4, '4x 2026 Node'],
+            'missing rate' => ['Node', null, 'Node'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('rateNameCases')]
+    public function test_subscription_adds_rate_prefix_and_preserves_existing_prefixes(string $name, mixed $rate, string $expected): void
+    {
+        $node = array_merge($this->nodes()[1], ['name' => $name, 'rate' => $rate]);
+        $general = base64_decode($this->subscribe([], 'general', [$node]), true);
+        self::assertSame($expected, rawurldecode(parse_url(trim($general), PHP_URL_FRAGMENT)));
+
+        $yaml = Yaml::parse($this->subscribe([], 'mihomo/1.19.26', [$node]));
+        self::assertSame([$expected], array_column($yaml['proxies'], 'name'));
+        self::assertSame([$expected], $yaml['proxy-groups'][0]['proxies']);
+
+        $surge = $this->subscribe([], 'surge/3000', [$node]);
+        self::assertStringContainsString($expected . ' = ', $surge);
+        self::assertStringContainsString('Auto = select,' . $expected, $surge);
+    }
+
+    public function test_rate_prefix_keeps_protocol_prefixes_and_filter_notices_consistent(): void
+    {
+        $nodes = $this->nodes();
+        $nodes[0]['rate'] = 4;
+        $nodes[1]['rate'] = 1.5;
+        admin_setting(['show_protocol_to_server_enable' => true]);
+
+        $yaml = Yaml::parse($this->subscribe(['snell' => '1', 'types' => 'socks'], 'mihomo/1.19.26', $nodes));
+        $expected = ['[socks]过滤掉1条线路', '[socks]1.5x SOCKS Node'];
+        self::assertSame($expected, array_column($yaml['proxies'], 'name'));
+        self::assertSame($expected, $yaml['proxy-groups'][0]['proxies']);
+    }
+
+    public static function subscriptionLabelNameCases(): array
+    {
+        return [
+            'requested format' => ['台湾mhy 京粤闽苏专线', 4, '高级', '4x (高级) 台湾mhy 京粤闽苏专线'],
+            'fractional rate' => ['台湾专线', 0.25, '高级', '0.25x (高级) 台湾专线'],
+            'existing rate' => ['4x 台湾专线', 1.5, '高级', '4x (高级) 台湾专线'],
+            'existing annotation' => ['4x (高级) 台湾专线', 4, '高级', '4x (高级) 台湾专线'],
+            'existing fullwidth annotation' => ['（高级）台湾专线', 4, '高级', '4x （高级）台湾专线'],
+            'preserve other note' => ['(台湾) 专线', 4, '高级', '4x (高级) (台湾) 专线'],
+            'no rate' => ['台湾专线', null, '高级', '(高级) 台湾专线'],
+            'blank label' => ['台湾专线', 4, ' ', '4x 台湾专线'],
+            'normalize whitespace' => ['台湾专线', 4, "高级\n用户", '4x (高级 用户) 台湾专线'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('subscriptionLabelNameCases')]
+    public function test_subscription_label_names_match_proxy_and_group_references(string $name, mixed $rate, string $label, string $expected): void
+    {
+        $node = array_merge($this->nodes()[1], ['name' => $name, 'rate' => $rate,
+            'subscription_label_id' => 2, 'subscription_label' => ['id' => 2, 'name' => $label]]);
+        $formatted = ServerService::formatSubscriptionServerNames([$node]);
+        self::assertSame($expected, $formatted[0]['name']);
+        self::assertSame($formatted, ServerService::formatSubscriptionServerNames($formatted));
+        self::assertSame($name, $node['name']);
+        $general = base64_decode($this->subscribe([], 'general', [$node]), true);
+        self::assertSame($expected, rawurldecode(parse_url(trim($general), PHP_URL_FRAGMENT)));
+        $yaml = Yaml::parse($this->subscribe([], 'mihomo/1.19.26', [$node]));
+        self::assertSame([$expected], array_column($yaml['proxies'], 'name'));
+        self::assertSame([$expected], $yaml['proxy-groups'][0]['proxies']);
+        $surge = $this->subscribe([], 'surge/3000', [$node]);
+        self::assertStringContainsString($expected . ' = ', $surge);
+        self::assertStringContainsString('Auto = select,' . $expected, $surge);
+    }
+
+    public function test_label_rename_clear_and_protocol_prefix_do_not_duplicate_or_reuse_stale_annotations(): void
+    {
+        $node = array_merge($this->nodes()[1], ['name' => '台湾专线', 'rate' => 4,
+            'subscription_label_id' => 2, 'subscription_label' => ['id' => 2, 'name' => '高级']]);
+        self::assertSame('4x (高级) 台湾专线', ServerService::formatSubscriptionServerNames([$node])[0]['name']);
+        $node['subscription_label']['name'] = '旗舰';
+        admin_setting(['show_protocol_to_server_enable' => true]);
+        $yaml = Yaml::parse($this->subscribe([], 'mihomo/1.19.26', [$node]));
+        self::assertSame('[socks]4x (旗舰) 台湾专线', $yaml['proxies'][0]['name']);
+        self::assertSame(['[socks]4x (旗舰) 台湾专线'], $yaml['proxy-groups'][0]['proxies']);
+        $node['subscription_label_id'] = null;
+        self::assertSame('4x 台湾专线', ServerService::formatSubscriptionServerNames([$node])[0]['name']);
+        $node['subscription_label_id'] = 999;
+        self::assertSame('4x 台湾专线', ServerService::formatSubscriptionServerNames([$node])[0]['name']);
+        $node['subscription_label'] = null;
+        self::assertSame('4x 台湾专线', ServerService::formatSubscriptionServerNames([$node])[0]['name']);
+    }
+
     private function index(string $protocol): int
     {
         return array_search($protocol, Server::VALID_TYPES, true);
@@ -275,12 +377,12 @@ class SubscriptionPolicyTest extends TestCase
         ];
     }
 
-    private function subscribe(array $query, string $userAgent): string
+    private function subscribe(array $query, string $userAgent, ?array $servers = null): string
     {
         $request = Request::create('https://panel.example.test/s/fixture-token', 'GET', $query, [], [], ['HTTP_USER_AGENT' => $userAgent]);
         $this->app->instance('request', $request);
         $user = ['uuid' => 'fixture-uuid', 'token' => 'fixture-token', 'u' => 0, 'd' => 0, 'transfer_enable' => 1024, 'expired_at' => null];
-        return (new ClientController())->doSubscribe($request, $user, $this->nodes())->getContent();
+        return (new ClientController())->doSubscribe($request, $user, $servers ?? $this->nodes())->getContent();
     }
 
     private function yamlNames(string $content): array

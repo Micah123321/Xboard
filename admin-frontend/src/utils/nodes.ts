@@ -1,4 +1,4 @@
-import type { AdminNodeGfwStatistics, AdminNodeItem, AdminPlanListItem, TrafficAmount } from '@/types/api'
+import type { AdminNodeGfwStatistics, AdminNodeItem, AdminPlanListItem, AdminSubscriptionLabel, TrafficAmount } from '@/types/api'
 
 export type NodeRelationFilter = 'all' | 'parent' | 'child'
 export type NodeGfwFilter = 'all' | 'normal' | 'blocked' | 'partial' | 'failed' | 'unchecked' | 'checking' | 'inherited'
@@ -469,15 +469,43 @@ function formatTimestamp(value: number): string {
   })
 }
 
-export function getNodePlanRestrictionDetail(node: AdminNodeItem, plans: Pick<AdminPlanListItem, 'id' | 'name'>[]) {
+export function getNodePlanRestrictionDetail(
+  node: AdminNodeItem,
+  plans: readonly (Pick<AdminPlanListItem, 'id' | 'name'> & { show?: boolean })[],
+  labels?: readonly AdminSubscriptionLabel[],
+  errors: { labels?: string; plans?: string } = {},
+) {
+  const labelId = node.subscription_label_id === undefined ? node.subscription_label?.id : node.subscription_label_id
+  if (labelId != null) {
+    const label = labels === undefined ? node.subscription_label : labels.find((item) => item.id === labelId)
+    if (!label) {
+      const pending = Boolean(errors.labels)
+      return {
+        enabled: true, label: pending ? '订阅标签 #' + labelId + ' · 信息待重试' : '标签 #' + labelId + ' 已不存在 · 无人可用',
+        tooltip: pending ? '标签信息加载失败，当前绑定保留，请重试' : '绑定的订阅标签已不存在，无人可用；请解绑或更换标签',
+        tagType: pending ? 'warning' as const : 'danger' as const, planNames: [] as string[],
+      }
+    }
+    const names = label.plan_ids.map((id) => {
+      const plan = plans.find((item) => item.id === id)
+      return plan ? plan.name + (plan.show === false ? '（隐藏）' : '') : '套餐 #' + id + (errors.plans ? '（信息待重试）' : '（已删除）')
+    })
+    const empty = !label.plan_ids.length || (!errors.plans && !label.plan_ids.some((id) => plans.some((plan) => plan.id === id)))
+    return {
+      enabled: true, label: '订阅标签 · ' + label.name + (empty ? ' · 无人可用' : ''),
+      tooltip: '按标签套餐分配：' + (names.join('、') || '未绑定套餐，无人可用') + '；清除标签后恢复原节点规则',
+      tagType: empty ? 'danger' as const : 'primary' as const, planNames: names,
+    }
+  }
   const enabled = node.plan_restriction_enabled === true
   const ids = [...new Set(node.allowed_plan_ids ?? [])]
-  const names = ids.map((id) => plans.find((plan) => plan.id === id)?.name ?? `套餐 #${id}（已删除）`)
+  const names = ids.map((id) => plans.find((plan) => plan.id === id)?.name ?? ('套餐 #' + id + (errors.plans ? '（信息待重试）' : '（已删除）')))
   return {
     enabled,
-    label: enabled ? (ids.length ? `套餐限制 · ${ids.length} 个` : '未配置套餐 · 无人可用') : '沿用权限组',
-    tooltip: enabled ? (names.length ? `仅以下套餐可用：${names.join('、')}` : '已启用套餐限制但未选择套餐，无人可用') : '按权限组分配节点',
+    label: enabled ? (ids.length ? '套餐限制 · ' + ids.length + ' 个' : '未配置套餐 · 无人可用') : '沿用权限组',
+    tooltip: enabled ? (names.length ? '仅以下套餐可用：' + names.join('、') : '已启用套餐限制但未选择套餐，无人可用') : '按权限组分配节点',
     tagType: enabled && ids.length === 0 ? 'danger' as const : 'info' as const,
+    planNames: enabled ? names : [],
   }
 }
 

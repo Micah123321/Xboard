@@ -17,7 +17,7 @@ class AppController extends Controller
         $user = $request->user();
         $userService = new UserService();
         if ($userService->isAvailable($user)) {
-            $servers = ServerService::getAvailableServers($user);
+            $servers = ServerService::formatSubscriptionServerNames(ServerService::getAvailableServers($user));
         }
         $defaultConfig = base_path() . '/resources/rules/app.clash.yaml';
         $customConfig = base_path() . '/resources/rules/custom.app.clash.yaml';

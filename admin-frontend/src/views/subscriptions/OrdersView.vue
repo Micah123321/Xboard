@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChatLineRound, CircleCheck, MoreFilled, Plus, RefreshRight, Search, TopRight } from '@element-plus/icons-vue'
@@ -589,22 +590,14 @@ onMounted(() => {
 
 <template>
   <div class="orders-page">
-    <section class="orders-intro">
-      <div class="orders-copy">
-        <p class="orders-kicker">Subscriptions</p>
-        <h1>订单管理</h1>
-        <span>在这里可以查看用户订单，包括分配、查看、删除等操作。</span>
-      </div>
-
-      <ElButton
-        v-if="hasTicketReturn"
-        class="ticket-return-button"
-        @click="returnToTicket"
-      >
-        <ElIcon><ChatLineRound /></ElIcon>
-        <span>{{ ticketReturnLabel }}</span>
-      </ElButton>
-    </section>
+    <PageHeader title="订单管理">
+      <template v-if="hasTicketReturn" #actions>
+        <ElButton class="ticket-return-button" @click="returnToTicket">
+          <ElIcon><ChatLineRound /></ElIcon>
+          <span>{{ ticketReturnLabel }}</span>
+        </ElButton>
+      </template>
+    </PageHeader>
 
     <section class="orders-shell">
       <header class="orders-toolbar">

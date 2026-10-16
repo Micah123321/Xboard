@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-10-17
+
+- **[subscription-labels]**: 新增订阅标签管理，标签绑定多个套餐，多个节点可复用同一标签，并支持已选节点批量绑定/清除；标签优先于原手动白名单，旧配置保留，清除后恢复。订阅、用户列表及节点全量/增量鉴权统一读取标签；套餐名单修改通过事务提交后的 node_sync 队列刷新引用节点，使用中标签删除受接口及外键保护。新增可回滚迁移 2026_10_15_000002_create_subscription_labels.php。标签/套餐加载失败保留绑定并支持重试，含桌面和手机交互。后端标签/套餐/策略/Snell 回归108项449断言、真实接口10项112断言，最终前端22项专项、独立生产构建及10项模拟接口浏览器验收通过；说明见 docs/subscription-labels.md，构建与截图位于 output/subscription-labels-*。生产发布先备份并执行指定增量迁移，验收记录位于 output/releases/labels-templates-deployment，保留并发节点模板与界面修改。
+
+- **[node-template-defaults]**: 检查全部 12 种节点协议模板；补齐 HY2、传输路径、gRPC、Reality Short ID、Naive TLS 及可选复用默认参数，增加 Salamander/XHTTP/mKCP/插件下拉与随机密码、Short ID、seed 按钮。修复编辑后新建残留旧节点 ID、跨协议版本/混淆/传输串用、空数值转 0，以及保存丢失未显示 WS/TLS 扩展；兼容已有 TCP HTTP 空路径，并将 TUIC ALPN 同时下发给节点。29 项前端回归、6 项 PHP 17 断言、类型检查、生产构建及 17 项隔离 API 桌面/手机浏览器检查通过；mi-node Xray 配套解析回归与 Linux amd64 构建通过。构建位于 output/node-template-defaults/admin，本地静态资源已增量更新并保留旧资产及入口备份；生产与节点配套发行验收记录位于 output/releases/labels-templates-deployment。说明见 docs/node-template-defaults.md。
+
 ## 2026-10-15
 
 - **[subscription-policy]**: 新增独立订阅下发策略页与管理员接口，按12种协议配置默认下发、允许URL参数覆盖及唯一参数名；Snell默认隐藏，通过snell=1显式开启，0排除，保留套餐/权限与客户端兼容过滤，并防止flag掩盖真实旧版Mihomo内核。Surge/Surfboard托管刷新保留有效策略参数及格式/筛选参数。沿用现有设置表，无新增迁移；说明见docs/subscription-policy.md。隔离PHP回归99项399断言、前端8项专项、独立生产构建和9项桌面/手机模拟接口浏览器交互通过；截图与构建位于output/subscription-policy-*；生产发布采用数据库备份与固定镜像，验收记录位于output/releases/subscription-policy-deployment。

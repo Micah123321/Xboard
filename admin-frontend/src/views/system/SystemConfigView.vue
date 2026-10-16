@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -217,43 +218,25 @@ onMounted(() => {
 
 <template>
   <div class="config-page">
-    <section class="config-hero">
-      <div class="config-copy">
-        <p class="config-kicker">System Settings</p>
-        <h1>系统设置。</h1>
-        <p>
-          管理系统核心配置，包括站点、安全、订阅、邀请佣金、节点、邮件与通知相关设置。
-        </p>
-
-        <div class="config-status">
-          <ElIcon :class="{ danger: isDirty }">
-            <WarningFilled v-if="isDirty" />
-            <CircleCheckFilled v-else />
-          </ElIcon>
-          <span>{{ saveStatusText }}</span>
-          <small v-if="lastLoadedAt">最近加载于 {{ formatDateTime(lastLoadedAt) }}</small>
-        </div>
+    <PageHeader title="系统配置" :stats="summaryCards">
+      <template #actions>
+        <ElButton :loading="reloading" @click="loadPage('reload')">
+          <ElIcon><RefreshRight /></ElIcon>
+          重新拉取
+        </ElButton>
+        <ElButton type="primary" :loading="saving" :disabled="!isDirty" @click="handleSave">
+          保存配置
+        </ElButton>
+      </template>
+      <div class="config-status" role="status">
+        <ElIcon :class="{ danger: isDirty }">
+          <WarningFilled v-if="isDirty" />
+          <CircleCheckFilled v-else />
+        </ElIcon>
+        <span>{{ saveStatusText }}</span>
+        <small v-if="lastLoadedAt">最近加载于 {{ formatDateTime(lastLoadedAt) }}</small>
       </div>
-
-      <div class="hero-side">
-        <div class="hero-actions">
-          <ElButton :loading="reloading" @click="loadPage('reload')">
-            <ElIcon><RefreshRight /></ElIcon>
-            重新拉取
-          </ElButton>
-          <ElButton type="primary" :loading="saving" :disabled="!isDirty" @click="handleSave">
-            保存配置
-          </ElButton>
-        </div>
-
-        <div class="hero-summary">
-          <article v-for="item in summaryCards" :key="item.label">
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-          </article>
-        </div>
-      </div>
-    </section>
+    </PageHeader>
 
     <section v-if="loading" class="loading-shell">
       <ElSkeleton :rows="4" animated />
@@ -406,44 +389,7 @@ onMounted(() => {
 <style scoped>
 .config-page {
   display: grid;
-  gap: 24px;
-}
-
-.config-hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 34px;
-  border-radius: 28px;
-  background: #000000;
-}
-
-.config-copy {
-  display: grid;
-  gap: 12px;
-  max-width: 620px;
-}
-
-.config-kicker {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 11px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-}
-
-.config-copy h1 {
-  margin: 0;
-  color: #ffffff;
-  font-size: clamp(34px, 5vw, 52px);
-  line-height: 1.08;
-  letter-spacing: -0.28px;
-}
-
-.config-copy > p:last-of-type {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.72);
-  line-height: 1.6;
+  gap: 16px;
 }
 
 .config-status {
@@ -451,8 +397,7 @@ onMounted(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 8px;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--xboard-text-secondary);
 }
 
 .config-status :deep(.el-icon) {
@@ -464,44 +409,7 @@ onMounted(() => {
 }
 
 .config-status small {
-  color: rgba(255, 255, 255, 0.52);
-}
-
-.hero-side {
-  display: grid;
-  gap: 16px;
-  min-width: 360px;
-}
-
-.hero-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.hero-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.hero-summary article {
-  display: grid;
-  gap: 6px;
-  padding: 18px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.hero-summary span {
-  color: rgba(255, 255, 255, 0.64);
-  font-size: 12px;
-}
-
-.hero-summary strong {
-  color: #ffffff;
-  font-size: 20px;
-  line-height: 1.2;
+  color: var(--xboard-text-muted);
 }
 
 .loading-shell {
@@ -639,18 +547,12 @@ onMounted(() => {
 }
 
 @media (max-width: 1180px) {
-  .config-hero,
   .config-shell,
   .section-header {
     grid-template-columns: 1fr;
     flex-direction: column;
   }
 
-  .hero-side {
-    min-width: 0;
-  }
-
-  .hero-actions,
   .section-actions {
     justify-content: flex-start;
   }
@@ -668,13 +570,8 @@ onMounted(() => {
 }
 
 @media (max-width: 767px) {
-  .config-grid,
-  .hero-summary {
+  .config-grid {
     grid-template-columns: 1fr;
-  }
-
-  .config-hero {
-    padding: 28px 24px;
   }
 
   .config-section {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { updateGiftCardCode } from '@/api/admin'
@@ -51,12 +52,7 @@ async function submitCodeEdit() {
 
 <template>
   <div class="gift-cards-page">
-    <section class="page-intro">
-      <div class="intro-copy">
-        <h1>礼品卡管理</h1>
-        <p>在这里可以管理礼品卡模板、兑换码和使用记录等功能。</p>
-      </div>
-    </section>
+    <PageHeader title="礼品卡管理" />
 
     <section class="segment-shell">
       <div class="segment-tabs">

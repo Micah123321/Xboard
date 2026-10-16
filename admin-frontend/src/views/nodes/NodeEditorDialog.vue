@@ -5,10 +5,12 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { saveNode } from '@/api/admin'
 import { getNodeVisibilityDisabledReason } from '@/utils/nodes'
-import type { AdminNodeItem, AdminNodeRouteItem, AdminNodeType, AdminPlanListItem, AdminServerGroupItem } from '@/types/api'
+import type { AdminNodeItem, AdminNodeRouteItem, AdminPlanListItem, AdminServerGroupItem, AdminSubscriptionLabel } from '@/types/api'
 import NodeEditorProtocolSection from './NodeEditorProtocolSection.vue'
+import SubscriptionLabelPicker from './SubscriptionLabelPicker.vue'
 import {
-  applySnellNodeConstraints,
+  applyNodeProtocolDefaults,
+  generateRandomRealityShortId,
   createEmptyNodeForm,
   createNodeRateRange,
   getNodeProtocolLabel,
@@ -26,6 +28,9 @@ const props = defineProps<{
   groups: AdminServerGroupItem[]
   plans: AdminPlanListItem[]
   planLoadError?: string
+  labels: AdminSubscriptionLabel[]
+  labelLoadError?: string
+  optionsLoading?: boolean
   routes: AdminNodeRouteItem[]
   nodes?: AdminNodeItem[] | null
   allNodes: AdminNodeItem[]
@@ -34,6 +39,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   success: [message: string]
+  retryOptions: []
 }>()
 
 const formRef = ref<FormInstance>()
@@ -85,33 +91,8 @@ function syncForm() {
   Object.assign(form, toNodeFormModel(props.node))
 }
 
-function applyProtocolDefaults(type: AdminNodeType | '') {
-  if (!type) {
-    form.network = ''
-    form.tlsMode = 0
-    return
-  }
-
-  if (type === 'snell') {
-    applySnellNodeConstraints(form)
-    return
-  }
-
-  if (['vmess', 'vless', 'trojan'].includes(type) && !form.network) {
-    form.network = 'tcp'
-  }
-
-  if (!['vmess', 'vless', 'trojan'].includes(type)) {
-    form.network = ''
-  }
-
-  if (!['vmess', 'vless', 'trojan', 'hysteria', 'tuic', 'anytls', 'socks', 'naive', 'http'].includes(type)) {
-    form.tlsMode = 0
-  }
-
-  if (type === 'trojan' && form.tlsMode === 0) {
-    form.tlsMode = 1
-  }
+function applyProtocolDefaults() {
+  applyNodeProtocolDefaults(form)
 }
 
 function addRateRange() {
@@ -137,8 +118,19 @@ async function handleSubmit() {
     return
   }
 
-  if (form.planRestrictionEnabled && props.planLoadError) {
-    ElMessage.warning(props.planLoadError)
+  if (form.subscriptionLabelId == null && form.planRestrictionEnabled && (props.planLoadError || props.optionsLoading)) {
+    ElMessage.warning(props.planLoadError || '套餐加载中，请稍后重试')
+    return
+  }
+
+  const originalLabelId = toNodeFormModel(props.node).subscriptionLabelId
+  const labelChanged = form.subscriptionLabelId !== originalLabelId
+  if (labelChanged && form.subscriptionLabelId != null && (props.optionsLoading || props.labelLoadError || props.planLoadError)) {
+    ElMessage.warning('请重试加载标签与套餐后再更换订阅标签')
+    return
+  }
+  if (labelChanged && form.subscriptionLabelId != null && !props.labels.some((label) => label.id === form.subscriptionLabelId)) {
+    ElMessage.warning('所选订阅标签已不存在，请重新选择')
     return
   }
 
@@ -150,7 +142,10 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    await saveNode(toNodeSavePayload(form))
+    const payload = toNodeSavePayload(form)
+    // Omission preserves a binding even when its label could not be loaded.
+    if (props.mode === 'edit' && !labelChanged) delete payload.subscription_label_id
+    await saveNode(payload)
     const message = props.mode === 'create' ? '节点已创建' : '节点已更新'
     ElMessage.success(message)
     emit('success', message)
@@ -170,7 +165,7 @@ watch(
     }
 
     syncForm()
-    applyProtocolDefaults(form.type)
+    applyProtocolDefaults()
     nextTick(() => {
       formRef.value?.clearValidate()
     })
@@ -180,8 +175,8 @@ watch(
 
 watch(
   () => form.type,
-  (value) => {
-    applyProtocolDefaults(value)
+  () => {
+    applyProtocolDefaults()
   },
 )
 
@@ -197,21 +192,9 @@ watch(
 watch(
   () => form.tlsMode,
   (value) => {
-    if (value !== 2) {
-      form.realityServerName = ''
-      form.realityServerPort = ''
-      form.realityPublicKey = ''
-      form.realityPrivateKey = ''
-      form.realityShortId = ''
-    }
-    if (value === 0) {
-      form.tlsServerName = ''
-      form.tlsAllowInsecure = false
-      form.echEnabled = false
-      form.echConfig = ''
-      form.echQueryServerName = ''
-      form.echKey = ''
-      form.utlsEnabled = false
+    if (value === 2 && !form.id) {
+      form.realityServerPort ||= '443'
+      form.realityShortId ||= generateRandomRealityShortId()
     }
   },
 )
@@ -350,42 +333,58 @@ watch(
               </ElSelect>
             </ElFormItem>
 
-            <ElFormItem label="启用套餐限制" class="form-grid--full">
-              <div class="switch-row">
-                <div>
-                  <strong>按套餐指定可使用此节点的用户</strong>
-                  <span>开启后需同时匹配节点权限组和所选套餐；关闭后仅按权限组分配，保留套餐选择。</span>
-                </div>
-                <ElSwitch v-model="form.planRestrictionEnabled" />
-              </div>
+            <ElFormItem label="订阅标签（优先）" class="form-grid--full">
+              <SubscriptionLabelPicker
+                v-model="form.subscriptionLabelId"
+                :labels="props.labels" :plans="props.plans"
+                :label-load-error="props.labelLoadError" :plan-load-error="props.planLoadError"
+                :loading="props.optionsLoading" :existing-label="props.node?.subscription_label"
+                @retry="emit('retryOptions')"
+              />
             </ElFormItem>
-            <ElFormItem v-if="form.planRestrictionEnabled" label="允许使用的套餐" required class="form-grid--full">
-              <ElAlert v-if="props.planLoadError" :title="props.planLoadError" type="warning" :closable="false" show-icon />
-              <ElSelect
-                :disabled="Boolean(props.planLoadError)"
-                v-model="form.allowedPlanIds"
-                multiple
-                filterable
-                collapse-tags
-                collapse-tags-tooltip
-                placeholder="搜索套餐名称或 ID，至少选择一个套餐"
-                no-data-text="暂无套餐，请先创建套餐或重新加载"
-                no-match-text="未找到匹配套餐"
-              >
-                <ElOption
-                  v-for="plan in props.plans"
-                  :key="plan.id"
-                  :label="`${plan.name} (#${plan.id})${plan.show ? '' : '（隐藏）'}`"
-                  :value="plan.id"
-                />
-                <ElOption
-                  v-for="id in missingPlanIds"
-                  :key="id"
-                  :label="`套餐 #${id}（已删除）`"
-                  :value="id"
-                />
-              </ElSelect>
-            </ElFormItem>
+            <div class="form-grid--full">
+              <ElCollapse data-testid="advanced-manual-plan-rules">
+                <ElCollapseItem title="高级：原节点手动套餐限制（清除标签后恢复）" name="manual-plans">
+                  <p v-if="form.subscriptionLabelId != null" class="footer-hint">当前按订阅标签执行，下列设置和值保留；清除标签后恢复这些规则。</p>
+                  <ElFormItem label="启用手动套餐限制">
+                    <div class="switch-row">
+                      <div>
+                        <strong>按套餐指定可使用此节点的用户</strong>
+                        <span>开启后需同时匹配节点权限组和所选套餐；关闭后仅按权限组分配，保留套餐选择。</span>
+                      </div>
+                      <ElSwitch v-model="form.planRestrictionEnabled" :disabled="form.subscriptionLabelId != null" />
+                    </div>
+                  </ElFormItem>
+                  <ElFormItem v-if="form.planRestrictionEnabled" label="允许使用的套餐" required class="form-grid--full">
+                    <ElAlert v-if="props.planLoadError" :title="props.planLoadError" type="warning" :closable="false" show-icon><ElButton @click="emit('retryOptions')">重试加载</ElButton></ElAlert>
+                    <ElSelect
+                      :disabled="form.subscriptionLabelId != null || props.optionsLoading || Boolean(props.planLoadError)"
+                      v-model="form.allowedPlanIds"
+                      multiple
+                      filterable
+                      collapse-tags
+                      collapse-tags-tooltip
+                      placeholder="搜索套餐名称或 ID，至少选择一个套餐"
+                      no-data-text="暂无套餐，请先创建套餐或重新加载"
+                      no-match-text="未找到匹配套餐"
+                    >
+                      <ElOption
+                        v-for="plan in props.plans"
+                        :key="plan.id"
+                        :label="`${plan.name} (#${plan.id})${plan.show ? '' : '（隐藏）'}`"
+                        :value="plan.id"
+                      />
+                      <ElOption
+                        v-for="id in missingPlanIds"
+                        :key="id"
+                        :label="`套餐 #${id}（已删除）`"
+                        :value="id"
+                      />
+                    </ElSelect>
+                  </ElFormItem>
+                </ElCollapseItem>
+              </ElCollapse>
+            </div>
 
             <ElFormItem label="节点地址" prop="host" class="form-grid--full">
               <ElInput v-model="form.host" placeholder="请输入节点域名或者 IP" />

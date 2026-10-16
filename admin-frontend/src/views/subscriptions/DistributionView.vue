@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -120,12 +121,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 
 <template>
   <div class="distribution-page">
-    <section class="distribution-hero">
-      <p class="distribution-kicker">Subscriptions</p>
-      <h1>订阅下发策略</h1>
-      <p>按协议设置默认下发范围，并决定是否允许用户通过订阅 URL 参数覆盖。</p>
-      <span>初始默认：Snell 关闭默认下发，其余协议开启。当前设置以已保存配置为准。</span>
-    </section>
+    <PageHeader title="订阅下发策略" />
 
     <section class="policy-shell" aria-labelledby="rules-title" :aria-busy="loading || saving">
       <header class="policy-toolbar">
@@ -204,12 +200,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 </template>
 
 <style scoped lang="scss">
-.distribution-page { display: grid; gap: 24px; min-width: 0; }
-.distribution-hero { display: grid; gap: 12px; padding: 30px 32px; border-radius: 28px; background: #000; color: #fff; }
-.distribution-hero h1 { margin: 0; font-size: clamp(30px, 4vw, 46px); line-height: 1.15; }
-.distribution-hero p { margin: 0; line-height: 1.6; color: rgba(255, 255, 255, 0.8); }
-.distribution-hero span { font-size: 13px; color: rgba(255, 255, 255, 0.65); }
-.distribution-hero .distribution-kicker { font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; }
+.distribution-page { display: grid; gap: 16px; min-width: 0; }
+
 .policy-shell { display: grid; gap: 18px; padding: 24px; min-width: 0; border-radius: 26px; background: #fff; box-shadow: var(--xboard-shadow); }
 h2 { margin: 0; font-size: 19px; color: var(--xboard-text-strong); }
 .policy-toolbar, .policy-heading, .policy-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -243,7 +235,7 @@ h2 { margin: 0; font-size: 19px; color: var(--xboard-text-strong); }
 }
 @media (max-width: 600px) {
   .distribution-page { gap: 16px; }
-  .distribution-hero, .policy-shell { padding: 20px 16px; border-radius: 20px; }
+  .policy-shell { padding: 20px 16px; border-radius: 20px; }
   .policy-toolbar { align-items: stretch; flex-direction: column; }
   .policy-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .policy-actions :deep(.el-button) { margin-left: 0; min-width: 0; }

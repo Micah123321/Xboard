@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { DataAnalysis, Search, View } from '@element-plus/icons-vue'
@@ -193,20 +194,7 @@ onMounted(() => {
 
 <template>
   <div class="tickets-page">
-    <section class="tickets-hero">
-      <div class="tickets-copy">
-        <p class="tickets-kicker">Tickets</p>
-        <h1>工单管理</h1>
-        <span>在这里可以查看用户工单，包括查看、回复、关闭与流量日志辅助排查。</span>
-      </div>
-
-      <div class="hero-stats">
-        <article v-for="item in headerStats" :key="item.label">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </article>
-      </div>
-    </section>
+    <PageHeader title="工单管理" :stats="headerStats" />
 
     <section class="ticket-board">
       <header class="ticket-toolbar">
@@ -336,66 +324,7 @@ onMounted(() => {
 <style scoped>
 .tickets-page {
   display: grid;
-  gap: 24px;
-}
-
-.tickets-hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 30px 32px;
-  border-radius: 28px;
-  background: #000000;
-}
-
-.tickets-copy {
-  display: grid;
-  gap: 10px;
-  max-width: 680px;
-}
-
-.tickets-kicker {
-  font-size: 11px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.68);
-}
-
-.tickets-copy h1 {
-  font-size: clamp(36px, 5vw, 52px);
-  line-height: 1.08;
-  letter-spacing: -0.28px;
-  color: #ffffff;
-}
-
-.tickets-copy span {
-  color: rgba(255, 255, 255, 0.72);
-  line-height: 1.47;
-}
-
-.hero-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  min-width: 260px;
-}
-
-.hero-stats article {
-  display: grid;
-  gap: 6px;
-  padding: 18px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.hero-stats span {
-  color: rgba(255, 255, 255, 0.64);
-  font-size: 12px;
-}
-
-.hero-stats strong {
-  color: #ffffff;
-  font-size: 22px;
+  gap: 16px;
 }
 
 .ticket-board {
@@ -469,14 +398,10 @@ onMounted(() => {
 }
 
 @media (max-width: 1080px) {
-  .tickets-hero,
   .ticket-footer {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .hero-stats {
-    min-width: 0;
-  }
 }
 </style>

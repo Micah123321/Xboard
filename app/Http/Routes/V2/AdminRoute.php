@@ -5,6 +5,7 @@ use App\Http\Controllers\V2\Admin\ConfigController;
 use App\Http\Controllers\V2\Admin\MailTemplateController;
 use App\Http\Controllers\V2\Admin\PlanController;
 use App\Http\Controllers\V2\Admin\SubscriptionPolicyController;
+use App\Http\Controllers\V2\Admin\SubscriptionLabelController;
 use App\Http\Controllers\V2\Admin\Server\GroupController;
 use App\Http\Controllers\V2\Admin\Server\RouteController;
 use App\Http\Controllers\V2\Admin\Server\ManageController;
@@ -69,6 +70,10 @@ class AdminRoute
 
             $router->get('/subscribe-policy/fetch', [SubscriptionPolicyController::class, 'fetch']);
             $router->post('/subscribe-policy/save', [SubscriptionPolicyController::class, 'save']);
+
+            $router->get('/subscription-label/fetch', [SubscriptionLabelController::class, 'fetch']);
+            $router->post('/subscription-label/save', [SubscriptionLabelController::class, 'save']);
+            $router->post('/subscription-label/drop', [SubscriptionLabelController::class, 'drop']);
 
             // Plan
             $router->group([

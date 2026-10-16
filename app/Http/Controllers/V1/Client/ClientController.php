@@ -76,6 +76,7 @@ class ClientController extends Controller
             filterKeywords: $filterKeywords
         );
 
+        $serversFiltered = ServerService::formatSubscriptionServerNames($serversFiltered);
         $this->setSubscribeInfoToServers($serversFiltered, $user, count($servers) - count($serversFiltered));
         $serversFiltered = $this->addPrefixToServerName($serversFiltered);
 

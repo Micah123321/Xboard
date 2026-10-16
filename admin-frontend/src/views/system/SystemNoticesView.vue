@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -162,20 +163,7 @@ onMounted(() => {
 
 <template>
   <div class="notices-page">
-    <section class="notices-hero">
-      <div class="hero-copy">
-        <p class="hero-kicker">System Management</p>
-        <h1>公告管理</h1>
-        <span>在这里可以配置公告，包括添加、删除、编辑、显隐切换与排序维护。</span>
-      </div>
-
-      <div class="hero-stats">
-        <article v-for="item in heroStats" :key="item.label">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </article>
-      </div>
-    </section>
+    <PageHeader title="公告管理" :stats="heroStats" />
 
     <section class="table-shell">
       <header class="table-toolbar">

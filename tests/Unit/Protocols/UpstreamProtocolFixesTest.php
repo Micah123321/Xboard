@@ -60,4 +60,24 @@ class UpstreamProtocolFixesTest extends TestCase
 
         $this->assertStringContainsString('congestion_control=bbr', $uri);
     }
+
+    public function test_vmess_tcp_http_empty_paths_export_the_default_path(): void
+    {
+        foreach ([null, []] as $paths) {
+            $uri = General::buildVmess('fixture-password', [
+                'name' => 'VMess fixture',
+                'host' => 'node.test',
+                'port' => 443,
+                'protocol_settings' => [
+                    'tls' => 0,
+                    'network' => 'tcp',
+                    'network_settings' => [
+                        'header' => ['type' => 'http', 'request' => ['path' => $paths]],
+                    ],
+                ],
+            ]);
+            $config = json_decode(base64_decode(substr($uri, strlen('vmess://'))), true);
+            $this->assertSame('/', $config['path']);
+        }
+    }
 }

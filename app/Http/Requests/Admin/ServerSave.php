@@ -130,6 +130,7 @@ class ServerSave extends FormRequest
             'bandwidth_check_enabled' => 'sometimes|boolean',
             'name' => 'required|string',
             'group_ids' => 'nullable|array',
+            'subscription_label_id' => 'sometimes|nullable|integer|min:1|exists:v2_subscription_labels,id',
             'plan_restriction_enabled' => 'sometimes|boolean',
             'allowed_plan_ids' => 'sometimes|array',
             'allowed_plan_ids.*' => 'required|integer|min:1|distinct',
@@ -269,11 +270,16 @@ class ServerSave extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator): void {
-            if ($validator->errors()->isNotEmpty() || !$this->hasAny(['plan_restriction_enabled', 'allowed_plan_ids'])) {
+            if ($validator->errors()->isNotEmpty() || !$this->hasAny(['plan_restriction_enabled', 'allowed_plan_ids', 'subscription_label_id'])) {
                 return;
             }
 
             $server = $this->input('id') ? Server::find($this->input('id')) : null;
+            $labelId = array_key_exists('subscription_label_id', $this->all())
+                ? $this->input('subscription_label_id') : $server?->subscription_label_id;
+            if ($labelId !== null) {
+                return;
+            }
             $enabled = $this->has('plan_restriction_enabled')
                 ? $this->boolean('plan_restriction_enabled')
                 : (bool) $server?->plan_restriction_enabled;
@@ -292,6 +298,7 @@ class ServerSave extends FormRequest
     public function attributes(): array
     {
         return [
+            'subscription_label_id' => '订阅标签',
             'plan_restriction_enabled' => '套餐限制',
             'allowed_plan_ids' => '允许使用的套餐',
             'allowed_plan_ids.*' => '允许使用的套餐',

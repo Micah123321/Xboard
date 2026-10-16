@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -136,20 +137,7 @@ onMounted(() => {
 
 <template>
   <div class="node-routes-page">
-    <section class="node-routes-hero">
-      <div class="hero-copy">
-        <p class="hero-kicker">Node Routes</p>
-        <h1>路由管理</h1>
-        <span>管理所有路由规则，包括添加、删除、编辑与节点引用摘要查看。</span>
-      </div>
-
-      <div class="hero-stats">
-        <article v-for="item in heroStats" :key="item.label">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </article>
-      </div>
-    </section>
+    <PageHeader title="路由管理" :stats="heroStats" />
 
     <section class="table-shell">
       <header class="table-toolbar">

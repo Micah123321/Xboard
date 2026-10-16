@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { ChatLineRound, MoreFilled, Plus, RefreshRight, Search } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { formatDateTime, formatTraffic } from '@/utils/dashboard'
@@ -87,31 +88,14 @@ const {
 
 <template>
   <div class="users-page">
-    <section class="users-hero">
-      <div class="users-copy">
-        <p class="users-kicker">Users</p>
-        <h1>用户管理工作台。</h1>
-        <span>现在可以在同一页完成快捷筛选、高级筛选、行级维护与批量操作，继续保持 Apple 风格的轻量运营节奏。</span>
-      </div>
-
-      <div class="users-hero__side">
-        <ElButton
-          v-if="hasTicketReturn"
-          class="ticket-return-button ticket-return-button--dark"
-          @click="returnToTicket"
-        >
+    <PageHeader title="用户管理" :stats="pageStats">
+      <template v-if="hasTicketReturn" #actions>
+        <ElButton class="ticket-return-button" @click="returnToTicket">
           <ElIcon><ChatLineRound /></ElIcon>
           <span>{{ ticketReturnLabel }}</span>
         </ElButton>
-
-        <div class="hero-stats">
-          <article v-for="item in pageStats" :key="item.label">
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-          </article>
-        </div>
-      </div>
-    </section>
+      </template>
+    </PageHeader>
 
     <section class="table-shell">
       <header class="table-toolbar">

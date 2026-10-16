@@ -4,7 +4,7 @@ import type {
   AdminNodeSavePayload,
   AdminNodeType,
 } from '@/types/api'
-import { applySnellNodeConstraints, createEmptyNodeForm, type NodeFormModel } from './nodeEditorOptions'
+import { applySnellNodeConstraints, createEmptyNodeForm, HYSTERIA_DEFAULTS, type NodeFormModel } from './nodeEditorOptions'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -14,16 +14,26 @@ function toRecord(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {}
 }
 
+function mergeSettings(original: Record<string, unknown>, updates: Record<string, unknown>): Record<string, unknown> {
+  const merged = { ...original }
+  for (const [key, value] of Object.entries(updates)) {
+    merged[key] = isRecord(value) ? mergeSettings(toRecord(original[key]), value) : value
+  }
+  return merged
+}
+
 function toStringValue(value: unknown): string {
   return typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value)
 }
 
 function toNumberValue(value: unknown, fallback = 0): number {
+  if (value == null || (typeof value === 'string' && !value.trim())) return fallback
   const normalized = Number(value)
   return Number.isFinite(normalized) ? normalized : fallback
 }
 
 function toNullableNumber(value: unknown): number | null {
+  if (value == null || (typeof value === 'string' && !value.trim())) return null
   const normalized = Number(value)
   return Number.isFinite(normalized) ? normalized : null
 }
@@ -184,6 +194,9 @@ export function toNodeFormModel(node?: AdminNodeItem | null): NodeFormModel {
   }
   form.planRestrictionEnabled = toBooleanValue(node.plan_restriction_enabled)
   form.allowedPlanIds = toNumberArray(node.allowed_plan_ids)
+  form.subscriptionLabelId = node.subscription_label_id === undefined
+    ? node.subscription_label?.id
+    : toNullableNumber(node.subscription_label_id)
   form.routeIds = toNumberArray(node.route_ids)
   form.machineId = node.machine_id ?? null
   form.host = toStringValue(node.host)
@@ -204,7 +217,7 @@ export function toNodeFormModel(node?: AdminNodeItem | null): NodeFormModel {
     return form
   }
 
-  form.tlsMode = Number(protocolSettings.tls ?? 0)
+  form.tlsMode = isRecord(protocolSettings.tls) ? 0 : toNumberValue(protocolSettings.tls)
   form.tlsServerName = toStringValue(tlsSettings.server_name || tlsObject.server_name)
   form.tlsAllowInsecure = toBooleanValue(tlsSettings.allow_insecure ?? tlsObject.allow_insecure)
   form.echEnabled = toBooleanValue(echFromTls.enabled ?? echFromTlsObject.enabled)
@@ -214,58 +227,86 @@ export function toNodeFormModel(node?: AdminNodeItem | null): NodeFormModel {
   form.utlsEnabled = toBooleanValue(utlsSettings.enabled)
   form.utlsFingerprint = toStringValue(utlsSettings.fingerprint || 'chrome')
   form.realityServerName = toStringValue(realitySettings.server_name)
-  form.realityServerPort = toStringValue(realitySettings.server_port)
+  form.realityServerPort = toStringValue(realitySettings.server_port ?? form.realityServerPort)
   form.realityPublicKey = toStringValue(realitySettings.public_key)
   form.realityPrivateKey = toStringValue(realitySettings.private_key)
   form.realityShortId = toStringValue(realitySettings.short_id)
   form.network = toStringValue(protocolSettings.network)
-  form.tcpHeaderType = toStringValue(tcpHeader.type || 'none')
-  form.tcpRequestPath = joinMultilineList(tcpRequest.path)
-  form.tcpRequestHost = joinInlineList(tcpHeaders.Host)
-  form.wsPath = toStringValue(networkSettings.path)
-  form.wsHost = toStringValue(wsHeaders.Host)
-  form.grpcServiceName = toStringValue(networkSettings.serviceName)
-  form.h2Path = toStringValue(networkSettings.path)
-  form.h2Host = joinInlineList(networkSettings.host)
-  form.httpupgradePath = toStringValue(networkSettings.path)
-  form.httpupgradeHost = toStringValue(networkSettings.host)
-  form.xhttpPath = toStringValue(networkSettings.path)
-  form.xhttpHost = toStringValue(networkSettings.host)
-  form.xhttpMode = toStringValue(networkSettings.mode || 'auto')
-  form.xhttpExtra = networkSettings.extra ? JSON.stringify(networkSettings.extra, null, 2) : ''
-  form.kcpSeed = toStringValue(networkSettings.seed)
-  form.kcpHeaderType = toStringValue(toRecord(networkSettings.header).type || 'none')
-  form.shadowsocksCipher = toStringValue(protocolSettings.cipher || '2022-blake3-aes-128-gcm')
-  form.shadowsocksObfs = toStringValue(protocolSettings.obfs)
-  form.shadowsocksObfsHost = toStringValue(toRecord(protocolSettings.obfs_settings).host)
-  form.shadowsocksObfsPath = toStringValue(toRecord(protocolSettings.obfs_settings).path)
-  form.shadowsocksPlugin = toStringValue(protocolSettings.plugin)
-  form.shadowsocksPluginOpts = toStringValue(protocolSettings.plugin_opts)
-  form.vlessFlow = toStringValue(protocolSettings.flow)
-  form.vlessEncryptionEnabled = toBooleanValue(encryption.enabled)
-  form.vlessEncryption = toStringValue(encryption.encryption)
-  form.vlessDecryption = toStringValue(encryption.decryption)
-  form.hysteriaVersion = toNumberValue(protocolSettings.version, 2)
-  form.hysteriaUpMbps = toNullableNumber(hysteriaBandwidth.up)
-  form.hysteriaDownMbps = toNullableNumber(hysteriaBandwidth.down)
-  form.hysteriaObfsEnabled = toBooleanValue(hysteriaObfs.open)
-  form.hysteriaObfsType = toStringValue(hysteriaObfs.type || 'salamander')
-  form.hysteriaObfsPassword = toStringValue(hysteriaObfs.password)
-  form.hysteriaHopInterval = toNullableNumber(protocolSettings.hop_interval)
-  form.tuicVersion = toNullableNumber(protocolSettings.version) ?? 5
-  form.tuicCongestionControl = toStringValue(protocolSettings.congestion_control || 'cubic')
-  form.tuicAlpn = toStringArray(protocolSettings.alpn).length ? toStringArray(protocolSettings.alpn) : ['h3']
-  form.tuicUdpRelayMode = toStringValue(protocolSettings.udp_relay_mode || 'native')
+  switch (form.network) {
+    case 'tcp':
+      form.tcpHeaderType = toStringValue(tcpHeader.type || form.tcpHeaderType)
+      form.tcpRequestPath = tcpRequest.path == null ? form.tcpRequestPath : joinMultilineList(tcpRequest.path)
+      form.tcpRequestHost = joinInlineList(tcpHeaders.Host)
+      break
+    case 'ws':
+      form.wsPath = toStringValue(networkSettings.path ?? form.wsPath)
+      form.wsHost = toStringValue(wsHeaders.Host)
+      break
+    case 'grpc':
+      form.grpcServiceName = toStringValue(networkSettings.serviceName ?? form.grpcServiceName)
+      break
+    case 'h2':
+      form.h2Path = toStringValue(networkSettings.path ?? form.h2Path)
+      form.h2Host = joinInlineList(networkSettings.host)
+      break
+    case 'httpupgrade':
+      form.httpupgradePath = toStringValue(networkSettings.path ?? form.httpupgradePath)
+      form.httpupgradeHost = toStringValue(networkSettings.host)
+      break
+    case 'xhttp':
+      form.xhttpPath = toStringValue(networkSettings.path ?? form.xhttpPath)
+      form.xhttpHost = toStringValue(networkSettings.host)
+      form.xhttpMode = toStringValue(networkSettings.mode || form.xhttpMode)
+      form.xhttpExtra = networkSettings.extra ? JSON.stringify(networkSettings.extra, null, 2) : ''
+      break
+    case 'kcp':
+      form.kcpSeed = toStringValue(networkSettings.seed)
+      form.kcpHeaderType = toStringValue(toRecord(networkSettings.header).type || form.kcpHeaderType)
+      break
+  }
+  if (form.type === 'shadowsocks') {
+    form.shadowsocksCipher = toStringValue(protocolSettings.cipher || form.shadowsocksCipher)
+    form.shadowsocksObfs = toStringValue(protocolSettings.obfs)
+    form.shadowsocksObfsHost = toStringValue(toRecord(protocolSettings.obfs_settings).host)
+    form.shadowsocksObfsPath = toStringValue(toRecord(protocolSettings.obfs_settings).path ?? form.shadowsocksObfsPath)
+    form.shadowsocksPlugin = toStringValue(protocolSettings.plugin)
+    form.shadowsocksPluginOpts = toStringValue(protocolSettings.plugin_opts)
+  }
+  if (form.type === 'vless') {
+    form.vlessFlow = toStringValue(protocolSettings.flow)
+    form.vlessEncryptionEnabled = toBooleanValue(encryption.enabled)
+    form.vlessEncryption = toStringValue(encryption.encryption)
+    form.vlessDecryption = toStringValue(encryption.decryption)
+  }
+  if (form.type === 'hysteria') {
+    form.hysteriaVersion = protocolSettings.version == null
+      ? HYSTERIA_DEFAULTS.version
+      : toNumberValue(protocolSettings.version, HYSTERIA_DEFAULTS.version)
+    form.hysteriaUpMbps = toNullableNumber(hysteriaBandwidth.up) ?? HYSTERIA_DEFAULTS.upMbps
+    form.hysteriaDownMbps = toNullableNumber(hysteriaBandwidth.down) ?? HYSTERIA_DEFAULTS.downMbps
+    form.hysteriaObfsEnabled = toBooleanValue(hysteriaObfs.open)
+    form.hysteriaObfsType = toStringValue(hysteriaObfs.type || HYSTERIA_DEFAULTS.obfsType)
+    form.hysteriaObfsPassword = toStringValue(hysteriaObfs.password)
+    form.hysteriaHopInterval = protocolSettings.hop_interval == null
+      ? HYSTERIA_DEFAULTS.hopInterval
+      : toNullableNumber(protocolSettings.hop_interval) ?? HYSTERIA_DEFAULTS.hopInterval
+  }
+  if (form.type === 'tuic') {
+    form.tuicVersion = toNullableNumber(protocolSettings.version) ?? form.tuicVersion
+    form.tuicCongestionControl = toStringValue(protocolSettings.congestion_control || form.tuicCongestionControl)
+    form.tuicAlpn = toStringArray(protocolSettings.alpn).length ? toStringArray(protocolSettings.alpn) : form.tuicAlpn
+    form.tuicUdpRelayMode = toStringValue(protocolSettings.udp_relay_mode || form.tuicUdpRelayMode)
+  }
   form.mieruTransport = toStringValue(protocolSettings.transport || 'TCP')
   form.mieruTrafficPattern = toStringValue(protocolSettings.traffic_pattern)
   form.anytlsPaddingSchemeText = joinMultilineList(protocolSettings.padding_scheme) || form.anytlsPaddingSchemeText
   form.multiplexEnabled = toBooleanValue(multiplexSettings.enabled)
   form.multiplexProtocol = toStringValue(multiplexSettings.protocol || 'yamux')
-  form.multiplexMaxConnections = toNullableNumber(multiplexSettings.max_connections)
+  form.multiplexMaxConnections = toNullableNumber(multiplexSettings.max_connections) ?? form.multiplexMaxConnections
   form.multiplexPadding = toBooleanValue(multiplexSettings.padding)
   form.multiplexBrutalEnabled = toBooleanValue(multiplexBrutal.enabled)
-  form.multiplexBrutalUpMbps = toNullableNumber(multiplexBrutal.up_mbps)
-  form.multiplexBrutalDownMbps = toNullableNumber(multiplexBrutal.down_mbps)
+  form.multiplexBrutalUpMbps = toNullableNumber(multiplexBrutal.up_mbps) ?? form.multiplexBrutalUpMbps
+  form.multiplexBrutalDownMbps = toNullableNumber(multiplexBrutal.down_mbps) ?? form.multiplexBrutalDownMbps
 
   return form
 }
@@ -323,25 +364,27 @@ function buildMultiplexPayload(form: NodeFormModel): Record<string, unknown> {
     brutal: {
       enabled: form.multiplexBrutalEnabled,
       up_mbps: form.multiplexBrutalEnabled ? form.multiplexBrutalUpMbps ?? undefined : undefined,
-      down_mbps: form.multiplexBrutalDownMbps ? form.multiplexBrutalDownMbps : undefined,
+      down_mbps: form.multiplexBrutalEnabled ? form.multiplexBrutalDownMbps ?? undefined : undefined,
     },
   }
 }
 
 function buildNetworkSettingsPayload(form: NodeFormModel): Record<string, unknown> | undefined {
   switch (form.network) {
-    case 'tcp':
+    case 'tcp': {
+      const paths = splitMultiline(form.tcpRequestPath)
       return form.tcpHeaderType === 'http'
         ? {
           header: {
             type: 'http',
             request: {
-              path: splitMultiline(form.tcpRequestPath),
+              path: paths.length ? paths : ['/'],
               headers: { Host: splitInlineList(form.tcpRequestHost) },
             },
           },
         }
         : { header: { type: 'none' } }
+    }
     case 'ws':
       return {
         path: form.wsPath.trim() || undefined,
@@ -399,12 +442,15 @@ function buildProtocolSettings(form: NodeFormModel): Record<string, unknown> {
   }
 
   const preserved = form.type === form.originalType ? cloneProtocolSettings(form.rawProtocolSettings) : {}
-  const networkSettings = buildNetworkSettingsPayload(form)
-  const tlsSettings = buildTlsSettingsPayload(form)
-  const tlsObject = buildTlsObjectPayload(form)
-  const realitySettings = buildRealityPayload(form)
-  const utls = buildUtlsPayload(form)
-  const multiplex = buildMultiplexPayload(form)
+  const networkUpdates = buildNetworkSettingsPayload(form)
+  const networkSettings = networkUpdates
+    ? mergeSettings(form.network === preserved.network ? toRecord(preserved.network_settings) : {}, networkUpdates)
+    : undefined
+  const tlsSettings = mergeSettings(toRecord(preserved.tls_settings), buildTlsSettingsPayload(form))
+  const tlsObject = mergeSettings(toRecord(preserved.tls), buildTlsObjectPayload(form))
+  const realitySettings = mergeSettings(toRecord(preserved.reality_settings), buildRealityPayload(form))
+  const utls = mergeSettings(toRecord(preserved.utls), buildUtlsPayload(form))
+  const multiplex = mergeSettings(toRecord(preserved.multiplex), buildMultiplexPayload(form))
 
   switch (form.type) {
     case 'shadowsocks':
@@ -450,8 +496,8 @@ function buildProtocolSettings(form: NodeFormModel): Record<string, unknown> {
         ...preserved,
         version: form.hysteriaVersion,
         bandwidth: {
-          up: form.hysteriaUpMbps ?? undefined,
-          down: form.hysteriaDownMbps ?? undefined,
+          up: form.hysteriaUpMbps ?? HYSTERIA_DEFAULTS.upMbps,
+          down: form.hysteriaDownMbps ?? HYSTERIA_DEFAULTS.downMbps,
         },
         obfs: {
           open: form.hysteriaObfsEnabled,
@@ -459,7 +505,7 @@ function buildProtocolSettings(form: NodeFormModel): Record<string, unknown> {
           password: form.hysteriaObfsEnabled ? form.hysteriaObfsPassword.trim() || undefined : undefined,
         },
         tls: tlsObject,
-        hop_interval: form.hysteriaHopInterval ?? undefined,
+        hop_interval: form.hysteriaHopInterval ?? HYSTERIA_DEFAULTS.hopInterval,
       }
     case 'vless':
       return {
@@ -489,7 +535,7 @@ function buildProtocolSettings(form: NodeFormModel): Record<string, unknown> {
     case 'tuic':
       return {
         ...preserved,
-        version: form.tuicVersion ?? undefined,
+        version: form.tuicVersion ?? 5,
         congestion_control: form.tuicCongestionControl.trim() || 'cubic',
         alpn: form.tuicAlpn.length ? form.tuicAlpn : ['h3'],
         udp_relay_mode: form.tuicUdpRelayMode.trim() || 'native',
@@ -522,6 +568,7 @@ export function toNodeSavePayload(form: NodeFormModel): AdminNodeSavePayload {
     group_ids: toJsonIdArray(form.groupIds),
     plan_restriction_enabled: form.planRestrictionEnabled,
     allowed_plan_ids: toNumberArray(form.allowedPlanIds),
+    ...(form.subscriptionLabelId !== undefined ? { subscription_label_id: form.subscriptionLabelId } : {}),
     route_ids: form.type === 'snell' ? [] : toJsonIdArray(form.routeIds),
     ...(form.type === 'snell' ? { machine_id: null } : {}),
     parent_id: form.parentId ?? undefined,

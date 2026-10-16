@@ -7,10 +7,15 @@ import {
   generateRandomAnytlsSni,
 } from '@/utils/nodeEditorRandomizers'
 import {
+  generateRandomHysteriaObfsPassword,
+  generateRandomRealityShortId,
   getNodeProtocolHint,
   NODE_ALPN_OPTIONS,
   NODE_CONGESTION_CONTROL_OPTIONS,
   NODE_MUX_PROTOCOL_OPTIONS,
+  NODE_KCP_HEADER_OPTIONS,
+  NODE_XHTTP_MODE_OPTIONS,
+  NODE_SHADOWSOCKS_PLUGIN_OPTIONS,
   NODE_SHADOWSOCKS_CIPHER_OPTIONS,
   NODE_SHADOWSOCKS_OBFS_OPTIONS,
   NODE_TCP_HEADER_OPTIONS,
@@ -51,6 +56,24 @@ function fillRandomTlsServerName() {
 
 function fillRandomAnytlsPaddingScheme() {
   props.form.anytlsPaddingSchemeText = generateRandomAnytlsPaddingScheme()
+}
+
+function fillRandomHysteriaObfsPassword() {
+  props.form.hysteriaObfsPassword = generateRandomHysteriaObfsPassword()
+}
+
+function fillRandomRealityShortId() {
+  props.form.realityShortId = generateRandomRealityShortId()
+}
+
+function fillRandomKcpSeed() {
+  props.form.kcpSeed = generateRandomHysteriaObfsPassword()
+}
+
+function ensureHysteriaObfsPassword() {
+  if (props.form.hysteriaObfsEnabled && !props.form.hysteriaObfsPassword.trim()) {
+    fillRandomHysteriaObfsPassword()
+  }
 }
 </script>
 
@@ -153,10 +176,14 @@ function fillRandomAnytlsPaddingScheme() {
           <ElInput v-model="props.form.realityPublicKey" placeholder="请输入公钥" />
         </ElFormItem>
         <ElFormItem label="Reality 私钥" class="form-grid--full">
-          <ElInput v-model="props.form.realityPrivateKey" placeholder="仅服务端维护时填写" />
+          <ElInput v-model="props.form.realityPrivateKey" placeholder="填写与公钥配对的服务端私钥" autocomplete="off" />
         </ElFormItem>
         <ElFormItem label="Reality Short ID">
-          <ElInput v-model="props.form.realityShortId" placeholder="请输入 Short ID" />
+          <ElInput v-model="props.form.realityShortId" placeholder="请输入或随机生成 Short ID" maxlength="16">
+            <template #append>
+              <ElButton :icon="RefreshRight" @click="fillRandomRealityShortId">随机生成</ElButton>
+            </template>
+          </ElInput>
         </ElFormItem>
       </template>
     </div>
@@ -221,6 +248,7 @@ function fillRandomAnytlsPaddingScheme() {
       </ElFormItem>
 
       <template v-if="props.form.network === 'h2'">
+        <div class="protocol-default-hint form-grid--full">H2 需要兼容的节点内核；当前 mi-node Xray 已移除此传输，可选择 HTTPUpgrade 或 XHTTP。</div>
         <ElFormItem label="路径">
           <ElInput v-model="props.form.h2Path" placeholder="/" />
         </ElFormItem>
@@ -246,7 +274,9 @@ function fillRandomAnytlsPaddingScheme() {
           <ElInput v-model="props.form.xhttpHost" placeholder="xhttp.example.com" />
         </ElFormItem>
         <ElFormItem label="模式">
-          <ElInput v-model="props.form.xhttpMode" placeholder="auto" />
+          <ElSelect v-model="props.form.xhttpMode" placeholder="请选择 XHTTP 模式">
+            <ElOption v-for="option in NODE_XHTTP_MODE_OPTIONS" :key="option.value" :value="option.value" :label="option.label" />
+          </ElSelect>
         </ElFormItem>
         <ElFormItem label="额外参数 JSON" class="form-grid--full">
           <ElInput
@@ -260,12 +290,16 @@ function fillRandomAnytlsPaddingScheme() {
 
       <template v-if="props.form.network === 'kcp'">
         <ElFormItem label="Seed">
-          <ElInput v-model="props.form.kcpSeed" placeholder="请输入 mKCP seed" />
+          <ElInput v-model="props.form.kcpSeed" placeholder="请输入或随机生成 mKCP seed">
+            <template #append>
+              <ElButton :icon="RefreshRight" @click="fillRandomKcpSeed">随机生成</ElButton>
+            </template>
+          </ElInput>
         </ElFormItem>
         <ElFormItem label="KCP 头部类型">
           <ElSelect v-model="props.form.kcpHeaderType" placeholder="请选择头部类型">
             <ElOption
-              v-for="option in NODE_TCP_HEADER_OPTIONS"
+              v-for="option in NODE_KCP_HEADER_OPTIONS"
               :key="option.value"
               :label="option.label"
               :value="option.value"
@@ -314,7 +348,9 @@ function fillRandomAnytlsPaddingScheme() {
           <ElInput v-model="props.form.shadowsocksObfsPath" placeholder="/path" />
         </ElFormItem>
         <ElFormItem label="Plugin">
-          <ElInput v-model="props.form.shadowsocksPlugin" placeholder="v2ray-plugin" />
+          <ElSelect v-model="props.form.shadowsocksPlugin" filterable allow-create default-first-option placeholder="选择插件或输入自定义名称">
+            <ElOption v-for="option in NODE_SHADOWSOCKS_PLUGIN_OPTIONS" :key="option.value" :value="option.value" :label="option.label" />
+          </ElSelect>
         </ElFormItem>
         <ElFormItem label="Plugin 参数">
           <ElInput v-model="props.form.shadowsocksPluginOpts" placeholder="server;tls;host=example.com" />
@@ -372,28 +408,38 @@ function fillRandomAnytlsPaddingScheme() {
           </ElSelect>
         </ElFormItem>
         <ElFormItem label="上行带宽 Mbps">
-          <ElInputNumber v-model="props.form.hysteriaUpMbps" :min="0" :controls="false" class="full-width" />
+          <ElInputNumber v-model="props.form.hysteriaUpMbps" :min="0" :precision="0" :controls="false" class="full-width" />
         </ElFormItem>
         <ElFormItem label="下行带宽 Mbps">
-          <ElInputNumber v-model="props.form.hysteriaDownMbps" :min="0" :controls="false" class="full-width" />
+          <ElInputNumber v-model="props.form.hysteriaDownMbps" :min="0" :precision="0" :controls="false" class="full-width" />
         </ElFormItem>
         <ElFormItem label="端口跳跃间隔（秒）">
-          <ElInputNumber v-model="props.form.hysteriaHopInterval" :min="0" :controls="false" class="full-width" />
+          <ElInputNumber v-model="props.form.hysteriaHopInterval" :min="0" :precision="0" :controls="false" class="full-width" />
         </ElFormItem>
+        <div class="protocol-default-hint form-grid--full">
+          <p>Hysteria 2 上下行默认均为 0，使用 BBR 自适应流控；填写带宽时请按实际链路能力设置。</p>
+          <p>跳跃间隔默认 30 秒，仅配置端口范围时生效；固定单端口不跳跃，填 0 使用客户端默认间隔。</p>
+        </div>
         <ElFormItem label="启用混淆" class="form-grid--full">
           <div class="switch-row">
             <div>
               <strong>Obfs</strong>
-              <span>Hysteria 2 默认推荐 Salamander；开启后需提供密码。</span>
+              <span>Hysteria 2 默认使用 Salamander，新建时自动生成混淆密码。</span>
             </div>
-            <ElSwitch v-model="props.form.hysteriaObfsEnabled" />
+            <ElSwitch v-model="props.form.hysteriaObfsEnabled" @change="ensureHysteriaObfsPassword" />
           </div>
         </ElFormItem>
-        <ElFormItem v-if="props.form.hysteriaObfsEnabled" label="混淆类型">
-          <ElInput v-model="props.form.hysteriaObfsType" placeholder="salamander" />
+        <ElFormItem v-if="props.form.hysteriaObfsEnabled && props.form.hysteriaVersion === 2" label="混淆类型">
+          <ElSelect v-model="props.form.hysteriaObfsType" placeholder="请选择混淆类型">
+            <ElOption value="salamander" label="Salamander" />
+          </ElSelect>
         </ElFormItem>
         <ElFormItem v-if="props.form.hysteriaObfsEnabled" label="混淆密码">
-          <ElInput v-model="props.form.hysteriaObfsPassword" placeholder="请输入混淆密码" />
+          <ElInput v-model="props.form.hysteriaObfsPassword" placeholder="请输入或随机生成混淆密码" autocomplete="off">
+            <template #append>
+              <ElButton :icon="RefreshRight" @click="fillRandomHysteriaObfsPassword">随机生成</ElButton>
+            </template>
+          </ElInput>
         </ElFormItem>
       </template>
 
@@ -445,6 +491,7 @@ function fillRandomAnytlsPaddingScheme() {
             />
           </ElSelect>
         </ElFormItem>
+        <div class="protocol-default-hint form-grid--full">mi-node 的 TUIC 入站使用 V5；选择 V4 时请确认节点内核支持。</div>
       </template>
 
       <template v-else-if="props.form.type === 'mieru'">
@@ -461,6 +508,7 @@ function fillRandomAnytlsPaddingScheme() {
             </template>
           </ElInput>
         </ElFormItem>
+        <div class="protocol-default-hint form-grid--full">Traffic Pattern 可留空使用核心默认模式，也可点击随机生成。</div>
       </template>
 
       <template v-else-if="props.form.type === 'anytls'">
@@ -503,6 +551,7 @@ function fillRandomAnytlsPaddingScheme() {
       </ElFormItem>
 
       <template v-if="props.form.multiplexEnabled">
+        <div class="protocol-default-hint form-grid--full">默认使用 yamux 和 4 个连接。Brutal 默认关闭；启用后请按实际线路调整上下行带宽。</div>
         <ElFormItem label="复用协议">
           <ElSelect v-model="props.form.multiplexProtocol" placeholder="请选择协议">
             <ElOption

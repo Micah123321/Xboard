@@ -57,6 +57,7 @@ class ServerService
     public static function getAvailableServers(User $user): array
     {
         $servers = Server::whereGroupId($user->group_id)
+            ->with('subscriptionLabel')
             ->forPlan($user->plan_id)
             ->where('show', true)
             ->where(function ($query) {
@@ -103,6 +104,48 @@ class ServerService
         return $servers;
     }
 
+    public static function formatSubscriptionServerNames(array $servers): array
+    {
+        return array_map(static function (array $server): array {
+            $label = $server['subscription_label'] ?? null;
+            $labelId = array_key_exists('subscription_label_id', $server) ? $server['subscription_label_id'] : ($label['id'] ?? null);
+            if (!$labelId || !is_array($label) || (int) $labelId !== (int) ($label['id'] ?? 0)) {
+                return $server;
+            }
+            $labelName = preg_replace('/\s+/u', ' ', trim((string) ($label['name'] ?? '')));
+            if ($labelName === '' || $labelName === null) {
+                return $server;
+            }
+            $name = (string) ($server['name'] ?? '');
+            $rate = '';
+            if (preg_match('/^(\s*(?:\d+(?:\.\d+)?|\.\d+)\s*x\s*)(.*)$/is', $name, $matches)) {
+                $rate = rtrim($matches[1]) . ' ';
+                $name = $matches[2];
+            }
+            // Keep an existing matching annotation, including full-width parentheses, without duplicating it.
+            if (!str_starts_with(ltrim($name), '(' . $labelName . ')')
+                && !str_starts_with(ltrim($name), '（' . $labelName . '）')) {
+                $server['name'] = $rate . '(' . $labelName . ') ' . $name;
+            }
+            return $server;
+        }, self::addRateToServerNames($servers));
+    }
+
+    public static function addRateToServerNames(array $servers): array
+    {
+        return array_map(static function (array $server): array {
+            $name = (string) ($server['name'] ?? '');
+            $rate = $server['rate'] ?? null;
+            if (preg_match('/^\s*(?:\d+(?:\.\d+)?|\.\d+)\s*x/i', $name)
+                || !is_numeric($rate) || !is_finite((float) $rate) || (float) $rate < 0) {
+                return $server;
+            }
+
+            $server['name'] = (string) (float) $rate . 'x ' . $name;
+            return $server;
+        }, $servers);
+    }
+
     /**
      * 根据权限组获取可用的用户列表
      * @param array $groupIds
@@ -114,9 +157,10 @@ class ServerService
         if (empty($groupIds)) {
             return collect();
         }
+        $planIds = $node->effectivePlanIds();
         $users = User::toBase()
             ->whereIn('group_id', $groupIds)
-            ->when($node->plan_restriction_enabled, fn ($query) => $query->whereIn('plan_id', $node->allowed_plan_ids ?? []))
+            ->when($planIds !== null, fn ($query) => $query->whereIn('plan_id', $planIds))
             ->whereRaw('u + d < transfer_enable')
             ->where(function ($query) {
                 $query->where('expired_at', '>=', time())
@@ -383,7 +427,9 @@ class ServerService
                 'server_port' => (int) $serverPort,
                 'server_name' => $protocolSettings['tls']['server_name'],
                 'congestion_control' => $protocolSettings['congestion_control'],
-                'tls_settings' => $protocolSettings['tls'],
+                'tls_settings' => array_merge((array) ($protocolSettings['tls'] ?? []), [
+                    'alpn' => ($protocolSettings['alpn'] ?? null) ?: ['h3'],
+                ]),
                 'auth_timeout' => '3s',
                 'zero_rtt_handshake' => false,
                 'heartbeat' => '3s',

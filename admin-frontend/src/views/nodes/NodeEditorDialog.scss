@@ -105,6 +105,18 @@
     grid-column: 1 / -1;
   }
 
+  .protocol-default-hint {
+    display: grid;
+    gap: 4px;
+    color: var(--xboard-text-muted);
+    font-size: 13px;
+    line-height: 1.55;
+
+    p {
+      margin: 0;
+    }
+  }
+
   .full-width,
   .full-width .el-input__wrapper {
     width: 100%;

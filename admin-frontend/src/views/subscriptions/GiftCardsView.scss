@@ -1,26 +1,8 @@
 .gift-cards-page {
   display: grid;
-  gap: 18px;
+  gap: 16px;
 }
 
-.page-intro {
-  display: grid;
-  gap: 10px;
-}
-
-.intro-copy {
-  display: grid;
-  gap: 8px;
-}
-
-.intro-copy h1 {
-  font-size: clamp(34px, 5vw, 48px);
-  line-height: 1.08;
-  letter-spacing: -0.28px;
-  color: var(--xboard-text-strong);
-}
-
-.intro-copy p,
 .panel-copy p,
 .table-footer span,
 .empty-copy,

@@ -40,6 +40,8 @@ import type {
   AdminPaginationResult,
   AdminPlanListItem,
   AdminPlanSavePayload,
+  AdminSubscriptionLabel,
+  AdminSubscriptionLabelSavePayload,
   AdminSubscribePolicyConfig,
   AdminSubscribePolicySavePayload,
   AdminThemeConfigRecord,
@@ -158,6 +160,18 @@ export function getHorizonFailedJobs(params: {
       },
     })
     .then((res) => res.data)
+}
+
+export function fetchSubscriptionLabels(): Promise<ApiResponse<AdminSubscriptionLabel[]>> {
+  return unwrap<AdminSubscriptionLabel[]>('/subscription-label/fetch')
+}
+
+export function saveSubscriptionLabel(payload: AdminSubscriptionLabelSavePayload): Promise<ApiResponse<AdminSubscriptionLabel>> {
+  return unwrapPost<AdminSubscriptionLabel>('/subscription-label/save', { ...payload })
+}
+
+export function deleteSubscriptionLabel(id: number): Promise<ApiResponse<boolean>> {
+  return unwrapPost<boolean>('/subscription-label/drop', { id })
 }
 
 export function fetchSubscribePolicy(): Promise<ApiResponse<AdminSubscribePolicyConfig>> {

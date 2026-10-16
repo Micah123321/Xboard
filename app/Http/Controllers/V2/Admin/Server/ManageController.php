@@ -36,7 +36,7 @@ class ManageController extends Controller
 
     public function getNodes(Request $request)
     {
-        $servers = ServerService::getAllServers();
+        $servers = ServerService::getAllServers()->load('subscriptionLabel');
         $trafficStats = $this->buildNodeTrafficStats($servers);
         $trafficLimitSnapshots = app(ServerTrafficLimitService::class)->buildSnapshotsForServers($servers);
 
@@ -143,17 +143,17 @@ class ManageController extends Controller
     public function getAllNodes(Request $request)
     {
         return $this->success(
-            Server::orderBy('sort', 'ASC')
-                ->get(['id', 'name', 'type', 'host', 'port', 'server_port', 'parent_id', 'group_ids', 'plan_restriction_enabled', 'allowed_plan_ids', 'route_ids', 'show', 'sort', 'auto_online', 'gfw_check_enabled', 'tcp_check_enabled', 'bandwidth_check_enabled', 'enabled', 'rate', 'machine_id'])
+            Server::with('subscriptionLabel')->orderBy('sort', 'ASC')
+                ->get(['id', 'name', 'type', 'host', 'port', 'server_port', 'parent_id', 'group_ids', 'plan_restriction_enabled', 'allowed_plan_ids', 'subscription_label_id', 'route_ids', 'show', 'sort', 'auto_online', 'gfw_check_enabled', 'tcp_check_enabled', 'bandwidth_check_enabled', 'enabled', 'rate', 'machine_id'])
                 ->toArray()
         );
     }
 
     private function applyNodeBaseFilters($query, array $params): void
     {
-        if (!empty($params['keyword'])) {
-            $keyword = trim((string) $params['keyword']);
-            $query->where(function ($q) use ($keyword) {
+        $keyword = trim((string) ($params['keyword'] ?? ''));
+        if ($keyword !== '') {
+            $matchesKeyword = function ($q) use ($keyword) {
                 $q->where('name', 'like', "%{$keyword}%")
                     ->orWhere('host', 'like', "%{$keyword}%")
                     ->orWhere('type', 'like', "%{$keyword}%")
@@ -161,8 +161,17 @@ class ManageController extends Controller
                     ->orWhere('server_port', 'like', "%{$keyword}%");
 
                 if (ctype_digit($keyword)) {
-                    $q->orWhere('id', (int) $keyword)
-                        ->orWhere('parent_id', (int) $keyword);
+                    $q->orWhere('id', (int) $keyword);
+                }
+            };
+
+            $query->where(function ($q) use ($keyword, $matchesKeyword) {
+                // Expand matches to their children before applying filters and pagination.
+                $q->where($matchesKeyword)
+                    ->orWhereIn('parent_id', Server::query()->select('id')->where($matchesKeyword));
+
+                if (ctype_digit($keyword)) {
+                    $q->orWhere('parent_id', (int) $keyword);
                 }
             });
         }
@@ -361,6 +370,7 @@ class ManageController extends Controller
 
     private function decorateNodePage($servers, bool $gfwDecorated = false, bool $groupsAttached = false)
     {
+        $servers->load('subscriptionLabel');
         $servers->append(self::NODE_RUNTIME_FIELDS);
         $servers = app(\App\Services\ServerBandwidthService::class)->decorateServers($servers);
         $trafficStats = $this->buildNodeTrafficStats($servers);
@@ -808,6 +818,7 @@ class ManageController extends Controller
             'machine_id' => 'nullable|integer',
             'host' => 'sometimes|required|string',
             'rate' => 'sometimes|required|numeric|min:0.01',
+            'subscription_label_id' => 'sometimes|nullable|integer|min:1|exists:v2_subscription_labels,id',
             'group_ids' => 'sometimes|array',
             'group_ids.*' => 'integer',
         ]);
@@ -854,6 +865,9 @@ class ManageController extends Controller
         }
         if (array_key_exists('rate', $params)) {
             $update['rate'] = (float) $params['rate'];
+        }
+        if (array_key_exists('subscription_label_id', $params)) {
+            $update['subscription_label_id'] = $params['subscription_label_id'];
         }
         if (array_key_exists('group_ids', $params)) {
             $update['group_ids'] = $params['group_ids'];

@@ -32,6 +32,7 @@ export interface NodeFormModel {
   groupIds: number[]
   planRestrictionEnabled: boolean
   allowedPlanIds: number[]
+  subscriptionLabelId?: number | null
   routeIds: number[]
   machineId: number | null
   host: string
@@ -171,6 +172,28 @@ export const NODE_TCP_HEADER_OPTIONS: Array<NodeOption> = [
   { value: 'http', label: 'HTTP 伪装' },
 ]
 
+export const NODE_KCP_HEADER_OPTIONS: Array<NodeOption> = [
+  { value: 'none', label: '无头部' },
+  { value: 'srtp', label: 'SRTP' },
+  { value: 'utp', label: 'uTP' },
+  { value: 'wechat-video', label: '微信视频' },
+  { value: 'dtls', label: 'DTLS' },
+  { value: 'wireguard', label: 'WireGuard' },
+]
+
+export const NODE_XHTTP_MODE_OPTIONS: Array<NodeOption> = [
+  { value: 'auto', label: 'auto（自动）' },
+  { value: 'packet-up', label: 'packet-up' },
+  { value: 'stream-up', label: 'stream-up' },
+  { value: 'stream-one', label: 'stream-one' },
+]
+
+export const NODE_SHADOWSOCKS_PLUGIN_OPTIONS: Array<NodeOption> = [
+  { value: '', label: '无' },
+  { value: 'obfs-local', label: 'obfs-local' },
+  { value: 'v2ray-plugin', label: 'v2ray-plugin' },
+]
+
 export const NODE_TLS_FINGERPRINT_OPTIONS: Array<NodeOption> = [
   { value: 'chrome', label: 'Chrome' },
   { value: 'firefox', label: 'Firefox' },
@@ -213,6 +236,27 @@ export const NODE_UDP_RELAY_MODE_OPTIONS: Array<NodeOption> = [
   { value: 'quic', label: 'quic' },
 ]
 
+export const HYSTERIA_DEFAULTS = {
+  version: 2,
+  upMbps: 0,
+  downMbps: 0,
+  hopInterval: 30,
+  obfsType: 'salamander',
+} as const
+
+function randomHex(byteLength: number): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength))
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')
+}
+
+export function generateRandomHysteriaObfsPassword(): string {
+  return randomHex(16)
+}
+
+export function generateRandomRealityShortId(): string {
+  return randomHex(8)
+}
+
 export const NODE_TUIC_VERSION_OPTIONS: Array<NodeOption<number>> = [
   { value: 5, label: 'V5' },
   { value: 4, label: 'V4' },
@@ -241,6 +285,7 @@ function createRateRange(index = 0): NodeRateRangeForm {
 
 export function createEmptyNodeForm(): NodeFormModel {
   return {
+    id: undefined,
     originalType: '',
     type: '',
     rawProtocolSettings: {},
@@ -258,6 +303,7 @@ export function createEmptyNodeForm(): NodeFormModel {
     groupIds: [],
     planRestrictionEnabled: false,
     allowedPlanIds: [],
+    subscriptionLabelId: undefined,
     routeIds: [],
     machineId: null,
     host: '',
@@ -281,44 +327,44 @@ export function createEmptyNodeForm(): NodeFormModel {
     utlsEnabled: false,
     utlsFingerprint: 'chrome',
     realityServerName: '',
-    realityServerPort: '',
+    realityServerPort: '443',
     realityPublicKey: '',
     realityPrivateKey: '',
-    realityShortId: '',
+    realityShortId: generateRandomRealityShortId(),
     network: '',
     tcpHeaderType: 'none',
-    tcpRequestPath: '',
+    tcpRequestPath: '/',
     tcpRequestHost: '',
-    wsPath: '',
+    wsPath: '/',
     wsHost: '',
-    grpcServiceName: '',
-    h2Path: '',
+    grpcServiceName: 'grpc',
+    h2Path: '/',
     h2Host: '',
-    httpupgradePath: '',
+    httpupgradePath: '/',
     httpupgradeHost: '',
-    xhttpPath: '',
+    xhttpPath: '/',
     xhttpHost: '',
     xhttpMode: 'auto',
     xhttpExtra: '',
-    kcpSeed: '',
+    kcpSeed: generateRandomHysteriaObfsPassword(),
     kcpHeaderType: 'none',
     shadowsocksCipher: '2022-blake3-aes-128-gcm',
     shadowsocksObfs: '',
     shadowsocksObfsHost: '',
-    shadowsocksObfsPath: '',
+    shadowsocksObfsPath: '/',
     shadowsocksPlugin: '',
     shadowsocksPluginOpts: '',
     vlessFlow: '',
     vlessEncryptionEnabled: false,
     vlessEncryption: '',
     vlessDecryption: '',
-    hysteriaVersion: 2,
-    hysteriaUpMbps: null,
-    hysteriaDownMbps: null,
-    hysteriaObfsEnabled: false,
-    hysteriaObfsType: 'salamander',
-    hysteriaObfsPassword: '',
-    hysteriaHopInterval: null,
+    hysteriaVersion: HYSTERIA_DEFAULTS.version,
+    hysteriaUpMbps: HYSTERIA_DEFAULTS.upMbps,
+    hysteriaDownMbps: HYSTERIA_DEFAULTS.downMbps,
+    hysteriaObfsEnabled: true,
+    hysteriaObfsType: HYSTERIA_DEFAULTS.obfsType,
+    hysteriaObfsPassword: generateRandomHysteriaObfsPassword(),
+    hysteriaHopInterval: HYSTERIA_DEFAULTS.hopInterval,
     tuicVersion: 5,
     tuicCongestionControl: 'cubic',
     tuicAlpn: ['h3'],
@@ -340,11 +386,11 @@ export function createEmptyNodeForm(): NodeFormModel {
     snellObfsHost: '',
     multiplexEnabled: false,
     multiplexProtocol: 'yamux',
-    multiplexMaxConnections: null,
+    multiplexMaxConnections: 4,
     multiplexPadding: false,
     multiplexBrutalEnabled: false,
-    multiplexBrutalUpMbps: null,
-    multiplexBrutalDownMbps: null,
+    multiplexBrutalUpMbps: 10,
+    multiplexBrutalDownMbps: 10,
   }
 }
 
@@ -369,6 +415,25 @@ export function applySnellNodeConstraints(form: NodeFormModel): void {
   form.realityShortId = ''
   form.multiplexEnabled = false
   form.multiplexBrutalEnabled = false
+}
+
+export function applyNodeProtocolDefaults(form: NodeFormModel): void {
+  if (form.type === 'snell') {
+    applySnellNodeConstraints(form)
+    return
+  }
+  const transports = getNodeTransportOptions(form.type)
+  if (!transports.some((option) => option.value === form.network) && (form.type !== form.originalType || !form.network)) {
+    form.network = transports[0]?.value ?? ''
+  }
+  if (!supportsNodeSecurity(form.type)) {
+    form.tlsMode = 0
+  } else if (!getNodeTlsOptions(form.type).some((option) => option.value === form.tlsMode)) {
+    form.tlsMode = 0
+  }
+  if ((form.type === 'trojan' || (form.type === 'naive' && !form.id)) && form.tlsMode === 0) {
+    form.tlsMode = 1
+  }
 }
 
 export function createNodeRateRange(): NodeRateRangeForm {
@@ -441,7 +506,7 @@ export function getNodeProtocolHint(type: AdminNodeType | '' | string): string {
 }
 
 export function validateNodeForm(form: NodeFormModel, plans: readonly Pick<AdminPlanListItem, 'id'>[] = []): string | null {
-  if (form.planRestrictionEnabled) {
+  if (form.subscriptionLabelId == null && form.planRestrictionEnabled) {
     if (form.allowedPlanIds.length === 0) return '启用套餐限制后，请至少选择一个套餐'
     const planIds = new Set(plans.map((plan) => plan.id))
     if (form.allowedPlanIds.some((id) => !Number.isInteger(id) || !planIds.has(id))) {
@@ -489,12 +554,22 @@ export function validateNodeForm(form: NodeFormModel, plans: readonly Pick<Admin
     if (!form.realityServerName.trim()) return 'Reality 模式下请输入服务器名称'
     if (!form.realityPublicKey.trim()) return 'Reality 模式下请输入公钥'
     if (!form.realityShortId.trim()) return 'Reality 模式下请输入 Short ID'
+    if (!form.id && !form.realityPrivateKey.trim()) return '新建 Reality 节点时请输入与公钥配对的私钥'
+    if (!/^(?:[0-9a-fA-F]{2}){1,8}$/.test(form.realityShortId.trim())) return 'Short ID 需为 2-16 位偶数长度的十六进制字符'
   }
   if (form.network === 'xhttp' && form.xhttpExtra.trim()) {
     try {
       JSON.parse(form.xhttpExtra)
     } catch {
       return 'XHTTP 额外参数必须是合法 JSON'
+    }
+  }
+  if (form.type === 'vless' && form.vlessEncryptionEnabled && (!form.vlessEncryption.trim() || !form.vlessDecryption.trim())) {
+    return '启用 VLess 自定义加密后，请填写配对的客户端公钥和服务端私钥'
+  }
+  if (supportsNodeMultiplex(form.type) && form.multiplexEnabled && form.multiplexBrutalEnabled) {
+    if (!(Number(form.multiplexBrutalUpMbps) > 0) || !(Number(form.multiplexBrutalDownMbps) > 0)) {
+      return '启用 Brutal 后，请填写大于 0 的上下行带宽'
     }
   }
   if (form.type === 'hysteria' && form.hysteriaObfsEnabled && !form.hysteriaObfsPassword.trim()) {

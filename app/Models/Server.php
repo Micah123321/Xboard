@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property array|null $group_ids 分组IDs
  * @property bool $plan_restriction_enabled 是否限制可用套餐
  * @property array|null $allowed_plan_ids 允许使用的套餐IDs
+ * @property int|null $subscription_label_id 复用的订阅标签ID
  * @property array|null $route_ids 路由IDs
  * @property array|null $tags 标签
  * @property boolean $show 是否显示
@@ -144,6 +145,7 @@ class Server extends Model
         'group_ids' => 'array',
         'plan_restriction_enabled' => 'boolean',
         'allowed_plan_ids' => 'array',
+        'subscription_label_id' => 'integer',
         'route_ids' => 'array',
         'tags' => 'array',
         'protocol_settings' => 'array',
@@ -224,23 +226,53 @@ class Server extends Model
         $this->attributes['allowed_plan_ids'] = json_encode(array_values(array_unique(array_map('intval', $ids))));
     }
 
+    public function setSubscriptionLabelIdAttribute($value): void
+    {
+        $this->attributes['subscription_label_id'] = $value === null ? null : (int) $value;
+        $this->unsetRelation('subscriptionLabel');
+    }
+
+    public function subscriptionLabel(): BelongsTo
+    {
+        return $this->belongsTo(SubscriptionLabel::class, 'subscription_label_id');
+    }
+
+    public function effectivePlanIds(): ?array
+    {
+        if ($this->subscription_label_id !== null) {
+            // A dangling reference remains restricted; it never falls back to the legacy open rule.
+            return array_map('intval', $this->subscriptionLabel?->plan_ids ?? []);
+        }
+        return $this->plan_restriction_enabled ? array_map('intval', $this->allowed_plan_ids ?? []) : null;
+    }
+
     public function allowsPlan(?int $planId): bool
     {
-        return !$this->plan_restriction_enabled
-            || ($planId > 0 && in_array($planId, array_map('intval', $this->allowed_plan_ids ?? []), true));
+        $ids = $this->effectivePlanIds();
+        return $ids === null || ($planId > 0 && in_array($planId, $ids, true));
     }
 
     public function scopeForPlan($query, ?int $planId)
     {
         return $query->where(function ($query) use ($planId) {
-            $query->where('plan_restriction_enabled', false);
-            if ($planId > 0) {
-                $query->orWhere(function ($query) use ($planId) {
-                    $query->where('plan_restriction_enabled', true)
-                        ->where(function ($query) use ($planId) {
-                            $query->whereJsonContains('allowed_plan_ids', $planId)
-                                ->orWhereJsonContains('allowed_plan_ids', (string) $planId);
+            $query->where(function ($legacy) use ($planId) {
+                $legacy->whereNull('subscription_label_id')->where(function ($legacy) use ($planId) {
+                    $legacy->where('plan_restriction_enabled', false);
+                    if ($planId > 0) {
+                        $legacy->orWhere(function ($restricted) use ($planId) {
+                            $restricted->where('plan_restriction_enabled', true)->where(function ($ids) use ($planId) {
+                                $ids->whereJsonContains('allowed_plan_ids', $planId)
+                                    ->orWhereJsonContains('allowed_plan_ids', (string) $planId);
+                            });
                         });
+                    }
+                });
+            });
+            if ($planId > 0) {
+                $query->orWhereHas('subscriptionLabel', function ($label) use ($planId) {
+                    $label->where(function ($ids) use ($planId) {
+                        $ids->whereJsonContains('plan_ids', $planId)->orWhereJsonContains('plan_ids', (string) $planId);
+                    });
                 });
             }
         });

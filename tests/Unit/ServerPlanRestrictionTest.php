@@ -6,6 +6,10 @@ use App\Http\Controllers\V2\Admin\PlanController;
 use App\Http\Requests\Admin\PlanSave;
 use App\Http\Requests\Admin\ServerSave;
 use App\Jobs\NodeGroupUserSyncJob;
+use App\Jobs\SubscriptionLabelSyncJob;
+use App\Models\SubscriptionLabel;
+use App\Services\SubscriptionLabelService;
+use Illuminate\Validation\ValidationException;
 use App\Models\Server;
 use App\Models\User;
 use App\Observers\ServerObserver;
@@ -67,6 +71,10 @@ class ServerPlanRestrictionTest extends TestCase
             $table->integer('server_port')->default(1080);
             $table->text('group_ids')->nullable();
             $table->text('protocol_settings')->nullable();
+            $table->integer('machine_id')->nullable();
+            foreach (['route_ids', 'custom_outbounds', 'custom_routes', 'cert_config'] as $field) {
+                $table->text($field)->nullable();
+            }
             $table->boolean('show')->default(true);
             $table->integer('parent_id')->nullable();
             $table->integer('sort')->default(0);
@@ -78,6 +86,7 @@ class ServerPlanRestrictionTest extends TestCase
         });
         $migration = require dirname(__DIR__, 2) . '/database/migrations/2026_10_15_000001_add_plan_restrictions_to_v2_server_table.php';
         $migration->up();
+        (require dirname(__DIR__, 2) . '/database/migrations/2026_10_15_000002_create_subscription_labels.php')->up();
         $schema->create('v2_user', function (Blueprint $table): void {
             $table->increments('id');
             $table->integer('group_id')->nullable();
@@ -302,6 +311,167 @@ class ServerPlanRestrictionTest extends TestCase
         self::assertSame('success', $response->getData(true)['status']);
         self::assertSame([1, 2], array_column($this->jobs, 'groupId'));
         self::assertSame(2, User::value('group_id'));
+    }
+
+    public function test_subscription_label_is_shared_by_nodes_and_overrides_legacy_lists(): void
+    {
+        $label = SubscriptionLabel::create(['name' => 'Premium', 'plan_ids' => [20, 30]]);
+        $ordinary = $this->node();
+        $premiumA = $this->node(['subscription_label_id' => $label->id]);
+        $premiumB = $this->node(['subscription_label_id' => $label->id, 'plan_restriction_enabled' => true, 'allowed_plan_ids' => [10]]);
+        $this->node(['subscription_label_id' => $label->id, 'group_ids' => [2]]);
+        self::assertSame([$ordinary->id], array_column(ServerService::getAvailableServers($this->user(10)), 'id'));
+        $user = $this->user(20);
+        self::assertSame([$ordinary->id, $premiumA->id, $premiumB->id], array_column(ServerService::getAvailableServers($user), 'id'));
+        foreach ([$premiumA, $premiumB] as $node) {
+            self::assertFalse($node->allowsPlan(10));
+            self::assertTrue($node->allowsPlan(20));
+            self::assertTrue($node->allowsPlan(30));
+            self::assertFalse($node->allowsPlan(null));
+            self::assertSame([$user->id], ServerService::getAvailableUsers($node)->pluck('id')->all());
+        }
+    }
+
+    public function test_label_edit_refreshes_all_bound_online_nodes_from_current_plan_list(): void
+    {
+        $service = new SubscriptionLabelService();
+        $label = $service->save(['name' => ' Premium ', 'plan_ids' => [20]]);
+        self::assertSame('Premium', $label->name);
+        $first = $this->node(['subscription_label_id' => $label->id]);
+        $second = $this->node(['subscription_label_id' => $label->id]);
+        $offline = $this->node(['subscription_label_id' => $label->id]);
+        $this->app['cache']->forget('node_ws_alive:' . $offline->id);
+        $this->node();
+        $old = $this->user(20);
+        $new = $this->user(30);
+        $saved = $service->save(['id' => $label->id, 'name' => 'Premium revised', 'plan_ids' => [30]]);
+        self::assertSame(3, $saved->servers_count);
+        self::assertCount(1, $this->jobs);
+        self::assertInstanceOf(SubscriptionLabelSyncJob::class, $this->jobs[0]);
+        self::assertTrue($this->jobs[0]->afterCommit);
+        self::assertSame('node_sync', $this->jobs[0]->queue);
+        $this->jobs[0]->handle();
+        self::assertSame([$first->id, $second->id], array_column($this->messages, 'node_id'));
+        foreach ($this->messages as $message) {
+            self::assertSame('sync.users', $message['event']);
+            self::assertSame([$new->id], array_column($message['data']['users'], 'id'));
+            self::assertNotContains($old->id, array_column($message['data']['users'], 'id'));
+        }
+        self::assertFalse($first->fresh()->allowsPlan(20));
+        self::assertTrue($first->fresh()->allowsPlan(30));
+        $this->jobs = [];
+        $service->save(['id' => $label->id, 'name' => 'Renamed', 'plan_ids' => [30]]);
+        self::assertSame([], $this->jobs);
+    }
+
+    public function test_label_keeps_same_group_upgrade_and_downgrade_delta_authorization(): void
+    {
+        $label = SubscriptionLabel::create(['name' => 'Premium', 'plan_ids' => [20]]);
+        $node = $this->node(['subscription_label_id' => $label->id]);
+        $user = $this->user(20);
+        NodeSyncService::notifyUserChanged($user);
+        self::assertSame('add', $this->messages[0]['data']['action']);
+        $this->messages = [];
+        $user->update(['plan_id' => 10]);
+        NodeSyncService::notifyUserChanged($user);
+        self::assertSame($node->id, $this->messages[0]['node_id']);
+        self::assertSame('remove', $this->messages[0]['data']['action']);
+    }
+
+    public function test_switching_and_clearing_label_refreshes_node_and_restores_manual_rule(): void
+    {
+        $first = SubscriptionLabel::create(['name' => 'First', 'plan_ids' => [20]]);
+        $second = SubscriptionLabel::create(['name' => 'Second', 'plan_ids' => [30]]);
+        $node = $this->node(['subscription_label_id' => $first->id, 'plan_restriction_enabled' => true, 'allowed_plan_ids' => [10]]);
+        self::assertTrue($node->allowsPlan(20));
+        $manual = $this->user(10);
+        $this->user(20);
+        $other = $this->user(30);
+        $node->update(['subscription_label_id' => $second->id]);
+        self::assertTrue($node->allowsPlan(30));
+        self::assertFalse($node->allowsPlan(20));
+        (new ServerObserver())->updated($node);
+        self::assertSame([$other->id], array_column($this->messages[1]['data']['users'], 'id'));
+        $this->messages = [];
+        $node->update(['subscription_label_id' => null]);
+        (new ServerObserver())->updated($node);
+        self::assertSame([$manual->id], array_column($this->messages[1]['data']['users'], 'id'));
+        self::assertSame([10], $node->fresh()->allowed_plan_ids);
+    }
+
+    public function test_empty_or_missing_label_does_not_fall_back_to_open_access(): void
+    {
+        $label = SubscriptionLabel::create(['name' => 'Empty', 'plan_ids' => []]);
+        $node = $this->node(['subscription_label_id' => $label->id]);
+        $user = $this->user(20);
+        self::assertSame([], Server::forPlan(20)->pluck('id')->all());
+        self::assertFalse($node->allowsPlan(20));
+        self::assertCount(0, ServerService::getAvailableUsers($node));
+        $orphan = new Server(['subscription_label_id' => 999]);
+        self::assertFalse($orphan->allowsPlan($user->plan_id));
+        self::assertSame([], $orphan->effectivePlanIds());
+    }
+
+    public function test_in_use_label_deletion_is_blocked_and_unused_label_can_be_deleted(): void
+    {
+        $service = new SubscriptionLabelService();
+        $label = $service->save(['name' => 'Premium', 'plan_ids' => [20]]);
+        $node = $this->node(['subscription_label_id' => $label->id]);
+        try {
+            $service->drop($label->id);
+            self::fail('Expected in-use label protection');
+        } catch (ValidationException $e) {
+            self::assertArrayHasKey('id', $e->errors());
+        }
+        self::assertNotNull($label->fresh());
+        self::assertSame($label->id, $node->fresh()->subscription_label_id);
+        $node->update(['subscription_label_id' => null]);
+        $service->drop($label->id);
+        self::assertNull($label->fresh());
+    }
+
+    public function test_label_management_validates_name_and_distinct_existing_nonempty_plan_ids(): void
+    {
+        $service = new SubscriptionLabelService();
+        $service->save(['name' => 'Premium', 'plan_ids' => [20]]);
+        foreach ([['name' => 'Premium', 'plan_ids' => [30]], ['name' => ' ', 'plan_ids' => [20]],
+            ['name' => 'Empty', 'plan_ids' => []], ['name' => 'Missing', 'plan_ids' => [999]],
+            ['name' => 'Duplicate', 'plan_ids' => [20, 20]], ['name' => 'Bad', 'plan_ids' => [0]]] as $input) {
+            try {
+                $service->save($input);
+                self::fail('Expected invalid label rejection');
+            } catch (ValidationException $e) {
+                self::assertNotEmpty($e->errors());
+            }
+        }
+        self::assertSame(1, SubscriptionLabel::count());
+    }
+
+    public function test_node_save_preserves_omitted_label_and_validates_effective_manual_rule_on_clear(): void
+    {
+        $label = SubscriptionLabel::create(['name' => 'Premium', 'plan_ids' => [20]]);
+        $node = $this->node(['subscription_label_id' => $label->id, 'plan_restriction_enabled' => true, 'allowed_plan_ids' => []]);
+        self::assertTrue($this->validator(['subscription_label_id' => $label->id, 'plan_restriction_enabled' => true, 'allowed_plan_ids' => []])->passes());
+        self::assertTrue($this->validator(['subscription_label_id' => 999])->fails());
+        $validator = $this->validator(['id' => $node->id]);
+        self::assertTrue($validator->passes());
+        $node->fill($validator->validated())->save();
+        self::assertSame($label->id, $node->fresh()->subscription_label_id);
+        self::assertTrue($this->validator(['id' => $node->id, 'subscription_label_id' => null])->fails());
+        self::assertTrue($this->validator(['id' => $node->id, 'subscription_label_id' => null, 'plan_restriction_enabled' => false])->passes());
+    }
+
+    public function test_label_migration_rolls_back_without_losing_legacy_restrictions(): void
+    {
+        $node = $this->node(['plan_restriction_enabled' => true, 'allowed_plan_ids' => [20]]);
+        $migration = require dirname(__DIR__, 2) . '/database/migrations/2026_10_15_000002_create_subscription_labels.php';
+        $migration->down();
+        self::assertFalse($this->db->schema()->hasTable('v2_subscription_labels'));
+        self::assertFalse($this->db->schema()->hasColumn('v2_server', 'subscription_label_id'));
+        self::assertSame([20], $node->fresh()->allowed_plan_ids);
+        $migration->up();
+        self::assertNull($node->fresh()->subscription_label_id);
+        self::assertFalse($node->fresh()->allowsPlan(10));
     }
 
     private function node(array $attributes = []): Server

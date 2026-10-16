@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -121,17 +122,7 @@ onMounted(() => {
 
 <template>
   <div class="node-groups-page">
-    <section class="page-header">
-      <div class="page-copy">
-        <h1>权限组管理</h1>
-        <p>管理所有权限组，包括添加、删除、编辑等操作。</p>
-        <div class="page-summary">
-          <span>共 {{ groups.length }} 组</span>
-          <span>关联用户 {{ summary.totalUsers }}</span>
-          <span>关联节点 {{ summary.totalServers }}</span>
-        </div>
-      </div>
-    </section>
+    <PageHeader title="权限组管理" :stats="[{ label: '权限组', value: groups.length }, { label: '关联用户', value: summary.totalUsers }, { label: '关联节点', value: summary.totalServers }]" />
 
     <section class="table-shell">
       <ElAlert
