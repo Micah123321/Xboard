@@ -42,6 +42,7 @@ class ServerService
     public static function getMachineNodes(ServerMachine $machine): Collection
     {
         $servers = Server::where('machine_id', $machine->id)
+            ->where('child_rate_enabled', false)
             ->where('enabled', true)
             ->orderBy('sort', 'ASC')
             ->get();
@@ -151,11 +152,11 @@ class ServerService
      * @param array $groupIds
      * @return Collection
      */
-    public static function getAvailableUsers(Server $node)
+    public static function getAvailableUsers(Server $node, bool $includeChildIdentities = true)
     {
         $groupIds = $node->group_ids ?? [];
         if (empty($groupIds)) {
-            return collect();
+            return $includeChildIdentities ? ChildNodeRateService::appendUsers($node, collect()) : collect();
         }
         $planIds = $node->effectivePlanIds();
         $users = User::toBase()
@@ -183,7 +184,7 @@ class ServerService
                 'device_limit' => data_get($user, 'device_limit') ?? 0,
             ]);
         }
-        return $users;
+        return $includeChildIdentities ? ChildNodeRateService::appendUsers($node, collect($users)) : collect($users);
     }
 
     // 获取路由规则
@@ -200,6 +201,17 @@ class ServerService
     {
         $receivedAt ??= time();
         $data = \App\Jobs\TrafficBillingJob::normalize($traffic);
+        if (ChildNodeRateService::hasIdentities($data)) {
+            $split = app(ChildNodeTrafficService::class)->processTraffic($node, $data, $reportId, $receivedAt);
+            $accounts = array_unique(array_column($split['mapping'], 'user_id'));
+            foreach ($split['traffic'] as $nodeId => $users) {
+                $type = strtoupper($split['nodes'][$nodeId]->type);
+                $count = $nodeId === (int) $node->id ? count($accounts) : count($users);
+                Cache::put(CacheKey::get("SERVER_{$type}_ONLINE_USER", $nodeId), $count, 3600);
+                Cache::put(CacheKey::get("SERVER_{$type}_LAST_PUSH_AT", $nodeId), time(), 3600);
+            }
+            return;
+        }
 
         if (empty($data)) {
             return;

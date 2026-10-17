@@ -98,7 +98,17 @@ class TrafficBillingJob implements ShouldQueue
 
     public function handle(): void
     {
-        DB::transaction(function (): void {
+        $this->settle();
+        if (DB::connection()->transactionLevel() > 0) {
+            DB::afterCommit(fn () => $this->notify());
+        } else {
+            $this->notify();
+        }
+    }
+
+    public function settle(): bool
+    {
+        return DB::transaction(function (): bool {
             // The node lock serializes reports and protects all node-scoped aggregates.
             if (!DB::table('v2_server')->where('id', $this->server['id'])->lockForUpdate()->first()) {
                 throw new InvalidArgumentException('Traffic node no longer exists.');
@@ -109,7 +119,7 @@ class TrafficBillingJob implements ShouldQueue
                 if (!hash_equals($existing->payload_hash, $this->payloadHash)) {
                     throw new InvalidArgumentException('report_id was reused with different traffic.');
                 }
-                return;
+                return false;
             }
             $snapshot = ['rate' => (float) $this->server['rate'], 'raw_upload' => 0, 'raw_download' => 0, 'users' => []];
             foreach ($this->data as $uid => $traffic) {
@@ -131,8 +141,12 @@ class TrafficBillingJob implements ShouldQueue
             ]);
             (new StatUserJob($this->server, $this->data, $this->protocol, 'd', $this->receivedAt))->handle();
             (new StatServerJob($this->server, $this->data, $this->protocol, 'd', $this->receivedAt))->handle();
+            return true;
         }, 3);
+    }
 
+    public function notify(): void
+    {
         // Detail processing is separate; durable receipts also have scheduled repair.
         $accessId = DB::table('v2_access_report')->where('node_id', $this->server['id'])
             ->where('billing_report_id', $this->reportKey)->whereNull('settled_at')->value('id');

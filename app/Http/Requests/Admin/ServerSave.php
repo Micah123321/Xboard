@@ -136,6 +136,7 @@ class ServerSave extends FormRequest
             'allowed_plan_ids.*' => 'required|integer|min:1|distinct',
             'route_ids' => 'nullable|array',
             'parent_id' => 'nullable|integer',
+            'child_rate_enabled' => 'sometimes|boolean',
             'machine_id' => 'nullable|integer',
             'enabled' => 'nullable|boolean',
             'host' => 'required',
@@ -269,6 +270,26 @@ class ServerSave extends FormRequest
 
     public function withValidator($validator): void
     {
+        $validator->after(function ($validator): void {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+            $server = $this->input('id') ? Server::find($this->input('id')) : new Server();
+            if (!$server) {
+                return;
+            }
+            $server->fill($this->only(['parent_id', 'child_rate_enabled', 'type', 'protocol_settings']));
+            try {
+                \App\Services\ChildNodeRateService::validate($server,
+                    $server->isDirty(['child_rate_enabled', 'parent_id', 'type', 'protocol_settings']));
+            } catch (\Illuminate\Validation\ValidationException $error) {
+                foreach ($error->errors() as $field => $messages) {
+                    foreach ($messages as $message) {
+                        $validator->errors()->add($field, $message);
+                    }
+                }
+            }
+        });
         $validator->after(function ($validator): void {
             if ($validator->errors()->isNotEmpty() || !$this->hasAny(['plan_restriction_enabled', 'allowed_plan_ids', 'subscription_label_id'])) {
                 return;

@@ -136,9 +136,10 @@ class DeviceStateService
 
         $result = [];
         foreach ($users as $user) {
-            $count = $this->getDeviceCount($user->id);
+            $accountId = (int) (data_get($user, 'billing_user_id') ?: data_get($user, 'id'));
+            $count = $this->getDeviceCount($accountId);
             if ($count > 0) {
-                $result[$user->id] = $count;
+                $result[$accountId] = $count;
             }
         }
 

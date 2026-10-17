@@ -1174,6 +1174,7 @@ export interface AdminNodeItem {
   enabled?: boolean
   machine_id?: number | null
   parent_id?: number | null
+  child_rate_enabled?: boolean
   rate?: number | null
   transfer_enable?: number | null
   u?: number | null
@@ -1282,6 +1283,7 @@ export interface AdminNodeSavePayload {
   group_ids?: string[]
   route_ids?: string[]
   parent_id?: number | null
+  child_rate_enabled?: boolean
   enabled?: boolean
   host: string
   port: number | string

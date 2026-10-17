@@ -12,6 +12,7 @@ class ServerObserver
     public function created(Server $server): void
     {
         $this->notifyMachineNodesChanged($server->machine_id);
+        $this->notifyChildRateParent($server);
     }
 
     public function updated(Server $server): void
@@ -37,7 +38,12 @@ class ServerObserver
             NodeSyncService::notifyConfigUpdated($server->id);
         }
 
-        if ($server->wasChanged(['machine_id', 'enabled', 'bandwidth_check_enabled'])) {
+        if ($server->wasChanged(['parent_id', 'child_rate_enabled', 'show', 'enabled', 'group_ids',
+            'plan_restriction_enabled', 'allowed_plan_ids', 'subscription_label_id', 'protocol_settings',
+            'transfer_enable', 'traffic_limit_status'])) {
+            $this->notifyChildRateParent($server);
+        }
+        if ($server->wasChanged(['machine_id', 'enabled', 'bandwidth_check_enabled', 'child_rate_enabled'])) {
             $this->notifyMachineChange(
                 $server->machine_id,
                 $server->getOriginal('machine_id')
@@ -48,6 +54,14 @@ class ServerObserver
     public function deleted(Server $server): void
     {
         $this->notifyMachineChange(null, $server->getOriginal('machine_id') ?: $server->machine_id);
+        $this->notifyChildRateParent($server);
+    }
+
+    private function notifyChildRateParent(Server $server): void
+    {
+        foreach (array_unique(array_filter([$server->parent_id, $server->getOriginal('parent_id')])) as $parentId) {
+            NodeSyncService::notifyFullSync((int) $parentId);
+        }
     }
 
     private function notifyMachineChange(?int $newMachineId, ?int $oldMachineId): void

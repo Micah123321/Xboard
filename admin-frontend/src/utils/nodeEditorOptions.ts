@@ -39,6 +39,7 @@ export interface NodeFormModel {
   port: string
   serverPort: string
   parentId: number | null
+  childRateEnabled: boolean
   tcpCheckEnabled: boolean
   bandwidthCheckEnabled: boolean
   show: boolean
@@ -310,6 +311,7 @@ export function createEmptyNodeForm(): NodeFormModel {
     port: '',
     serverPort: '',
     parentId: null,
+    childRateEnabled: false,
     tcpCheckEnabled: false,
     bandwidthCheckEnabled: false,
     show: true,
@@ -395,6 +397,7 @@ export function createEmptyNodeForm(): NodeFormModel {
 }
 
 export function applySnellNodeConstraints(form: NodeFormModel): void {
+  form.childRateEnabled = false
   form.rawProtocolSettings = {}
   form.machineId = null
   form.routeIds = []

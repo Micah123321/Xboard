@@ -87,7 +87,7 @@ class NodeEventHandlers
         if (!$node) return;
 
         $users = ServerService::getAvailableUsers($node);
-        $userIds = $users->pluck('id')->toArray();
+        $userIds = \App\Services\ChildNodeRateService::accountIds($users);
 
         $service = app(DeviceStateService::class);
         $devices = $service->getUsersDevices($userIds);
@@ -108,7 +108,7 @@ class NodeEventHandlers
         if (!$node) return;
 
         $users = ServerService::getAvailableUsers($node);
-        $userIds = $users->pluck('id')->toArray();
+        $userIds = \App\Services\ChildNodeRateService::accountIds($users);
         $devices = $service->getUsersDevices($userIds);
 
         NodeRegistry::send($nodeId, 'sync.devices', [

@@ -50,6 +50,7 @@ class Server
             throw new ApiException('Server does not exist');
         }
 
+        \App\Services\ChildNodeRateService::recordCapability($serverInfo, $request);
         $request->attributes->set('node_info', $serverInfo);
 
         return $next($request);

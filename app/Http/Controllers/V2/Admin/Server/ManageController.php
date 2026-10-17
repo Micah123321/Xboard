@@ -144,7 +144,7 @@ class ManageController extends Controller
     {
         return $this->success(
             Server::with('subscriptionLabel')->orderBy('sort', 'ASC')
-                ->get(['id', 'name', 'type', 'host', 'port', 'server_port', 'parent_id', 'group_ids', 'plan_restriction_enabled', 'allowed_plan_ids', 'subscription_label_id', 'route_ids', 'show', 'sort', 'auto_online', 'gfw_check_enabled', 'tcp_check_enabled', 'bandwidth_check_enabled', 'enabled', 'rate', 'machine_id'])
+                ->get(['id', 'name', 'type', 'host', 'port', 'server_port', 'parent_id', 'child_rate_enabled', 'group_ids', 'plan_restriction_enabled', 'allowed_plan_ids', 'subscription_label_id', 'route_ids', 'show', 'sort', 'auto_online', 'gfw_check_enabled', 'tcp_check_enabled', 'bandwidth_check_enabled', 'enabled', 'rate', 'machine_id'])
                 ->toArray()
         );
     }

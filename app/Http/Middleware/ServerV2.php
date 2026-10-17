@@ -22,6 +22,9 @@ class ServerV2
             $this->authenticateByServerToken($request);
         }
 
+        if ($node = $request->attributes->get('node_info')) {
+            \App\Services\ChildNodeRateService::recordCapability($node, $request);
+        }
         return $next($request);
     }
 

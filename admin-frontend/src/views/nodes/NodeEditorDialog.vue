@@ -184,6 +184,7 @@ watch(
   () => form.parentId,
   (value) => {
     if (!value) {
+      form.childRateEnabled = false
       form.tcpCheckEnabled = false
     }
   },
@@ -331,6 +332,16 @@ watch(
                   :value="node.id"
                 />
               </ElSelect>
+            </ElFormItem>
+
+            <ElFormItem v-if="form.parentId && form.type !== 'snell'" label="子节点单独倍率" class="form-grid--full">
+              <div class="switch-row">
+                <div>
+                  <strong>使用该子节点的基础倍率与动态倍率</strong>
+                  <span>开启后按该子节点的订阅身份独立计费；需更新 mi-node 并刷新订阅。共用入口时计费身份不等同于实际中转线路。</span>
+                </div>
+                <ElSwitch v-model="form.childRateEnabled" />
+              </div>
             </ElFormItem>
 
             <ElFormItem label="订阅标签（优先）" class="form-grid--full">

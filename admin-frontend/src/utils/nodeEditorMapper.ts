@@ -203,6 +203,7 @@ export function toNodeFormModel(node?: AdminNodeItem | null): NodeFormModel {
   form.port = toStringValue(node.port)
   form.serverPort = toStringValue(node.server_port)
   form.parentId = node.parent_id ?? null
+  form.childRateEnabled = Boolean(form.parentId) && toBooleanValue(node.child_rate_enabled)
   form.tcpCheckEnabled = toBooleanValue(node.tcp_check_enabled)
   form.bandwidthCheckEnabled = toBooleanValue(node.bandwidth_check_enabled)
   form.show = toBooleanValue(node.show, true)
@@ -571,7 +572,8 @@ export function toNodeSavePayload(form: NodeFormModel): AdminNodeSavePayload {
     ...(form.subscriptionLabelId !== undefined ? { subscription_label_id: form.subscriptionLabelId } : {}),
     route_ids: form.type === 'snell' ? [] : toJsonIdArray(form.routeIds),
     ...(form.type === 'snell' ? { machine_id: null } : {}),
-    parent_id: form.parentId ?? undefined,
+    parent_id: form.parentId || null,
+    child_rate_enabled: Boolean(form.parentId) && form.type !== 'snell' && form.childRateEnabled,
     enabled: form.enabled,
     host: form.host.trim(),
     port: form.port.trim(),

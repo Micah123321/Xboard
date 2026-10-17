@@ -49,6 +49,7 @@ class NodeSyncService
             $users = ServerService::getAvailableUsers($server)->toArray();
             self::push($server->id, 'sync.users', ['users' => $users]);
         }
+        self::notifyChildParents($servers);
     }
 
     /**
@@ -62,6 +63,7 @@ class NodeSyncService
                     self::push($server->id, 'sync.users', ['users' => ServerService::getAvailableUsers($server)->toArray()]);
                 }
             }
+            self::notifyChildParents($servers);
         });
     }
 
@@ -95,6 +97,7 @@ class NodeSyncService
                 ]);
             }
         }
+        self::notifyChildParents($servers);
     }
 
     /**
@@ -113,6 +116,14 @@ class NodeSyncService
                 'action' => 'remove',
                 'users' => [['id' => $userId]],
             ]);
+        }
+        self::notifyChildParents($servers);
+    }
+
+    private static function notifyChildParents($servers): void
+    {
+        foreach ($servers->pluck('parent_id')->filter()->unique() as $parentId) {
+            self::notifyFullSync((int) $parentId);
         }
     }
 

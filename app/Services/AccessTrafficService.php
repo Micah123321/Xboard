@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\AccessTrafficJob;
 use App\Jobs\TrafficBillingJob;
+use App\Models\Server;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -126,13 +127,59 @@ class AccessTrafficService
         return array_replace(array_fill_keys(['version', 'report_id', 'billing_report_id', 'kernel', 'observed_at', 'coverage', 'dropped_entries', 'totals', 'entries'], null), $data);
     }
 
-    public function receive(int $nodeId, array $input, ?int $receivedAt = null): int
+    public function receiveFromSource(Server $source, array $input, ?int $receivedAt = null): array
+    {
+        $receivedAt ??= time();
+        $data = $this->normalize($input);
+        $virtual = array_filter(array_keys($data['totals']), fn ($uid) => $uid >= ChildNodeTrafficService::AUTH_ID_OFFSET);
+        if (!$virtual) {
+            $ids = [$this->receive((int) $source->id, $input, $receivedAt)];
+        } else {
+            try {
+                $split = (new ChildNodeTrafficService())->splitTraffic($source, $data['totals']);
+            } catch (\InvalidArgumentException $e) {
+                $this->invalid($e->getMessage());
+            }
+            $reports = [];
+            foreach ($split['traffic'] as $nodeId => $totals) {
+                $report = $data;
+                $report['report_id'] = ChildNodeTrafficService::billingReportId((int) $source->id, $data['report_id'], $nodeId);
+                $report['billing_report_id'] = ChildNodeTrafficService::billingReportId((int) $source->id, $data['billing_report_id'], $nodeId);
+                $report['totals'] = $totals;
+                $report['entries'] = [];
+                $reports[$nodeId] = $report;
+            }
+            foreach ($data['entries'] as $entry) {
+                $identity = $split['mapping'][$entry['user_id']];
+                $entry['user_id'] = $identity['user_id'];
+                $reports[$identity['node_id']]['entries'][] = $entry;
+            }
+            // Validate every partition before receiving any of them.
+            foreach ($reports as &$report) $report = $this->normalize($report);
+            unset($report);
+            $wireHash = hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
+            $totalsHash = TrafficBillingJob::fingerprint($data['totals']);
+            $ids = DB::transaction(function () use ($source, $reports, $receivedAt, $wireHash, $totalsHash): array {
+                $ids = [];
+                foreach ($reports as $nodeId => $report) {
+                    $root = $nodeId === (int) $source->id;
+                    $ids[] = $this->receive($nodeId, $report, $receivedAt, $root ? $wireHash : null, $root ? $totalsHash : null);
+                }
+                return $ids;
+            }, 3);
+        }
+        foreach ($ids as $id) $this->enqueue($id);
+        return $ids;
+    }
+
+    public function receive(int $nodeId, array $input, ?int $receivedAt = null, ?string $payloadHash = null, ?string $totalsHash = null): int
     {
         $receivedAt ??= time();
         $data = $this->normalize($input);
         $settings = $this->settings();
-        $hash = hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
-        return DB::transaction(function () use ($nodeId, $data, $settings, $hash, $receivedAt): int {
+        $hash = $payloadHash ?? hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
+        $totalsHash ??= TrafficBillingJob::fingerprint($data['totals']);
+        return DB::transaction(function () use ($nodeId, $data, $settings, $hash, $totalsHash, $receivedAt): int {
             $node = DB::table('v2_server')->where('id', $nodeId)->lockForUpdate()->first();
             if (!$node) $this->invalid('Node does not exist.');
             $key = self::reportKey($data['report_id']);
@@ -152,7 +199,7 @@ class AccessTrafficService
             return (int) DB::table('v2_access_report')->insertGetId([
                 'node_id' => $nodeId, 'report_id' => $key, 'billing_report_id' => $billingKey,
                 'node_name' => (string) ($node->name ?? ('Node #' . $nodeId)),
-                'payload_hash' => $hash, 'totals_hash' => TrafficBillingJob::fingerprint($data['totals']),
+                'payload_hash' => $hash, 'totals_hash' => $totalsHash,
                 'payload' => json_encode($data, JSON_THROW_ON_ERROR), 'kernel' => $data['kernel'],
                 'coverage' => $data['coverage'], 'dropped_entries' => $data['dropped_entries'],
                 'bucket_seconds' => (int) $settings['bucket_seconds'],
@@ -163,6 +210,10 @@ class AccessTrafficService
 
     public function enqueue(int $reportId): void
     {
+        if (DB::connection()->transactionLevel() > 0) {
+            DB::afterCommit(fn () => $this->enqueue($reportId));
+            return;
+        }
         try {
             AccessTrafficJob::dispatch($reportId);
         } catch (\Throwable $e) {

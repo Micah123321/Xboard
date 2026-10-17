@@ -46,6 +46,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property string|null $allow_insecure 是否允许不安全
  * @property string|null $network 网络类型
  * @property int|null $parent_id 父节点ID
+ * @property boolean $child_rate_enabled 是否使用子节点独立计费身份
  * @property float|null $rate 倍率
  * @property boolean $rate_time_enable 是否启用时间范围功能
  * @property array|null $rate_time_ranges 倍率时间范围
@@ -146,6 +147,7 @@ class Server extends Model
         'plan_restriction_enabled' => 'boolean',
         'allowed_plan_ids' => 'array',
         'subscription_label_id' => 'integer',
+        'child_rate_enabled' => 'boolean',
         'route_ids' => 'array',
         'tags' => 'array',
         'protocol_settings' => 'array',
@@ -183,6 +185,8 @@ class Server extends Model
     protected static function booted(): void
     {
         static::saving(function (self $server): void {
+            \App\Services\ChildNodeRateService::validate($server,
+                $server->isDirty(['child_rate_enabled', 'parent_id', 'type', 'protocol_settings']));
             if ($server->type !== self::TYPE_SNELL) {
                 return;
             }
@@ -539,21 +543,24 @@ class Server extends Model
 
     public function generateServerPassword(User $user): string
     {
+        $uuid = $this->child_rate_enabled
+            ? \App\Services\ChildNodeRateService::credential($this, $user)
+            : $user->uuid;
         if ($this->type !== self::TYPE_SHADOWSOCKS) {
-            return $user->uuid;
+            return $uuid;
         }
 
 
         $cipher = data_get($this, 'protocol_settings.cipher');
         if (!$cipher || !isset(self::CIPHER_CONFIGURATIONS[$cipher])) {
-            return $user->uuid;
+            return $uuid;
         }
 
         $config = self::CIPHER_CONFIGURATIONS[$cipher];
         // Use parent's created_at if this is a child node
         $serverCreatedAt = $this->parent_id ? $this->parent->created_at : $this->created_at;
         $serverKey = Helper::getServerKey($serverCreatedAt, $config['serverKeySize']);
-        $userKey = Helper::uuidToBase64($user->uuid, $config['userKeySize']);
+        $userKey = Helper::uuidToBase64($uuid, $config['userKeySize']);
         return "{$serverKey}:{$userKey}";
     }
 
@@ -601,6 +608,9 @@ class Server extends Model
             return $ownKeys;
         }
 
+        if ($this->child_rate_enabled && in_array($name, ['ONLINE_USER', 'LAST_PUSH_AT'], true)) {
+            return array_values(array_unique([...$ownKeys, ...$this->parentRuntimeCacheKeys($name)]));
+        }
         return array_values(array_unique([
             ...$this->parentRuntimeCacheKeys($name),
             ...$ownKeys,
