@@ -8,6 +8,12 @@ return [
     'node_ids' => [],
     'export_max_rows' => 100000,
     'rules' => [
+        ['cmecloud.cn', '移动云 EOS / 云服务', 'cdn'],
+        ['cmvideo.cn', '咪咕视频分发', 'video'],
+        ['miguvideo.com', '咪咕视频服务', 'video'],
+        ['douyinvod.com', '抖音视频分发', 'video'],
+        ['douyincdn.com', '抖音内容分发', 'cdn'],
+        ['biliimg.com', '哔哩哔哩图片分发', 'cdn'],
         ['googlevideo.com', 'YouTube 视频分发', 'video'],
         ['nflxvideo.net', 'Netflix 视频分发', 'video'],
         ['bilivideo.com', '哔哩哔哩视频分发', 'video'],

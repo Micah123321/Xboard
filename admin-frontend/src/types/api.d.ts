@@ -946,7 +946,7 @@ export interface AdminTrafficLogResult extends AdminPaginationResult<AdminTraffi
   summary: TrafficAmount
 }
 
-export type AccessTrafficCategory = 'video' | 'web' | 'download' | 'update' | 'sync' | 'cdn' | 'unknown'
+export type AccessTrafficCategory = 'video' | 'web' | 'download' | 'update' | 'sync' | 'storage' | 'cdn' | 'unknown'
 export type AccessTrafficConfidence = 'high' | 'medium' | 'low' | 'unknown'
 export type AccessTrafficCoverage = 'complete' | 'partial' | 'none'
 
@@ -964,6 +964,8 @@ export interface AccessTrafficFilters {
 export interface AccessTrafficRow {
   id: string
   user_id: number
+  user_email?: string | null
+  ip_unavailable_reason?: string
   node_id: number
   node_name: string
   domain: string
@@ -1015,6 +1017,7 @@ export interface AccessTrafficAnalysis {
 }
 
 export interface AccessTrafficMeta {
+  classification_database?: { available: boolean; source: string; updated_at: number | null; rule_count: number; group_count: number; skipped_rules: number }
   timezone: string
   bucket_seconds: number
   retention_days: number

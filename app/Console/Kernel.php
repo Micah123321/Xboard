@@ -43,6 +43,9 @@ class Kernel extends ConsoleKernel
         $schedule->command('reset:traffic')->everyMinute()->onOneServer()->withoutOverlapping(10);
         $schedule->command('reset:log')->daily()->onOneServer();
         $schedule->command('access-traffic:maintain')->everyMinute()->onOneServer()->withoutOverlapping(10);
+        if (config('access_traffic_geosite.auto_update', true)) {
+            $schedule->command('access-traffic:sync-domains')->weeklyOn(0, '3:20')->onOneServer()->withoutOverlapping(60);
+        }
         $schedule->command('access-traffic:maintain', ['--prune'])->dailyAt('0:30')->onOneServer()->withoutOverlapping(30);
         $schedule->command('cleanup:server-gfw-checks')->dailyAt('0:40')->onOneServer()->withoutOverlapping(30);
         // send

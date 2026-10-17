@@ -58,6 +58,14 @@ class AccessTrafficService
         throw ValidationException::withMessages(['access_report' => $message]);
     }
 
+    public static function isUnspecifiedIP(string $ip): bool
+    {
+        if ($ip === '') return false;
+        $packed = @inet_pton($ip);
+        return $packed !== false && ($packed === str_repeat("\0", 4) || $packed === str_repeat("\0", 16)
+            || $packed === str_repeat("\0", 10) . "\xff\xff" . str_repeat("\0", 4));
+    }
+
     public function normalize(array $data): array
     {
         $data = Validator::make($data, [
@@ -246,6 +254,15 @@ class AccessTrafficService
                 $rows = [];
                 $classifier = new AccessTrafficClassifier();
                 foreach ($payload['entries'] as $entry) {
+                    // Keep the durable wire fingerprint stable across collector upgrades.
+                    if (self::isUnspecifiedIP($entry['ip'])) {
+                        $entry['ip'] = '';
+                        if ($entry['domain'] === '') {
+                            $entry['port'] = 0;
+                            $entry['domain_source'] = 'unknown';
+                            if ($entry['u'] || $entry['d']) $report->coverage = 'partial';
+                        }
+                    }
                     $uid = $entry['user_id'];
                     $remaining[$uid][0] -= $entry['u'];
                     $remaining[$uid][1] -= $entry['d'];
@@ -256,7 +273,7 @@ class AccessTrafficService
                     if ($u || $d) $rows[] = $this->unknownRow($report, (int) $uid, $u, $d);
                 }
                 foreach (array_chunk($rows, 200) as $chunk) DB::table('v2_access_traffic')->insert($chunk);
-                DB::table('v2_access_report')->where('id', $reportId)->update(['processed_at' => time(), 'payload' => null]);
+                DB::table('v2_access_report')->where('id', $reportId)->update(['processed_at' => time(), 'payload' => null, 'coverage' => $report->coverage]);
             }
             $billing = DB::table('v2_traffic_report')->where('node_id', $nodeId)->where('report_id', $report->billing_report_id)->first();
             if (!$billing || !$billing->billing_snapshot) return;

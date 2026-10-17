@@ -16,7 +16,7 @@ class AccessTrafficQueryService
             'user_id' => 'nullable|integer|min:1', 'node_id' => 'nullable|integer|min:1',
             'start_time' => 'nullable|integer|min:1|max:253402214400',
             'end_time' => 'nullable|integer|min:1|max:253402214400',
-            'search' => 'nullable|string|max:253', 'category' => 'nullable|in:video,web,download,update,sync,cdn,unknown',
+            'search' => 'nullable|string|max:253', 'category' => 'nullable|in:video,web,download,update,sync,storage,cdn,unknown',
             'network' => 'nullable|in:tcp,udp,unknown', 'group_by' => 'nullable|in:domain,time',
             'page' => 'nullable|integer|min:1|max:10000000', 'pageSize' => 'nullable|integer|min:1|max:100',
             'format' => 'nullable|in:csv,html',
@@ -51,11 +51,25 @@ class AccessTrafficQueryService
         return $query;
     }
 
-    public function rows(array $filters): Builder
+    private function groupColumns(array $filters): array
     {
         $groups = ['e.user_id', 'e.node_id', 'r.node_name', 'e.domain', 'e.ip', 'e.port', 'e.network',
             'e.domain_source', 'e.service', 'e.category', 'e.confidence', 'e.reason'];
         if ($filters['group_by'] === 'time') $groups[] = 'e.bucket_at';
+        return $groups;
+    }
+
+    public function countGroups(array $filters, ?int $limit = null): int
+    {
+        // Counting groups needs neither their byte aggregates nor their ranking sort.
+        $groups = $this->base($filters)->selectRaw('1 AS present')->groupBy($this->groupColumns($filters));
+        if ($limit !== null) $groups->limit($limit);
+        return (int) DB::query()->fromSub($groups, 'access_groups')->count();
+    }
+
+    public function rows(array $filters): Builder
+    {
+        $groups = $this->groupColumns($filters);
         $query = $this->base($filters)->select($groups)->groupBy($groups)
             ->selectRaw('MIN(e.id) as id, MIN(e.first_seen) as first_seen, MAX(e.last_seen) as last_seen')
             ->selectRaw('SUM(e.raw_u) as raw_u, SUM(e.raw_d) as raw_d, SUM(e.raw_u + e.raw_d) as raw_total')
@@ -64,15 +78,25 @@ class AccessTrafficQueryService
             ->selectRaw('CASE WHEN COUNT(e.billed_u) = COUNT(*) AND COUNT(e.billed_d) = COUNT(*) THEN SUM(e.billed_u + e.billed_d) ELSE NULL END as billed_total')
             ->selectRaw('CASE WHEN COUNT(e.rate) = COUNT(*) AND MIN(e.rate) = MAX(e.rate) THEN MIN(e.rate) ELSE NULL END as rate')
             ->selectRaw('SUM(e.connections) as connections')
-            ->selectRaw("CASE WHEN SUM(CASE WHEN r.coverage = 'partial' OR r.dropped_entries > 0 THEN 1 ELSE 0 END) > 0 THEN 'partial' ELSE 'complete' END as coverage")
-            ->orderByDesc('raw_total')->orderBy('id');
-        return $query;
+            ->selectRaw("CASE WHEN SUM(CASE WHEN r.coverage = 'partial' OR r.dropped_entries > 0 THEN 1 ELSE 0 END) > 0 THEN 'partial' ELSE 'complete' END as coverage");
+        // User details join after grouping, without widening or multiplying the detail scan.
+        return DB::query()->fromSub($query, 'g')->leftJoin('v2_user as u', 'u.id', '=', 'g.user_id')
+            ->select('g.*', 'u.email as user_email')->orderByDesc('g.raw_total')->orderBy('g.id');
     }
 
     public function row(object $row, int $total): array
     {
         $result = (array) $row;
         $result['id'] = (string) $result['id'];
+        if (AccessTrafficService::isUnspecifiedIP($result['ip'])) {
+            $result['ip'] = '';
+            $result['ip_unavailable_reason'] = '节点上报了未指定地址，未采集到真实目标 IP';
+            if ($result['domain'] === '') {
+                $result['port'] = 0;
+                $result['domain_source'] = 'unknown';
+                $result['reason'] = '节点上报的是未指定地址（:: / 0.0.0.0），真实访问目标未采集。';
+            }
+        }
         $result['node_name'] = $result['node_name'] ?: ('Node #' . $result['node_id']);
         foreach (['user_id', 'node_id', 'port', 'bucket_at', 'first_seen', 'last_seen', 'raw_u', 'raw_d', 'raw_total', 'connections'] as $key) {
             if (array_key_exists($key, $result)) $result[$key] = (int) $result[$key];
@@ -86,26 +110,36 @@ class AccessTrafficQueryService
     public function context(array $filters): array
     {
         $base = $this->base($filters);
-        $summary = (array) (clone $base)->selectRaw('COALESCE(SUM(e.raw_u), 0) as raw_u, COALESCE(SUM(e.raw_d), 0) as raw_d, COALESCE(SUM(e.raw_u + e.raw_d), 0) as raw_total')
+        // All totals, categories and report metadata share one filtered detail scan.
+        $aggregate = (clone $base)->selectRaw('COALESCE(SUM(e.raw_u), 0) as raw_u, COALESCE(SUM(e.raw_d), 0) as raw_d, COALESCE(SUM(e.raw_u + e.raw_d), 0) as raw_total')
             ->selectRaw('COALESCE(SUM(e.billed_u), 0) as billed_u, COALESCE(SUM(e.billed_d), 0) as billed_d, COALESCE(SUM(e.billed_u + e.billed_d), 0) as billed_total')
             ->selectRaw("COALESCE(SUM(CASE WHEN e.category <> 'unknown' THEN e.raw_u + e.raw_d ELSE 0 END), 0) as identified_bytes")
             ->selectRaw("COALESCE(SUM(CASE WHEN e.category = 'unknown' THEN e.raw_u + e.raw_d ELSE 0 END), 0) as unidentified_bytes")
-            ->selectRaw("COALESCE(SUM(CASE WHEN e.domain = '' AND e.ip = '' THEN e.raw_u + e.raw_d ELSE 0 END), 0) as unattributed_bytes")
+            ->selectRaw("COALESCE(SUM(CASE WHEN e.domain = '' AND e.ip IN ('', '::', '0.0.0.0', '::ffff:0.0.0.0') THEN e.raw_u + e.raw_d ELSE 0 END), 0) as unattributed_bytes")
             ->selectRaw('COUNT(DISTINCT r.id) as report_count')
             ->selectRaw("COUNT(DISTINCT CASE WHEN r.coverage = 'partial' OR r.dropped_entries > 0 THEN r.id ELSE NULL END) as partial_report_count")
-            ->selectRaw('COUNT(DISTINCT CASE WHEN r.settled_at IS NULL THEN r.id ELSE NULL END) as unsettled_report_count')->first();
-        $summary = array_map('intval', $summary);
+            ->selectRaw('COUNT(DISTINCT CASE WHEN r.settled_at IS NULL THEN r.id ELSE NULL END) as unsettled_report_count')
+            ->selectRaw('COUNT(DISTINCT CASE WHEN r.settlement_error IS NOT NULL THEN r.id ELSE NULL END) as failed_report_count')
+            ->selectRaw('MIN(r.observed_at) as first_at, MAX(r.observed_at) as last_at');
+        foreach (AccessTrafficClassifier::LABELS as $category => $label) {
+            $aggregate->selectRaw("SUM(CASE WHEN e.category = ? THEN e.raw_u + e.raw_d ELSE NULL END) as category_{$category}_bytes", [$category])
+                ->selectRaw("MIN(CASE WHEN e.category = ? THEN CASE e.confidence WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END ELSE NULL END) as category_{$category}_confidence", [$category]);
+        }
+        $stats = (array) $aggregate->first();
+        $summary = array_map('intval', array_intersect_key($stats, array_flip(['raw_u', 'raw_d', 'raw_total',
+            'billed_u', 'billed_d', 'billed_total', 'identified_bytes', 'unidentified_bytes', 'unattributed_bytes',
+            'report_count', 'partial_report_count', 'unsettled_report_count'])));
         $summary['identified_percent'] = $summary['raw_total'] ? round($summary['identified_bytes'] / $summary['raw_total'] * 100, 2) : 0;
-        $analysis = (clone $base)->select('e.category')->groupBy('e.category')
-            ->selectRaw('SUM(e.raw_u + e.raw_d) as raw_total')
-            ->selectRaw("MIN(CASE e.confidence WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END) as confidence_rank")
-            ->orderByDesc('raw_total')->get()->map(function ($row) use ($summary): array {
-                return ['category' => $row->category, 'category_label' => AccessTrafficClassifier::LABELS[$row->category],
-                    'raw_total' => (int) $row->raw_total, 'share' => $summary['raw_total'] ? round($row->raw_total / $summary['raw_total'] * 100, 2) : 0,
-                    'confidence' => ['unknown', 'low', 'medium', 'high'][(int) $row->confidence_rank],
-                    'reason' => $row->category === 'unknown' ? '目标证据或服务规则不足，具体用途未知。' : '依据目标域名规则推断服务类型；视频播放、下载、预加载等具体操作仍属推断。'];
-            })->all();
-        $collected = (clone $base)->selectRaw('MIN(r.observed_at) as first_at, MAX(r.observed_at) as last_at')->first();
+        $analysis = [];
+        foreach (AccessTrafficClassifier::LABELS as $category => $label) {
+            if ($stats["category_{$category}_bytes"] === null) continue;
+            $bytes = (int) $stats["category_{$category}_bytes"];
+            $analysis[] = ['category' => $category, 'category_label' => $label, 'raw_total' => $bytes,
+                'share' => $summary['raw_total'] ? round($bytes / $summary['raw_total'] * 100, 2) : 0,
+                'confidence' => ['unknown', 'low', 'medium', 'high'][(int) $stats["category_{$category}_confidence"]],
+                'reason' => $category === 'unknown' ? '目标证据或服务规则不足，具体用途未知。' : '依据目标域名规则推断服务类型；视频播放、下载、预加载等具体操作仍属推断。'];
+        }
+        usort($analysis, fn ($a, $b) => $b['raw_total'] <=> $a['raw_total'] ?: strcmp($a['category'], $b['category']));
         $billing = DB::table('v2_traffic_report as b')->where('b.received_at', '>=', $filters['start_time'])
             ->where('b.received_at', '<', $filters['end_time']);
         if (isset($filters['node_id'])) $billing->where('b.node_id', $filters['node_id']);
@@ -121,14 +155,15 @@ class AccessTrafficQueryService
             'timezone' => config('app.timezone', 'UTC'), 'bucket_seconds' => (int) $settings['bucket_seconds'],
             'retention_days' => (int) $settings['retention_days'],
             'enabled' => isset($filters['node_id']) ? app(AccessTrafficService::class)->nodeConfig((int) $filters['node_id'])['enabled'] : (bool) $settings['enabled'],
-            'first_collected_at' => $collected->first_at === null ? null : (int) $collected->first_at,
-            'last_collected_at' => $collected->last_at === null ? null : (int) $collected->last_at,
+            'first_collected_at' => $stats['first_at'] === null ? null : (int) $stats['first_at'],
+            'last_collected_at' => $stats['last_at'] === null ? null : (int) $stats['last_at'],
             'coverage' => !$summary['report_count'] ? 'none' : ($summary['partial_report_count'] || $missing ? 'partial' : 'complete'),
             'reason' => '覆盖状态仅描述已收到的报告，未采集时段及节点不等于零流量。时间筛选统计与范围重叠的整个采集片段，片段内字节不作秒级拆分。计费量按实际扣费分摊，未结算部分暂不计入计费汇总；缺口对比使用节点级计费批次。',
             'collection_gaps' => [
                 'node_billing_reports_without_details' => $missing, 'pending_detail_reports' => $pending->count(),
-                'failed_settlement_reports' => (clone $base)->whereNotNull('r.settlement_error')->distinct()->count('r.id'),
+                'failed_settlement_reports' => (int) $stats['failed_report_count'],
             ],
+            'classification_database' => (new AccessTrafficDomainDatabase())->status(),
             'filters' => $filters,
         ];
         return compact('summary', 'analysis', 'meta');
@@ -138,10 +173,27 @@ class AccessTrafficQueryService
     {
         $context = $this->context($filters);
         $query = $this->rows($filters);
-        $total = $query->getCountForPagination();
-        $rows = $query->forPage($filters['page'], $filters['pageSize'])->get()
-            ->map(fn ($row) => $this->row($row, $context['summary']['raw_total']))->all();
+        $windowCount = $this->supportsWindowCount();
+        if ($windowCount) $query->selectRaw('COUNT(*) OVER () AS total_groups');
+        $records = $query->forPage($filters['page'], $filters['pageSize'])->get();
+        $total = $windowCount && $records->isNotEmpty() ? (int) $records->first()->total_groups
+            : ($windowCount && $filters['page'] === 1 ? 0 : $this->countGroups($filters));
+        $rows = $records->map(function ($record) use ($context): array {
+            unset($record->total_groups);
+            return $this->row($record, $context['summary']['raw_total']);
+        })->all();
         return ['data' => $rows, 'total' => $total] + $context;
+    }
+
+    protected function supportsWindowCount(): bool
+    {
+        $connection = DB::connection();
+        return match ($connection->getDriverName()) {
+            'pgsql', 'sqlsrv' => true,
+            'sqlite' => version_compare($connection->getServerVersion(), '3.25.0', '>='),
+            'mysql', 'mariadb' => version_compare($connection->getServerVersion(), $connection->isMaria() ? '10.2.0' : '8.0.0', '>='),
+            default => false,
+        };
     }
 
     public static function csvCell(mixed $value): string

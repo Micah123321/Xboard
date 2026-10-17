@@ -43,17 +43,17 @@ let releaseSlow
 let slowFinished
 let savedConfig = { enabled: true, bucket_seconds: 300, retention_days: 30, max_entries: 2000, node_ids: [] }
 const row = (domain = 'cdn.example', override = {}) => ({
-  id: 'row-1', user_id: 123, node_id: 7, node_name: 'Mock Node', domain, ip: '203.0.113.8', port: 443, network: 'tcp', domain_source: 'request',
+  id: 'row-1', user_id: 123, user_email: 'customer@example.test', node_id: 7, node_name: 'Mock Node', domain, ip: '203.0.113.8', port: 443, network: 'tcp', domain_source: 'request',
   first_seen: 1767225600, last_seen: 1767225900, raw_u: 1000, raw_d: 9000, raw_total: 10000,
   billed_u: null, billed_d: null, billed_total: null, rate: null, service: 'Generic CDN', category: 'cdn', confidence: 'low',
   reason: '通用 CDN 域名匹配，实际用途未知', connections: 3, share: 12.5, coverage: 'partial', ...override,
 })
 const traffic = params => ({
-  data: params.get('search') === 'empty' ? [] : [row(params.get('search') === 'fast' ? 'fast.example' : params.get('search') === 'slow' ? 'slow.example' : params.get('page') === '2' ? 'page-two.example' : 'cdn.example'), row('', { id: 'row-2', ip: '', domain_source: 'unknown', service: '', category: 'unknown', confidence: 'unknown', reason: '目的地未归属', billed_u: 2000, billed_d: 18000, billed_total: 20000, rate: 2, network: 'unknown', coverage: 'complete' })],
+  data: params.get('search') === 'empty' ? [] : [row(params.get('search') === 'fast' ? 'fast.example' : params.get('search') === 'slow' ? 'slow.example' : params.get('page') === '2' ? 'page-two.example' : 'cdn.example'), row('', { id: 'row-2', ip: '', ip_unavailable_reason: '节点上报了未指定地址，未采集到真实目标 IP', domain_source: 'unknown', service: '', category: 'unknown', confidence: 'unknown', reason: '目的地未归属', billed_u: 2000, billed_d: 18000, billed_total: 20000, rate: 2, network: 'unknown', coverage: 'complete' })],
   total: params.get('search') === 'empty' ? 0 : 41,
   summary: { raw_u: 8000, raw_d: 72000, raw_total: 80000, billed_u: 2000, billed_d: 18000, billed_total: 20000, identified_bytes: 40000, unidentified_bytes: 40000, identified_percent: 50, unattributed_bytes: 40000, report_count: 4, partial_report_count: 1, unsettled_report_count: 1 },
   analysis: [{ category: 'cdn', category_label: '通用 CDN', raw_total: 40000, share: 50, confidence: 'low', reason: '域名后缀依据，实际用途未知' }, { category: 'unknown', category_label: '未知', raw_total: 40000, share: 50, confidence: 'unknown', reason: '没有目的地证据' }],
-  meta: { timezone: 'UTC', bucket_seconds: 300, retention_days: 30, enabled: savedConfig.enabled, first_collected_at: 1767225600, last_collected_at: 1767225900, coverage: params.get('search') === 'empty' ? 'none' : 'partial', reason: '存在未采集时间和部分报告' },
+  meta: { classification_database: { available: true, source: 'GeoSite', rule_count: 5000, updated_at: 1767225600, group_count: 24, skipped_rules: 1 }, timezone: 'UTC', bucket_seconds: 300, retention_days: 30, enabled: savedConfig.enabled, first_collected_at: 1767225600, last_collected_at: 1767225900, coverage: params.get('search') === 'empty' ? 'none' : 'partial', reason: '存在未采集时间和部分报告' },
 })
 await page.route('**/*', async route => {
   const url = new URL(route.request().url())
@@ -120,7 +120,12 @@ try {
   assert.ok(await page.getByText('通用 CDN 用途未知，不能据此认定在观看视频。', { exact: true }).count())
   assert.ok(await page.getByText('未归属目的地', { exact: true }).count())
   assert.ok(await page.getByText('78.1 KB', { exact: true }).count(), 'Global summary is independent of visible page rows')
+  assert.ok(await page.getByText('customer@example.test', { exact: true }).count(), 'Email is visible beside user ID')
+  assert.ok(await page.getByText(/GeoSite · 5000 条域名规则/).count(), 'Active database status is visible')
+  assert.ok(await page.getByText(/节点上报了未指定地址/).count(), 'Unspecified addresses are explained')
+  assert.ok(await page.getByText(/服务识别可信度/).count(), 'Confidence refers to service attribution')
   record('query initialization, historical billing, unknown destinations, evidence and collection gaps')
+  record('user email, target capture reason, GeoSite status and service confidence are explicit')
 
   await page.getByRole('button', { name: 'Go to next page' }).click()
   await visible('page-two.example')

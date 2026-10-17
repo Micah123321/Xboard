@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AccessTrafficController extends Controller
 {
-    public const COLUMNS = ['id', 'user_id', 'node_id', 'node_name', 'domain', 'ip', 'port', 'network', 'domain_source',
+    public const COLUMNS = ['id', 'user_id', 'user_email', 'node_id', 'node_name', 'domain', 'ip', 'port', 'network', 'domain_source',
         'bucket_at', 'first_seen', 'last_seen', 'raw_u', 'raw_d', 'raw_total', 'billed_u', 'billed_d', 'billed_total',
         'rate', 'service', 'category', 'confidence', 'reason', 'connections', 'share', 'coverage'];
 
@@ -41,7 +41,7 @@ class AccessTrafficController extends Controller
         $confidence = ['high' => '高', 'medium' => '中', 'low' => '低', 'unknown' => '未知'][$row['confidence']];
         return [
             self::reportTime($row['first_seen'], $timezone) . ' 至 ' . self::reportTime($row['last_seen'], $timezone),
-            '用户 #' . $row['user_id'] . ' / ' . $row['node_name'], $target . ' / ' . $row['network'],
+            '用户 #' . $row['user_id'] . (!empty($row['user_email']) ? ' (' . $row['user_email'] . ')' : '') . ' / ' . $row['node_name'], $target . ' / ' . $row['network'],
             ($row['service'] ?: '未知服务') . ' / ' . \App\Services\AccessTrafficClassifier::LABELS[$row['category']],
             self::reportBytes($row['raw_u']), self::reportBytes($row['raw_d']), self::reportBytes($row['raw_total']),
             self::reportBytes($row['billed_total']), $row['share'] . '% / ' . $rate,
@@ -65,7 +65,7 @@ class AccessTrafficController extends Controller
         $format = $filters['format'] ?? 'csv';
         $query = $service->rows($filters);
         $limit = (int) config('access_traffic.export_max_rows', 100000);
-        if ($query->getCountForPagination() > $limit) {
+        if ($service->countGroups($filters, $limit + 1) > $limit) {
             throw ValidationException::withMessages(['export' => 'Export exceeds ' . $limit . ' rows; narrow the filters.']);
         }
         $context = $service->context($filters);

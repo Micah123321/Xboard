@@ -7,7 +7,7 @@ import type { AccessTrafficCategory, AccessTrafficConfidence, AccessTrafficConfi
 import { formatTraffic } from '@/utils/dashboard'
 
 const route = useRoute()
-const categories: Record<AccessTrafficCategory, string> = { video: '视频服务', web: '网页服务', download: '下载', update: '更新', sync: '同步', cdn: '通用 CDN', unknown: '未知' }
+const categories: Record<AccessTrafficCategory, string> = { video: '视频服务', web: '网页服务', download: '下载', update: '更新', sync: '同步', storage: '云存储', cdn: '通用 CDN', unknown: '未知' }
 const confidences: Record<AccessTrafficConfidence, string> = { high: '高', medium: '中', low: '低', unknown: '未知' }
 const coverageLabels = { complete: '已采集报告完整', partial: '部分采集', none: '暂无采集' }
 const sourceLabels = { request: '请求域名', sniff: '嗅探域名', ip: '仅 IP', unknown: '未知' }
@@ -197,6 +197,7 @@ onBeforeUnmount(() => { alive = false; requestSequence++ })
       <template #title>{{ meta.enabled ? '采集已启用' : '采集已关闭' }} · {{ coverageLabels[meta.coverage] }}</template>
       <p>{{ meta.reason || '覆盖状态仅描述已收到的报告。' }} 完整报告不代表所有时间段或节点均有采集；缺口不等于零流量。</p>
       <p v-if="meta.collection_gaps">节点级缺口 {{ meta.collection_gaps.node_billing_reports_without_details }} 个计费批次 · 明细待处理 {{ meta.collection_gaps.pending_detail_reports }} 份 · 结算关联异常 {{ meta.collection_gaps.failed_settlement_reports }} 份</p>
+      <p v-if="meta.classification_database">服务识别数据库：{{ meta.classification_database.available ? `GeoSite · ${meta.classification_database.rule_count} 条域名规则 · 更新于 ${date(meta.classification_database.updated_at)}` : '内置规则（GeoSite 数据库未就绪）' }}。识别可信度表示服务归属，具体观看、下载行为仍需结合内容证据。</p>
       <p>首次采集 {{ date(meta.first_collected_at) }} · 最近采集 {{ date(meta.last_collected_at) }} · 时区 {{ meta.timezone }} · 分桶 {{ meta.bucket_seconds }} 秒 · 保留 {{ meta.retention_days }} 天</p>
     </ElAlert>
 
@@ -211,7 +212,7 @@ onBeforeUnmount(() => { alive = false; requestSequence++ })
       <template #header><div class="section-heading"><h2>消耗构成（依据域名推断）</h2><span>占全部筛选原始流量，不局限当前页</span></div></template>
       <div class="analysis-grid">
         <article v-for="item in result.analysis" :key="item.category" class="analysis-item">
-          <div class="section-heading"><strong>{{ categories[item.category] || item.category_label }}（推断）</strong><ElTag size="small" type="info">置信度 {{ confidences[item.confidence] }}</ElTag></div>
+          <div class="section-heading"><strong>{{ categories[item.category] || item.category_label }}（推断）</strong><ElTag size="small" type="info">服务识别可信度 {{ confidences[item.confidence] }}</ElTag></div>
           <p>{{ formatTraffic(item.raw_total) }} · {{ percent(item.share) }}</p>
           <ElProgress :percentage="Math.min(100, Math.max(0, item.share))" :show-text="false" />
           <small>{{ item.reason || '尚无分类依据' }}</small>
@@ -231,11 +232,11 @@ onBeforeUnmount(() => { alive = false; requestSequence++ })
       <ElTable :data="result?.data || []" row-key="id" class="access-table">
         <ElTableColumn v-if="applied.group_by === 'time'" label="采集时间" min-width="200"><template #default="{ row }"><div class="cell-stack"><strong>{{ date(row.first_seen) }}</strong><small>至 {{ date(row.last_seen) }}</small></div></template></ElTableColumn>
         <ElTableColumn v-else label="排行" width="64"><template #default="{ $index }">{{ (current - 1) * pageSize + $index + 1 }}</template></ElTableColumn>
-        <ElTableColumn label="目的地 / 服务" min-width="220"><template #default="{ row }"><div class="cell-stack"><strong>{{ row.domain || row.ip || '未归属目的地' }}</strong><small>{{ row.service || '未知服务' }} · {{ sourceLabels[row.domain_source as keyof typeof sourceLabels] || '未知来源' }}</small><small>{{ row.ip || 'IP 未记录' }} · 端口 {{ row.port || '未知' }} · {{ row.network }}</small></div></template></ElTableColumn>
-        <ElTableColumn label="用户 / 节点" min-width="160"><template #default="{ row }"><div class="cell-stack"><RouterLink :to="{ path: '/users', query: { user_id: row.user_id } }" class="text-link">用户 #{{ row.user_id }}</RouterLink><span>{{ row.node_name || '未知节点' }} #{{ row.node_id }}</span></div></template></ElTableColumn>
+        <ElTableColumn label="目的地 / 服务" min-width="220"><template #default="{ row }"><div class="cell-stack"><strong>{{ row.domain || row.ip || '未归属目的地' }}</strong><small>{{ row.service || '未知服务' }} · {{ sourceLabels[row.domain_source as keyof typeof sourceLabels] || '未知来源' }}</small><small>{{ row.ip || row.ip_unavailable_reason || '目标 IP 未采集' }} · 端口 {{ row.port || '未知' }} · {{ row.network }}</small></div></template></ElTableColumn>
+        <ElTableColumn label="用户 / 节点" min-width="160"><template #default="{ row }"><div class="cell-stack"><RouterLink :to="{ path: '/users', query: { user_id: row.user_id } }" class="text-link">用户 #{{ row.user_id }}</RouterLink><small v-if="row.user_email">{{ row.user_email }}</small><span>{{ row.node_name || '未知节点' }} #{{ row.node_id }}</span></div></template></ElTableColumn>
         <ElTableColumn label="原始量 / 占比" min-width="180"><template #default="{ row }"><div class="cell-stack"><strong>{{ formatTraffic(row.raw_total) }} · {{ percent(row.share) }}</strong><small>上 {{ formatTraffic(row.raw_u) }} / 下 {{ formatTraffic(row.raw_d) }}</small><ElProgress :percentage="Math.min(100, Math.max(0, row.share))" :show-text="false" /></div></template></ElTableColumn>
         <ElTableColumn label="计费分摊 / 历史倍率" min-width="180"><template #default="{ row }"><div class="cell-stack"><strong>{{ billed(row.billed_total) }}</strong><small>上 {{ billed(row.billed_u) }} / 下 {{ billed(row.billed_d) }}</small><small>{{ row.rate == null ? '倍率混合或未知' : '历史倍率 ×' + row.rate }}</small></div></template></ElTableColumn>
-        <ElTableColumn label="分类推断 / 依据" min-width="240"><template #default="{ row }"><div class="cell-stack"><strong>{{ categories[row.category as AccessTrafficCategory] || '未知' }}（推断） · 置信度 {{ confidences[row.confidence as AccessTrafficConfidence] || '未知' }}</strong><small>{{ row.reason || '尚无判断依据' }}</small></div></template></ElTableColumn>
+        <ElTableColumn label="分类推断 / 依据" min-width="240"><template #default="{ row }"><div class="cell-stack"><strong>{{ categories[row.category as AccessTrafficCategory] || '未知' }}（推断） · 服务识别可信度 {{ confidences[row.confidence as AccessTrafficConfidence] || '未知' }}</strong><small>{{ row.reason || '尚无判断依据' }}</small></div></template></ElTableColumn>
         <ElTableColumn label="采集 / 连接" min-width="145"><template #default="{ row }"><div class="cell-stack"><span>{{ coverageLabels[row.coverage as keyof typeof coverageLabels] || '未知覆盖' }}</span><small>{{ row.connections }} 次连接</small><small v-if="applied.group_by !== 'time'">最近 {{ date(row.last_seen) }}</small></div></template></ElTableColumn>
         <template #empty><ElEmpty :description="loading ? '正在加载访问流量…' : errorMessage ? '请求失败，请重试' : meta?.coverage === 'none' ? '尚无采集记录，请检查采集配置与节点上报' : '当前筛选下暂无记录'" /></template>
       </ElTable>

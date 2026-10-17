@@ -78,6 +78,7 @@ class AccessTrafficTest extends TestCase
             $this->db->schema()->create($name, function (Blueprint $table): void {
                 $table->integer('id')->primary();
                 $table->string('name')->nullable();
+                $table->string('email')->nullable();
                 $table->bigInteger('u')->default(0);
                 $table->bigInteger('d')->default(0);
                 $table->bigInteger('t')->nullable();
@@ -369,6 +370,102 @@ class AccessTrafficTest extends TestCase
         self::assertSame(0, $this->queryResult(['search' => '%'])['total']);
         $filters = $query->filters(['start_time' => $this->now - 99999999], $this->now);
         self::assertSame($this->now + 1 - 30 * 86400, $filters['start_time']);
+    }
+
+    public function test_paginated_window_and_legacy_queries_keep_exact_stats_and_email(): void
+    {
+        DB::table('v2_user')->where('id', 1)->update(['email' => 'customer@example.test']);
+        foreach (['one', 'two'] as $name) {
+            $entries = [$this->entry('same.googlevideo.com', 1, 2), $this->entry('example.test', 2, 3)];
+            $id = $this->service->receive(1, $this->payload($name, $entries), $this->now);
+            $this->service->process($id);
+        }
+        $query = new AccessTrafficQueryService();
+        $filters = $query->filters(['start_time' => $this->now - 3600, 'end_time' => $this->now + 1, 'pageSize' => 1], $this->now);
+        DB::connection()->enableQueryLog();
+        DB::connection()->flushQueryLog();
+        $result = $query->index($filters);
+        self::assertCount(4, DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+        self::assertSame('customer@example.test', $result['data'][0]['user_email']);
+        self::assertSame(2, $result['total']);
+        self::assertSame(2, $result['summary']['report_count']);
+        self::assertSame(16, $result['summary']['raw_total']);
+        self::assertCount(2, $result['analysis']);
+        self::assertSame([10, 6], array_column($result['analysis'], 'raw_total'));
+        $legacy = new class extends AccessTrafficQueryService {
+            protected function supportsWindowCount(): bool { return false; }
+        };
+        self::assertSame($result, $legacy->index($filters));
+        $filters['page'] = 2;
+        self::assertSame($query->index($filters), $legacy->index($filters));
+        $filters['page'] = 999;
+        $empty = $query->index($filters);
+        self::assertSame(2, $empty['total']);
+        self::assertSame([], $empty['data']);
+        self::assertSame($empty, $legacy->index($filters));
+        self::assertSame(1, $query->countGroups($filters, 1));
+    }
+
+    public function test_placeholder_addresses_keep_wire_idempotency_but_not_fake_destinations(): void
+    {
+        foreach (['::', '0.0.0.0', '::ffff:0.0.0.0'] as $index => $ip) {
+            $entry = array_replace($this->entry('', 3, 5), ['ip' => $ip, 'domain_source' => 'ip', 'port' => 30525]);
+            $payload = $this->payload('placeholder-' . $index, [$entry]);
+            $normalized = $this->service->normalize($payload);
+            self::assertSame($ip, $normalized['entries'][0]['ip']);
+            $id = $this->service->receive(1, $payload, $this->now);
+            $this->service->process($id);
+            self::assertSame($id, $this->service->receive(1, $payload, $this->now));
+        }
+        $result = $this->queryResult();
+        self::assertSame(24, $result['summary']['raw_total']);
+        self::assertSame(24, $result['summary']['unattributed_bytes']);
+        self::assertSame('', $result['data'][0]['ip']);
+        self::assertSame(0, $result['data'][0]['port']);
+        self::assertSame('unknown', $result['data'][0]['domain_source']);
+        self::assertSame('partial', $result['meta']['coverage']);
+        DB::table('v2_access_traffic')->update(['ip' => '::', 'port' => 30525, 'domain_source' => 'ip']);
+        $historic = $this->queryResult();
+        self::assertSame('', $historic['data'][0]['ip']);
+        self::assertStringContainsString('未指定地址', $historic['data'][0]['ip_unavailable_reason']);
+        self::assertSame(24, $historic['summary']['unattributed_bytes']);
+    }
+
+    public function test_query_index_migration_is_reversible_on_existing_tables(): void
+    {
+        $migration = require __DIR__ . '/../../database/migrations/2026_10_18_000001_add_access_traffic_query_indexes.php';
+        $this->db->schema()->table('v2_access_report', function (Blueprint $table): void {
+            $table->index(['processed_at', 'observed_at', 'node_id'], 'access_pending_capture_node');
+        });
+        $migration->up();
+        $migration->up();
+        self::assertTrue($this->db->schema()->hasIndex('v2_access_report', 'access_pending_capture_node'));
+        self::assertTrue($this->db->schema()->hasIndex('v2_traffic_report', 'traffic_received_node_report'));
+        $migration->down();
+        $migration->down();
+        self::assertFalse($this->db->schema()->hasIndex('v2_access_report', 'access_pending_capture_node'));
+        self::assertFalse($this->db->schema()->hasIndex('v2_traffic_report', 'traffic_received_node_report'));
+    }
+
+    public function test_historic_reclassification_updates_filters_without_touching_billing(): void
+    {
+        $entry = $this->entry('ykj-eos-dg5-01.eos-dongguan-6.cmecloud.cn', 3, 5);
+        $id = $this->service->receive(1, $this->payload('historic-cloud', [$entry]), $this->now);
+        $this->bill('historic-cloud'); $this->service->process($id);
+        DB::table('v2_access_traffic')->update(['service' => '', 'category' => 'unknown', 'confidence' => 'unknown', 'reason' => 'old rules']);
+        $before = (array) DB::table('v2_access_traffic')->first();
+        $userBefore = (array) DB::table('v2_user')->where('id', 1)->first();
+        $service = new \App\Services\AccessTrafficReclassifier();
+        $result = $service->chunk(0, $before['id'], 1);
+        self::assertSame(1, $result['updated']);
+        $after = (array) DB::table('v2_access_traffic')->first();
+        self::assertSame('storage', $after['category']);
+        self::assertStringContainsString('移动云', $after['service']);
+        foreach (['raw_u', 'raw_d', 'billed_u', 'billed_d', 'rate', 'report_id', 'user_id'] as $key) self::assertSame($before[$key], $after[$key]);
+        self::assertSame($userBefore, (array) DB::table('v2_user')->where('id', 1)->first());
+        self::assertSame(1, $this->queryResult(['category' => 'storage'])['total']);
+        self::assertSame(0, $service->chunk(0, $before['id'], 1)['updated']);
     }
 
     public function test_coverage_exposes_uncollected_reports_and_partial_batches(): void

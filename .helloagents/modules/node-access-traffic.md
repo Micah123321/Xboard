@@ -6,8 +6,8 @@
 
 后端迁移2026_09_01_000001_create_access_traffic_tables新增明细报告和目标记录，扩展计费账本实际倍率及hook后用户扣费快照。每用户每方向按实际扣费分摊，整数尾差归并，计费和明细两种到达顺序均可结算。独立access_traffic队列在production和local环境均由Horizon独立supervisor处理。schedule每分钟修复待处理/结算报告，每日按实际last_seen清理过期片段；计费幂等键继续保留。
 
-域名分类规则在config/access_traffic.php，按域名标签边界匹配；视频、网页、下载、更新、同步为服务类型推断，CDN用途不被猜测，源IP不充当目标IP。缺目标计入未归属量，覆盖状态、未结算和节点级计费缺口明确返回。查询纳入与筛选范围相交的整个采集片段，节点名称为接收时快照。
+域名分类规则在config/access_traffic.php，另有24个服务组、5414条MIT许可GeoSite本地域名索引，支持每周原子更新、失败保留和30秒内刷新缓存；视频、网页、下载、更新、同步、EOS云存储为服务类型推断，CDN用途不被猜测，源IP不充当目标IP。管理员可见数据库数量、更新时间和识别依据；access-traffic:reclassify按500行批次更新历史分类，不改扣费与流量。缺目标计入未归属量，覆盖状态、未结算和节点级计费缺口明确返回。查询纳入与筛选范围相交的整个采集片段，节点名称为接收时快照。
 
 默认关闭、300秒分桶、30天保留，管理员采集配置可指定节点ID。上线先备份和迁移后端，再更新管理员资源和Horizon/scheduler，保持采集关闭；试点节点更新并通过验收后再启用。环境部署证据位于output/releases/access-traffic-deployment。完整接口及启用步骤见../../docs/node-access-traffic.md。
 
-验证：PHP37项206断言（隔离SQLite），Go8个相关包回归，最终Vue构建与Chrome13项mock交互通过；内核实现代理报告Linux race通过。生产真实客户端Mux/XUDP重连、Linux socket splice及MySQL并发仍需试点验收。
+2026-10-18查询优化：合并明细统计与窗口分页计数，正常8→4条SQL；新增processed_at/observed_at与received_at/node_id/report_id索引。用户列与导出补邮箱，::/0.0.0.0视为未采集目标而保留原报告wire指纹。百万行隔离SQLite中位2.64s→1.55s（约41%），响应对照一致；76项438断言，Go access/singbox/xray/service四包、Linux构建、最终Vue构建与Chrome14项mock交互通过。本轮未发布或执行生产迁移，生产MySQL耗时仍需实测，详情见../../docs/access-traffic-query-optimization.md。
