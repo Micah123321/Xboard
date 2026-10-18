@@ -23,7 +23,7 @@ class AccessTrafficReclassifier
                     $partial[] = $row->report_id;
                 }
             }
-            foreach ($classifier->classify($row->domain, $row->domain_source) as $field => $value) {
+            foreach ($classifier->classify($row->domain, $row->domain_source, $changes['ip'] ?? $row->ip) as $field => $value) {
                 if ($row->$field !== $value) $changes[$field] = $value;
             }
             if (!$changes) continue;

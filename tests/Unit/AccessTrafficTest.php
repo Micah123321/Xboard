@@ -468,6 +468,45 @@ class AccessTrafficTest extends TestCase
         self::assertSame(0, $service->chunk(0, $before['id'], 1)['updated']);
     }
 
+    public function test_ai_and_ip_services_refresh_historic_filters_without_changing_billing(): void
+    {
+        $cases = [
+            ['ai-upload', 'chatgpt.com', '', 'request', 6 * 1048576, 500000, 'ai'],
+            ['quark-download', 'dl-c-zb-u.drive.quark.cn', '', 'request', 30000, 3 * 1048576, 'storage'],
+            ['telegram', '', '91.108.56.137', 'ip', 30000, 3 * 1048576, 'messaging'],
+            ['unproven', 'ojfn.hzrmzz.com', '', 'request', 30000, 3 * 1048576, 'unknown'],
+            ['missing-target', '', '', 'unknown', 30000, 3 * 1048576, 'unknown'],
+        ];
+        foreach ($cases as [$name, $domain, $ip, $source, $u, $d, $category]) {
+            $entry = array_replace($this->entry($domain, $u, $d), ['ip' => $ip, 'domain_source' => $source, 'port' => $source === 'unknown' ? 0 : 443]);
+            $id = $this->service->receive(1, $this->payload($name, [$entry], [1 => [$u, $d]]), $this->now);
+            $this->bill($name, [1 => [$u, $d]], 2); $this->service->process($id);
+        }
+        $result = $this->queryResult();
+        self::assertSame(5, $result['total']);
+        self::assertSame(4, count($result['analysis']));
+        $byDomain = collect($result['data'])->keyBy(fn ($row) => $row['domain'] ?: $row['ip']);
+        self::assertSame('ai', $byDomain['chatgpt.com']['category']);
+        self::assertSame('疑似上传 / 同步', $byDomain['chatgpt.com']['activity_hint']);
+        self::assertSame('storage', $byDomain['dl-c-zb-u.drive.quark.cn']['category']);
+        self::assertSame('messaging', $byDomain['91.108.56.137']['category']);
+        self::assertSame('unknown', $byDomain['ojfn.hzrmzz.com']['category']);
+        self::assertSame('疑似下载 / 内容接收', $byDomain['ojfn.hzrmzz.com']['activity_hint']);
+        self::assertSame('low', $byDomain['ojfn.hzrmzz.com']['activity_confidence']);
+        self::assertSame('unknown', $byDomain['']['category']);
+        self::assertStringContainsString('真实目标未采集', $byDomain['']['activity_reason']);
+        $before = DB::table('v2_access_traffic')->orderBy('id')->get(['raw_u', 'raw_d', 'billed_u', 'billed_d', 'rate'])->toArray();
+        $accountBefore = (array) DB::table('v2_user')->where('id', 1)->first();
+        DB::table('v2_access_traffic')->update(['service' => '', 'category' => 'unknown', 'confidence' => 'unknown', 'reason' => 'old rules']);
+        $reclassifier = new \App\Services\AccessTrafficReclassifier();
+        $last = (int) DB::table('v2_access_traffic')->max('id');
+        $reclassifier->chunk(0, $last);
+        self::assertSame(1, $this->queryResult(['category' => 'ai'])['total']);
+        self::assertSame(1, $this->queryResult(['category' => 'messaging'])['total']);
+        self::assertEquals($before, DB::table('v2_access_traffic')->orderBy('id')->get(['raw_u', 'raw_d', 'billed_u', 'billed_d', 'rate'])->toArray());
+        self::assertSame($accountBefore, (array) DB::table('v2_user')->where('id', 1)->first());
+    }
+
     public function test_coverage_exposes_uncollected_reports_and_partial_batches(): void
     {
         $this->bill('uncaptured');

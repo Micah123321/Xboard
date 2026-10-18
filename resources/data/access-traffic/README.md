@@ -1,7 +1,10 @@
 # GeoSite service domain snapshot
 
 Source: https://github.com/v2fly/domain-list-community (MIT; see LICENSE.geosite).
-The 24 selected service groups and their includes were compiled into 5414 exact/suffix rules.
+The 37 selected service groups and their includes were compiled into 5786 exact/suffix rules.
+AI and netdisk groups are included. Shared advertising/telemetry domains are omitted.
+telegram-cidr.txt contains the 14 published ranges from https://core.telegram.org/resources/cidr.txt
+for dedicated Telegram service inference; these are not generic cloud/ISP ownership rules.
 Source file SHA256 values are embedded in geosite.json. Regex/plain and attribute-filtered
 includes are skipped rather than widened. The release contains a usable offline snapshot.
 

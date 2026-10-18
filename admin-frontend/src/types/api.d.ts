@@ -946,7 +946,7 @@ export interface AdminTrafficLogResult extends AdminPaginationResult<AdminTraffi
   summary: TrafficAmount
 }
 
-export type AccessTrafficCategory = 'video' | 'web' | 'download' | 'update' | 'sync' | 'storage' | 'cdn' | 'unknown'
+export type AccessTrafficCategory = 'ai' | 'messaging' | 'video' | 'web' | 'download' | 'update' | 'sync' | 'storage' | 'cdn' | 'unknown'
 export type AccessTrafficConfidence = 'high' | 'medium' | 'low' | 'unknown'
 export type AccessTrafficCoverage = 'complete' | 'partial' | 'none'
 
@@ -962,6 +962,9 @@ export interface AccessTrafficFilters {
 }
 
 export interface AccessTrafficRow {
+  activity_hint?: string
+  activity_confidence?: AccessTrafficConfidence
+  activity_reason?: string
   id: string
   user_id: number
   user_email?: string | null

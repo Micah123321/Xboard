@@ -16,7 +16,7 @@ class AccessTrafficQueryService
             'user_id' => 'nullable|integer|min:1', 'node_id' => 'nullable|integer|min:1',
             'start_time' => 'nullable|integer|min:1|max:253402214400',
             'end_time' => 'nullable|integer|min:1|max:253402214400',
-            'search' => 'nullable|string|max:253', 'category' => 'nullable|in:video,web,download,update,sync,storage,cdn,unknown',
+            'search' => 'nullable|string|max:253', 'category' => 'nullable|in:ai,messaging,video,web,download,update,sync,storage,cdn,unknown',
             'network' => 'nullable|in:tcp,udp,unknown', 'group_by' => 'nullable|in:domain,time',
             'page' => 'nullable|integer|min:1|max:10000000', 'pageSize' => 'nullable|integer|min:1|max:100',
             'format' => 'nullable|in:csv,html',
@@ -104,7 +104,7 @@ class AccessTrafficQueryService
         foreach (['billed_u', 'billed_d', 'billed_total'] as $key) $result[$key] = $result[$key] === null ? null : (int) $result[$key];
         $result['rate'] = $result['rate'] === null ? null : (float) $result['rate'];
         $result['share'] = $total > 0 ? round($result['raw_total'] / $total * 100, 2) : 0;
-        return $result;
+        return $result + (new AccessTrafficActivityInference())->infer($result);
     }
 
     public function context(array $filters): array
@@ -137,7 +137,7 @@ class AccessTrafficQueryService
             $analysis[] = ['category' => $category, 'category_label' => $label, 'raw_total' => $bytes,
                 'share' => $summary['raw_total'] ? round($bytes / $summary['raw_total'] * 100, 2) : 0,
                 'confidence' => ['unknown', 'low', 'medium', 'high'][(int) $stats["category_{$category}_confidence"]],
-                'reason' => $category === 'unknown' ? '目标证据或服务规则不足，具体用途未知。' : '依据目标域名规则推断服务类型；视频播放、下载、预加载等具体操作仍属推断。'];
+                'reason' => $category === 'unknown' ? '目标证据或服务规则不足，具体用途未知。' : '依据目标域名规则或服务专用 IP 网段推断服务归属；具体聊天、视频、下载等操作仍属推断。'];
         }
         usort($analysis, fn ($a, $b) => $b['raw_total'] <=> $a['raw_total'] ?: strcmp($a['category'], $b['category']));
         $billing = DB::table('v2_traffic_report as b')->where('b.received_at', '>=', $filters['start_time'])

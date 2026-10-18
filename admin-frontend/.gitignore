@@ -11,6 +11,7 @@ node_modules
 dist
 dist-access-traffic/
 dist-access-query-optimization/
+dist-access-ai-inference/
 dist-access-release/
 dist-ssr
 *.local

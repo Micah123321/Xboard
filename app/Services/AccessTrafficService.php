@@ -267,7 +267,7 @@ class AccessTrafficService
                     $remaining[$uid][0] -= $entry['u'];
                     $remaining[$uid][1] -= $entry['d'];
                     $rows[] = ['report_id' => $reportId, 'node_id' => $nodeId, 'raw_u' => $entry['u'], 'raw_d' => $entry['d']]
-                        + array_diff_key($entry, array_flip(['u', 'd'])) + $classifier->classify($entry['domain'], $entry['domain_source']);
+                        + array_diff_key($entry, array_flip(['u', 'd'])) + $classifier->classify($entry['domain'], $entry['domain_source'], $entry['ip']);
                 }
                 foreach ($remaining as $uid => [$u, $d]) {
                     if ($u || $d) $rows[] = $this->unknownRow($report, (int) $uid, $u, $d);

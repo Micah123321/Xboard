@@ -14,7 +14,7 @@ class AccessTrafficController extends Controller
 {
     public const COLUMNS = ['id', 'user_id', 'user_email', 'node_id', 'node_name', 'domain', 'ip', 'port', 'network', 'domain_source',
         'bucket_at', 'first_seen', 'last_seen', 'raw_u', 'raw_d', 'raw_total', 'billed_u', 'billed_d', 'billed_total',
-        'rate', 'service', 'category', 'confidence', 'reason', 'connections', 'share', 'coverage'];
+        'rate', 'service', 'category', 'confidence', 'reason', 'activity_hint', 'activity_confidence', 'activity_reason', 'connections', 'share', 'coverage'];
 
     public const REPORT_COLUMNS = ['采集片段', '用户 / 节点', '访问目标', '服务 / 分类（推断）', '原始上行', '原始下行', '原始合计', '计费分摊', '占比 / 倍率', '判断依据'];
 
@@ -45,7 +45,8 @@ class AccessTrafficController extends Controller
             ($row['service'] ?: '未知服务') . ' / ' . \App\Services\AccessTrafficClassifier::LABELS[$row['category']],
             self::reportBytes($row['raw_u']), self::reportBytes($row['raw_d']), self::reportBytes($row['raw_total']),
             self::reportBytes($row['billed_total']), $row['share'] . '% / ' . $rate,
-            '置信度：' . $confidence . '。' . $row['reason'],
+            '服务识别可信度：' . $confidence . '。' . $row['reason']
+                . (isset($row['activity_hint']) ? ' 流量形态（低可信度）：' . $row['activity_hint'] . '；' . $row['activity_reason'] : ''),
         ];
     }
 

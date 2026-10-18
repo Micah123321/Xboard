@@ -26,7 +26,7 @@ th { background: #f3f4f6; }
 <span>未归属目标：{{ \App\Http\Controllers\V2\Admin\AccessTrafficController::reportBytes($context['summary']['unattributed_bytes']) }}</span>
 </div>
 <p class="muted">{{ $context['meta']['reason'] }}</p>
-<p>分类依据为目标域名规则；具体页面、视频标题及用户主动操作未被记录。通用 CDN 保留用途未知。</p>
+<p>服务识别依据为目标域名规则或服务专用 IP 网段；流量形态推测依据上下行占比，可信度低。具体页面、视频标题及用户主动操作未被记录。通用 CDN 保留用途未知。</p>
 <p>缺口：{{ $context['meta']['collection_gaps']['node_billing_reports_without_details'] }} 个节点级计费批次尚无已处理明细；{{ $context['meta']['collection_gaps']['pending_detail_reports'] }} 份明细待处理；{{ $context['meta']['collection_gaps']['failed_settlement_reports'] }} 份结算关联异常。</p>
 @if (count($context['analysis']))
 <p>消耗构成：@foreach ($context['analysis'] as $item) {{ $item['category_label'] }}（推断） {{ $item['share'] }}% @endforeach</p>

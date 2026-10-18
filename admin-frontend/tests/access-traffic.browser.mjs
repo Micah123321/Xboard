@@ -49,10 +49,10 @@ const row = (domain = 'cdn.example', override = {}) => ({
   reason: '通用 CDN 域名匹配，实际用途未知', connections: 3, share: 12.5, coverage: 'partial', ...override,
 })
 const traffic = params => ({
-  data: params.get('search') === 'empty' ? [] : [row(params.get('search') === 'fast' ? 'fast.example' : params.get('search') === 'slow' ? 'slow.example' : params.get('page') === '2' ? 'page-two.example' : 'cdn.example'), row('', { id: 'row-2', ip: '', ip_unavailable_reason: '节点上报了未指定地址，未采集到真实目标 IP', domain_source: 'unknown', service: '', category: 'unknown', confidence: 'unknown', reason: '目的地未归属', billed_u: 2000, billed_d: 18000, billed_total: 20000, rate: 2, network: 'unknown', coverage: 'complete' })],
+  data: params.get('search') === 'empty' ? [] : [row(params.get('search') === 'fast' ? 'fast.example' : params.get('search') === 'slow' ? 'slow.example' : params.get('page') === '2' ? 'page-two.example' : 'cdn.example'), row('', { id: 'row-2', ip: '', ip_unavailable_reason: '节点上报了未指定地址，未采集到真实目标 IP', domain_source: 'unknown', service: '', category: 'unknown', confidence: 'unknown', reason: '目的地未归属', billed_u: 2000, billed_d: 18000, billed_total: 20000, rate: 2, network: 'unknown', coverage: 'complete', raw_u: 1000, raw_d: 2097152, raw_total: 2098152, activity_hint: '疑似下载 / 内容接收', activity_confidence: 'low', activity_reason: '接收占主导，仅为流量形态线索。真实目标未采集。' }), row('chatgpt.com', { id: 'row-ai', service: 'ChatGPT / OpenAI', category: 'ai', confidence: 'high', reason: '匹配域名后缀 chatgpt.com，服务归属可信度高' }), row('', { id: 'row-ip', ip: '91.108.56.137', domain_source: 'ip', service: 'Telegram', category: 'messaging', confidence: 'medium', reason: '目标 IP 匹配 Telegram 官方专用网段 91.108.56.0/22' })],
   total: params.get('search') === 'empty' ? 0 : 41,
-  summary: { raw_u: 8000, raw_d: 72000, raw_total: 80000, billed_u: 2000, billed_d: 18000, billed_total: 20000, identified_bytes: 40000, unidentified_bytes: 40000, identified_percent: 50, unattributed_bytes: 40000, report_count: 4, partial_report_count: 1, unsettled_report_count: 1 },
-  analysis: [{ category: 'cdn', category_label: '通用 CDN', raw_total: 40000, share: 50, confidence: 'low', reason: '域名后缀依据，实际用途未知' }, { category: 'unknown', category_label: '未知', raw_total: 40000, share: 50, confidence: 'unknown', reason: '没有目的地证据' }],
+  summary: { raw_u: 8000, raw_d: 3137728, raw_total: 3145728, billed_u: 2000, billed_d: 18000, billed_total: 20000, identified_bytes: 1047576, unidentified_bytes: 2098152, identified_percent: 33.30, unattributed_bytes: 2098152, report_count: 4, partial_report_count: 1, unsettled_report_count: 1 },
+  analysis: [{ category: 'cdn', category_label: '通用 CDN', raw_total: 1027576, share: 32.67, confidence: 'low', reason: '域名后缀依据，实际用途未知' }, { category: 'ai', category_label: 'AI 服务', raw_total: 10000, share: 0.32, confidence: 'high', reason: 'OpenAI 域名规则' }, { category: 'messaging', category_label: '即时通讯', raw_total: 10000, share: 0.32, confidence: 'medium', reason: '官方服务专用网段' }, { category: 'unknown', category_label: '未知', raw_total: 2098152, share: 66.70, confidence: 'unknown', reason: '没有目的地证据' }],
   meta: { classification_database: { available: true, source: 'GeoSite', rule_count: 5000, updated_at: 1767225600, group_count: 24, skipped_rules: 1 }, timezone: 'UTC', bucket_seconds: 300, retention_days: 30, enabled: savedConfig.enabled, first_collected_at: 1767225600, last_collected_at: 1767225900, coverage: params.get('search') === 'empty' ? 'none' : 'partial', reason: '存在未采集时间和部分报告' },
 })
 await page.route('**/*', async route => {
@@ -119,13 +119,18 @@ try {
   assert.ok(await page.getByText('未结算 / 未知', { exact: true }).count())
   assert.ok(await page.getByText('通用 CDN 用途未知，不能据此认定在观看视频。', { exact: true }).count())
   assert.ok(await page.getByText('未归属目的地', { exact: true }).count())
-  assert.ok(await page.getByText('78.1 KB', { exact: true }).count(), 'Global summary is independent of visible page rows')
+  assert.ok(await page.getByText('3.00 MB', { exact: true }).count(), 'Global summary is independent of visible page rows')
   assert.ok(await page.getByText('customer@example.test', { exact: true }).count(), 'Email is visible beside user ID')
   assert.ok(await page.getByText(/GeoSite · 5000 条域名规则/).count(), 'Active database status is visible')
   assert.ok(await page.getByText(/节点上报了未指定地址/).count(), 'Unspecified addresses are explained')
   assert.ok(await page.getByText(/服务识别可信度/).count(), 'Confidence refers to service attribution')
   record('query initialization, historical billing, unknown destinations, evidence and collection gaps')
   record('user email, target capture reason, GeoSite status and service confidence are explicit')
+  assert.ok(await page.getByText('ChatGPT / OpenAI · 请求域名', { exact: true }).count())
+  assert.ok(await page.getByText('Telegram · 仅 IP', { exact: true }).count())
+  assert.ok(await page.getByText('AI 服务（推断） · 服务识别可信度 高', { exact: true }).count())
+  assert.ok(await page.getByText('流量形态（低可信度）：疑似下载 / 内容接收', { exact: true }).count())
+  record('AI and dedicated IP services are separated from low confidence activity hints')
 
   await page.getByRole('button', { name: 'Go to next page' }).click()
   await visible('page-two.example')

@@ -19,20 +19,28 @@ class AccessTrafficDomainDatabase
 
     private function database(): array
     {
+        $files = [];
+        $signatures = [];
         foreach ($this->paths() as $path) {
             clearstatcache(true, $path);
             if (!is_file($path) || filesize($path) > self::MAX_BYTES) continue;
-            $signature = $path . ':' . filemtime($path) . ':' . filesize($path);
-            if (isset(self::$cache[$signature]) && self::$cache[$signature]['expires_at'] > microtime(true)) return self::$cache[$signature]['data'];
+            $files[] = $path;
+            $signatures[] = $path . ':' . filemtime($path) . ':' . filesize($path);
+        }
+        $signature = implode('|', $signatures);
+        if (isset(self::$cache[$signature]) && self::$cache[$signature]['expires_at'] > microtime(true)) return self::$cache[$signature]['data'];
+        $latest = [];
+        foreach ($files as $path) {
             try {
                 $data = json_decode(file_get_contents($path), true, 64, JSON_THROW_ON_ERROR);
                 if (($data['version'] ?? null) !== 1 || !is_array($data['suffix'] ?? null) || !is_array($data['full'] ?? null)
                     || !is_array($data['groups'] ?? null)) continue;
-                self::$cache = [$signature => ['data' => $data, 'expires_at' => microtime(true) + 30]];
-                return $data;
+                // A bundled upgrade must not be shadowed by an older weekly download.
+                if ($latest === [] || ($data['updated_at'] ?? 0) > ($latest['updated_at'] ?? 0)) $latest = $data;
             } catch (\Throwable) { continue; }
         }
-        return [];
+        self::$cache = [$signature => ['data' => $latest, 'expires_at' => microtime(true) + 30]];
+        return $latest;
     }
 
     public function lookup(string $domain): ?array
@@ -68,11 +76,12 @@ class AccessTrafficDomainDatabase
         if (!$groups) throw new RuntimeException('No GeoSite service groups configured.');
         $data = ['version' => 1, 'source' => 'https://github.com/v2fly/domain-list-community', 'license' => 'MIT',
             'updated_at' => time(), 'groups' => $groups, 'suffix' => [], 'full' => [], 'source_hashes' => [], 'skipped_rules' => 0];
+        $sharedDomains = array_fill_keys(config('access_traffic_geosite.shared_domains', []), true);
         $texts = [];
         $resolving = [];
         $resolved = [];
         $download = function (string $name) use (&$texts, &$data): string {
-            if (!preg_match('/^[a-z0-9][a-z0-9_.-]{0,100}$/D', $name)) throw new RuntimeException('Invalid GeoSite group.');
+            if (!preg_match('/^[a-z0-9][a-z0-9_.!-]{0,100}$/D', $name)) throw new RuntimeException('Invalid GeoSite group.');
             if (isset($texts[$name])) return $texts[$name];
             if (count($texts) >= 256) throw new RuntimeException('GeoSite include limit exceeded.');
             $response = Http::connectTimeout(10)->timeout(25)->retry(2, 250, throw: false)->withOptions(['allow_redirects' => false,
@@ -86,7 +95,7 @@ class AccessTrafficDomainDatabase
             $data['source_hashes'][$name] = hash('sha256', $body);
             return $texts[$name] = $body;
         };
-        $read = function (string $name) use (&$read, &$resolved, &$resolving, &$data, $download): array {
+        $read = function (string $name) use (&$read, &$resolved, &$resolving, &$data, $download, $sharedDomains): array {
             if (isset($resolved[$name])) return $resolved[$name];
             if (isset($resolving[$name])) throw new RuntimeException('Cyclic GeoSite include.');
             $resolving[$name] = true;
@@ -96,6 +105,9 @@ class AccessTrafficDomainDatabase
                 if ($line === '') continue;
                 $parts = preg_split('/\s+/', $line);
                 $rule = strtolower($parts[0]);
+                if (array_intersect(['@ads', '@telemetry', '@tracking'], array_slice($parts, 1))) {
+                    $data['skipped_rules']++; continue;
+                }
                 if (str_starts_with($rule, 'include:')) {
                     // Attribute-filtered includes must not silently become unrestricted lists.
                     if (count($parts) > 1) { $data['skipped_rules']++; continue; }
@@ -110,6 +122,7 @@ class AccessTrafficDomainDatabase
                     || !preg_match('/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/D', $rule)) {
                     $data['skipped_rules']++; continue;
                 }
+                if (isset($sharedDomains[$rule])) { $data['skipped_rules']++; continue; }
                 $rules[$kind . ':' . $rule] = [$kind, $rule];
             }
             unset($resolving[$name]);
