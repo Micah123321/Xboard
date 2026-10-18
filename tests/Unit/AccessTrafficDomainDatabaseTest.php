@@ -43,7 +43,7 @@ class AccessTrafficDomainDatabaseTest extends TestCase
         $this->app['config']->set('access_traffic_geosite.snapshot_path', __DIR__ . '/../../resources/data/access-traffic/geosite.json');
         $db = new AccessTrafficDomainDatabase();
         self::assertGreaterThan(5000, $db->status()['rule_count']);
-        self::assertSame(37, $db->status()['group_count']);
+        self::assertSame(72, $db->status()['group_count']);
         self::assertSame('Netflix', $db->lookup('api.netflix.com')['service']);
         self::assertSame('哔哩哔哩', $db->lookup('r.acgvideo.com')['service']);
         $classified = (new AccessTrafficClassifier())->classify('ykj-eos-dg5-01.eos-dongguan-6.cmecloud.cn', 'request');
@@ -62,6 +62,11 @@ class AccessTrafficDomainDatabaseTest extends TestCase
             self::assertSame('ai', $result['category'], $domain);
             self::assertSame('high', $result['confidence'], $domain);
         }
+        foreach (['askdiandian.com', 'api.askdiandian.com', 'diandianlife.top'] as $domain) {
+            self::assertSame('ai', $classifier->classify($domain, 'request')['category'], $domain);
+        }
+        self::assertSame('social', $classifier->classify('xiaohongshu.com', 'request')['category']);
+        self::assertSame('unknown', $classifier->classify('askdiandian.com.example.test', 'request')['category']);
         self::assertSame('ai', $classifier->classify('openrouter.ai', 'request')['category']);
         self::assertSame('ai', $classifier->classify('api.perplexity.ai', 'request')['category']);
         self::assertSame('storage', $classifier->classify('dl-c-zb-u.drive.quark.cn', 'request')['category']);
@@ -82,6 +87,61 @@ class AccessTrafficDomainDatabaseTest extends TestCase
         self::assertSame('unknown', $classifier->classify('unknown.example', 'request', '91.108.56.137')['category']);
         self::assertSame('unknown', $classifier->classify('', 'unknown', '91.108.56.137')['category']);
         self::assertSame('unknown', $classifier->classify('chatgpt.com', 'ip')['category']);
+        Http::assertNothingSent();
+    }
+
+    public function test_exchange_wallet_tools_push_and_telemetry_match_verified_screenshot_samples(): void
+    {
+        $this->app['config']->set('access_traffic_geosite.snapshot_path', __DIR__ . '/../../resources/data/access-traffic/geosite.json');
+        $classifier = new AccessTrafficClassifier();
+        $examples = [
+            ['static.okx.com', 'crypto', 'OKX 交易所静态资源'],
+            ['www.okx.com', 'crypto', 'OKX 加密货币交易所'],
+            ['static.oklink.com', 'crypto', 'OKLink 区块链浏览器静态资源'],
+            ['www.oklink.com', 'crypto', 'OKLink 区块链浏览器'],
+            ['data.onekey.so', 'crypto', 'OneKey 加密货币钱包'],
+            ['utility.onekeycn.com', 'crypto', 'OneKey 钱包 API'],
+            ['uni.onekey-asset.com', 'crypto', 'OneKey 钱包资源'],
+            ['www.itdog.cn', 'tools', 'ITDOG 网络测速与诊断工具'],
+            ['api.onesignal.com', 'push', 'OneSignal 消息推送'],
+            ['toblog.tobsnssdk.com', 'telemetry', 'BytePlus SDK 日志与统计上报'],
+        ];
+        foreach ($examples as [$domain, $category, $service]) {
+            $result = $classifier->classify($domain, 'request');
+            self::assertSame($category, $result['category'], $domain);
+            self::assertSame($service, $result['service'], $domain);
+            self::assertSame('high', $result['confidence'], $domain);
+            self::assertStringContainsString('来源：https://', $result['reason']);
+            self::assertLessThanOrEqual(255, mb_strlen($result['reason']));
+        }
+        foreach (['evilokx.com', 'oklink.com.attacker.test', 'onekeycn.com.evil.example', 'fakeonesignal.com'] as $domain) {
+            self::assertSame('unknown', $classifier->classify($domain, 'request')['category'], $domain);
+        }
+        foreach (['hiadwwa.003939.xyz', 'unknown.example'] as $domain) self::assertSame('unknown', $classifier->classify($domain, 'request')['category']);
+        foreach (['17.253.84.125', '194.221.250.50'] as $ip) self::assertSame('unknown', $classifier->classify('', 'ip', $ip)['category']);
+        self::assertSame('unknown', $classifier->classify('www.okx.com', 'ip')['category']);
+        Http::assertNothingSent();
+    }
+
+    public function test_whole_service_categories_expand_beyond_individual_screenshot_domains(): void
+    {
+        $this->app['config']->set('access_traffic_geosite.snapshot_path', __DIR__ . '/../../resources/data/access-traffic/geosite.json');
+        $db = new AccessTrafficDomainDatabase();
+        $examples = [
+            'api.binance.com' => 'crypto', 'www.coinbase.com' => 'crypto', 'www.bybit.com' => 'crypto',
+            'app.trustwallet.com' => 'crypto', 'walletconnect.com' => 'crypto',
+            'www.paypal.com' => 'finance', 'tradingview.com' => 'finance',
+            'www.speedtest.net' => 'tools', 'pypi.org' => 'tools',
+            'discord.com' => 'messaging', 'www.instagram.com' => 'social',
+            'store.epicgames.com' => 'games', 'www.ebay.com' => 'shopping',
+            'www.notion.so' => 'productivity', 'www.shanbay.com' => 'education',
+        ];
+        foreach ($examples as $domain => $category) {
+            $match = $db->lookup($domain);
+            self::assertNotNull($match, $domain);
+            self::assertSame($category, $match['category'], $domain);
+            self::assertSame('medium', $match['confidence']);
+        }
         Http::assertNothingSent();
     }
 

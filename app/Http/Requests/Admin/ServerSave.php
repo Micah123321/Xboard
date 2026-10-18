@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Models\Server;
 use App\Models\Plan;
+use App\Services\ServerEntryPointService;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ServerSave extends FormRequest
@@ -142,6 +143,15 @@ class ServerSave extends FormRequest
             'host' => 'required',
             'port' => 'required',
             'server_port' => 'required',
+            'entry_points_enabled' => 'sometimes|boolean',
+            'entry_points' => 'sometimes|nullable|array|list|max:' . ServerEntryPointService::MAX_EXTRA_ENTRIES,
+            'entry_points.*' => 'required|array:host,port',
+            'entry_points.*.host' => ['required', 'string', 'max:255', function ($attribute, $value, $fail): void {
+                if (!is_string($value) || !ServerEntryPointService::validHost($value)) {
+                    $fail('入口地址请填写域名或 IP，不含协议、路径和端口');
+                }
+            }],
+            'entry_points.*.port' => 'required|integer|between:1,65535',
             'tags' => 'nullable|array',
             'excludes' => 'nullable|array',
             'ips' => 'nullable|array',
@@ -274,6 +284,35 @@ class ServerSave extends FormRequest
             if ($validator->errors()->isNotEmpty()) {
                 return;
             }
+            $server = $this->input('id') ? Server::find($this->input('id')) : null;
+            $enabled = $this->has('entry_points_enabled')
+                ? $this->boolean('entry_points_enabled') : (bool) $server?->entry_points_enabled;
+            $entries = $this->input('entry_points', $server?->entry_points ?? []) ?? [];
+            if ($enabled && !$entries) {
+                $validator->errors()->add('entry_points', '开启随机入口后，请至少添加一个额外入口');
+            }
+            if ($enabled && (!is_string($this->input('host')) || !ServerEntryPointService::validHost($this->input('host')))) {
+                $validator->errors()->add('host', '随机入口的主地址请填写域名或 IP');
+            }
+            if ($enabled && !ServerEntryPointService::validPort($this->input('port'))) {
+                $validator->errors()->add('port', '随机入口的主连接端口需为 1-65535 的单个整数');
+            }
+            $seen = [];
+            if (is_string($this->input('host')) && ServerEntryPointService::validPort($this->input('port'))) {
+                $seen[json_encode([ServerEntryPointService::normalizeHost($this->input('host')), (int) $this->input('port')])] = true;
+            }
+            foreach ($entries as $index => $entry) {
+                $key = json_encode([ServerEntryPointService::normalizeHost($entry['host']), (int) $entry['port']]);
+                if (isset($seen[$key])) {
+                    $validator->errors()->add("entry_points.{$index}.host", '入口地址与连接端口组合重复');
+                }
+                $seen[$key] = true;
+            }
+        });
+        $validator->after(function ($validator): void {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
             $server = $this->input('id') ? Server::find($this->input('id')) : new Server();
             if (!$server) {
                 return;
@@ -319,6 +358,10 @@ class ServerSave extends FormRequest
     public function attributes(): array
     {
         return [
+            'entry_points_enabled' => '随机入口',
+            'entry_points' => '额外入口',
+            'entry_points.*.host' => '入口地址',
+            'entry_points.*.port' => '入口连接端口',
             'subscription_label_id' => '订阅标签',
             'plan_restriction_enabled' => '套餐限制',
             'allowed_plan_ids' => '允许使用的套餐',

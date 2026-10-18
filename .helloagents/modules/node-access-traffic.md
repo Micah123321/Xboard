@@ -1,5 +1,7 @@
 # 节点访问流量
 
+2026-10-18服务覆盖补齐：72组11451条域名规则，crypto/finance/tools/push/telemetry/social/games/shopping/productivity/education分类覆盖金融钱包、推送统计及常见平台整类；OKX、OneKey、OneSignal等有官方来源依据。20类筛选使用LABELS自动校验，历史重分类与原账单不变、4次SQL。PHP87项690断言和Chrome16项通过，构建位于admin-frontend/dist-access-service-coverage。详情见../../docs/access-traffic-service-coverage.md，本轮未发布。
+
 2026-10-18 AI与未知推测：ai/messaging分类支持OpenAI等服务与Telegram官方14网段，GeoSite快照37组5786规则，排除共享跟踪域名。activity_hint/confidence/reason按原始字节方向生成低可信度线索，未知服务分类保持未知；查询/导出可见，无需写回。新快照按updated_at选择，历史重分类不改计费。PHP84项540断言与Chrome15项通过，当前为本地交付，详情见../../docs/access-traffic-service-inference.md。
 
 管理员路由 /access-traffic 提供域名排行和时间片段视图，可按用户、节点、时间、域名/IP、类别与TCP/UDP筛选，并导出CSV和中文可打印HTML报告。入口位于用户菜单、原流量记录弹窗及节点菜单。用户主题兼容原接口。

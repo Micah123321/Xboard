@@ -7,7 +7,7 @@ import type { AccessTrafficCategory, AccessTrafficConfidence, AccessTrafficConfi
 import { formatTraffic } from '@/utils/dashboard'
 
 const route = useRoute()
-const categories: Record<AccessTrafficCategory, string> = { ai: 'AI 服务', messaging: '即时通讯', video: '视频服务', web: '网页服务', download: '下载', update: '更新', sync: '同步', storage: '云存储', cdn: '通用 CDN', unknown: '未知' }
+const categories: Record<AccessTrafficCategory, string> = { crypto: '加密货币', finance: '金融服务', tools: '开发与网络工具', push: '消息推送', telemetry: '统计与遥测', social: '社交平台', games: '游戏服务', shopping: '购物电商', productivity: '办公与效率', education: '教育学习', ai: 'AI 服务', messaging: '即时通讯', video: '视频服务', web: '网页服务', download: '下载', update: '更新', sync: '同步', storage: '云存储', cdn: '通用 CDN', unknown: '未知' }
 const confidences: Record<AccessTrafficConfidence, string> = { high: '高', medium: '中', low: '低', unknown: '未知' }
 const coverageLabels = { complete: '已采集报告完整', partial: '部分采集', none: '暂无采集' }
 const sourceLabels = { request: '请求域名', sniff: '嗅探域名', ip: '仅 IP', unknown: '未知' }

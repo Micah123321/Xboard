@@ -6,7 +6,9 @@ use Symfony\Component\HttpFoundation\IpUtils;
 
 class AccessTrafficClassifier
 {
-    public const LABELS = ['ai' => 'AI 服务', 'messaging' => '即时通讯', 'video' => '视频服务', 'web' => '网页服务', 'download' => '下载',
+    public const LABELS = ['crypto' => '加密货币', 'finance' => '金融服务', 'tools' => '开发与网络工具',
+        'push' => '消息推送', 'telemetry' => '统计与遥测', 'social' => '社交平台', 'games' => '游戏服务',
+        'shopping' => '购物电商', 'productivity' => '办公与效率', 'education' => '教育学习', 'ai' => 'AI 服务', 'messaging' => '即时通讯', 'video' => '视频服务', 'web' => '网页服务', 'download' => '下载',
         'update' => '软件更新', 'sync' => '同步服务', 'storage' => '云存储', 'cdn' => '通用 CDN', 'unknown' => '未知'];
 
     public function classify(string $domain, string $source, string $ip = ''): array
@@ -40,7 +42,8 @@ class AccessTrafficClassifier
             [$suffix, $service, $category] = $rule;
             if ($domain === $suffix || str_ends_with($domain, '.' . $suffix)) {
                 return compact('service', 'category') + ['confidence' => $rule[3] ?? (in_array($category, ['video', 'update'], true) ? 'high' : 'medium'),
-                    'reason' => '匹配域名后缀 ' . $suffix . '，可信度表示服务类型识别；具体 HTTPS 内容及用户意图未知。'];
+                    'reason' => '匹配域名后缀 ' . $suffix . (isset($rule[4]) ? '；来源：' . $rule[4] : '')
+                        . '，可信度表示服务归属；具体交易、转账或消息未被采集，具体 HTTPS 内容及用户意图未知。'];
             }
         }
         $known = (new AccessTrafficDomainDatabase())->lookup($domain);

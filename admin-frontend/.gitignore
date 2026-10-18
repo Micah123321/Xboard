@@ -12,6 +12,7 @@ dist
 dist-access-traffic/
 dist-access-query-optimization/
 dist-access-ai-inference/
+dist-access-service-coverage/
 dist-access-release/
 dist-ssr
 *.local

@@ -16,7 +16,7 @@ class AccessTrafficQueryService
             'user_id' => 'nullable|integer|min:1', 'node_id' => 'nullable|integer|min:1',
             'start_time' => 'nullable|integer|min:1|max:253402214400',
             'end_time' => 'nullable|integer|min:1|max:253402214400',
-            'search' => 'nullable|string|max:253', 'category' => 'nullable|in:ai,messaging,video,web,download,update,sync,storage,cdn,unknown',
+            'search' => 'nullable|string|max:253', 'category' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(AccessTrafficClassifier::LABELS))],
             'network' => 'nullable|in:tcp,udp,unknown', 'group_by' => 'nullable|in:domain,time',
             'page' => 'nullable|integer|min:1|max:10000000', 'pageSize' => 'nullable|integer|min:1|max:100',
             'format' => 'nullable|in:csv,html',

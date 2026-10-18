@@ -147,6 +147,40 @@
     border: 1px solid rgba(0, 0, 0, 0.05);
   }
 
+  .entry-points,
+  .entry-points-list {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .entry-points > .el-form-item,
+  .entry-point-row > .el-form-item {
+    margin-bottom: 0;
+  }
+
+  .entry-point-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 180px) auto;
+    align-items: end;
+    gap: 12px;
+  }
+
+  .entry-points-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .entry-points-hint,
+  .entry-points-actions span {
+    margin: 0;
+    color: var(--xboard-text-muted);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
   .rate-item {
     display: grid;
     gap: 12px;
@@ -203,7 +237,8 @@
     }
 
     .form-grid,
-    .rate-item__grid {
+    .rate-item__grid,
+    .entry-point-row {
       grid-template-columns: 1fr;
     }
 

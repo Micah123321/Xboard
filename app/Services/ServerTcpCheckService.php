@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Cache;
 class ServerTcpCheckService
 {
     private const CONNECT_TIMEOUT_SECONDS = 2.0;
+    private const NODES_PER_BATCH = 8;
 
     public function sync(?int $limit = null): array
     {
@@ -26,8 +27,8 @@ class ServerTcpCheckService
         $servers = $query->get();
         $result = $this->emptyResult($servers->count());
 
-        foreach ($servers as $server) {
-            $this->checkServer($server, $result);
+        foreach ($servers->chunk(self::NODES_PER_BATCH) as $batch) {
+            $this->checkServers($batch->all(), $result);
         }
 
         return $result;
@@ -42,45 +43,95 @@ class ServerTcpCheckService
             return $result;
         }
 
-        $this->checkServer($server, $result);
+        $this->checkServers([$server], $result);
 
         return $result;
     }
 
-    private function checkServer(Server $server, array &$result): void
+    private function checkServers(array $servers, array &$result): void
     {
-        $result['checked']++;
-        $online = $this->isReachable((string) $server->host, (int) $server->server_port);
-
-        if ($online) {
-            ServerService::touchNode($server);
-            $result['online']++;
-            return;
+        $entries = app(ServerEntryPointService::class);
+        $candidates = [];
+        $slices = [];
+        foreach ($servers as $server) {
+            if ($server->entry_points_enabled) {
+                $pool = $entries->candidates($server);
+            } else {
+                // Keep the existing probe target unless the entry pool is explicitly enabled.
+                $port = (int) $server->server_port;
+                $pool = [['host' => (string) $server->host, 'port' => (int) $port]];
+            }
+            $slices[] = [count($candidates), count($pool)];
+            $candidates = array_merge($candidates, $pool);
         }
-
-        $this->forgetOwnHeartbeat($server);
-        if ((bool) $server->auto_online) {
-            app(ServerAutoOnlineService::class)->syncServer($server->fresh() ?? $server);
+        $health = $this->probeEntries($candidates);
+        foreach (array_values($servers) as $index => $server) {
+            $nodeHealth = array_slice($health, $slices[$index][0], $slices[$index][1]);
+            if ($server->entry_points_enabled) {
+                $entries->recordHealth($server, $nodeHealth);
+            }
+            $result['checked']++;
+            if (in_array(true, array_column($nodeHealth, 'online'), true)) {
+                ServerService::touchNode($server);
+                $result['online']++;
+                continue;
+            }
+            $this->forgetOwnHeartbeat($server);
+            if ((bool) $server->auto_online) {
+                app(ServerAutoOnlineService::class)->syncServer($server->fresh() ?? $server);
+            }
+            $result['offline']++;
         }
-        $result['offline']++;
     }
 
-    private function isReachable(string $host, int $port): bool
+    /** Probe the pool concurrently so failed entries share one connection deadline. */
+    protected function probeEntries(array $entries): array
     {
-        $address = $this->tcpAddress($host, $port);
-        if ($address === null) {
-            return false;
+        $results = array_map(fn (array $entry): array => $entry + ['online' => false], $entries);
+        $pending = [];
+        try {
+            foreach ($entries as $index => $entry) {
+                $address = $this->tcpAddress($entry['host'], $entry['port']);
+                if ($address === null) {
+                    continue;
+                }
+                $errno = 0;
+                $errstr = '';
+                $socket = @stream_socket_client($address, $errno, $errstr,
+                    self::CONNECT_TIMEOUT_SECONDS, STREAM_CLIENT_CONNECT | STREAM_CLIENT_ASYNC_CONNECT);
+                if (is_resource($socket)) {
+                    stream_set_blocking($socket, false);
+                    $pending[$index] = $socket;
+                }
+            }
+            // DNS resolution during socket creation must not consume other entries' connect window.
+            $deadline = microtime(true) + self::CONNECT_TIMEOUT_SECONDS;
+            while ($pending && ($remaining = $deadline - microtime(true)) > 0) {
+                $read = null;
+                $write = array_values($pending);
+                $except = array_values($pending);
+                $seconds = (int) $remaining;
+                $selected = @stream_select($read, $write, $except, $seconds,
+                    (int) (($remaining - $seconds) * 1000000));
+                if ($selected === false || $selected === 0) {
+                    break;
+                }
+                foreach ($pending as $index => $socket) {
+                    if (!in_array($socket, $write, true) && !in_array($socket, $except, true)) {
+                        continue;
+                    }
+                    $results[$index]['online'] = !in_array($socket, $except, true)
+                        && @stream_socket_get_name($socket, true) !== false;
+                    fclose($socket);
+                    unset($pending[$index]);
+                }
+            }
+        } finally {
+            foreach ($pending as $socket) {
+                fclose($socket);
+            }
         }
-
-        $errno = 0;
-        $errstr = '';
-        $socket = @stream_socket_client($address, $errno, $errstr, self::CONNECT_TIMEOUT_SECONDS, STREAM_CLIENT_CONNECT);
-        if (!is_resource($socket)) {
-            return false;
-        }
-
-        fclose($socket);
-        return true;
+        return $results;
     }
 
     private function tcpAddress(string $host, int $port): ?string

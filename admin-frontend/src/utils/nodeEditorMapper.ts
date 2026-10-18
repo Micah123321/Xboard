@@ -4,7 +4,7 @@ import type {
   AdminNodeSavePayload,
   AdminNodeType,
 } from '@/types/api'
-import { applySnellNodeConstraints, createEmptyNodeForm, HYSTERIA_DEFAULTS, type NodeFormModel } from './nodeEditorOptions'
+import { applySnellNodeConstraints, createEmptyNodeForm, createNodeEntryPoint, HYSTERIA_DEFAULTS, normalizeNodeEntryHost, type NodeFormModel } from './nodeEditorOptions'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -199,8 +199,12 @@ export function toNodeFormModel(node?: AdminNodeItem | null): NodeFormModel {
     : toNullableNumber(node.subscription_label_id)
   form.routeIds = toNumberArray(node.route_ids)
   form.machineId = node.machine_id ?? null
-  form.host = toStringValue(node.host)
+  form.host = normalizeNodeEntryHost(toStringValue(node.host))
   form.port = toStringValue(node.port)
+  form.entryPointsEnabled = toBooleanValue(node.entry_points_enabled)
+  form.entryPoints = Array.isArray(node.entry_points)
+    ? node.entry_points.map((entry) => createNodeEntryPoint(normalizeNodeEntryHost(toStringValue(entry.host)), toStringValue(entry.port)))
+    : []
   form.serverPort = toStringValue(node.server_port)
   form.parentId = node.parent_id ?? null
   form.childRateEnabled = Boolean(form.parentId) && toBooleanValue(node.child_rate_enabled)
@@ -575,8 +579,13 @@ export function toNodeSavePayload(form: NodeFormModel): AdminNodeSavePayload {
     parent_id: form.parentId || null,
     child_rate_enabled: Boolean(form.parentId) && form.type !== 'snell' && form.childRateEnabled,
     enabled: form.enabled,
-    host: form.host.trim(),
+    host: normalizeNodeEntryHost(form.host),
     port: form.port.trim(),
+    entry_points_enabled: form.entryPointsEnabled,
+    entry_points: form.entryPoints.map((entry) => ({
+      host: normalizeNodeEntryHost(entry.host),
+      port: Number(entry.port),
+    })),
     server_port: form.serverPort.trim(),
     tags: [...new Set(form.tags.map((item) => item.trim()).filter(Boolean))],
     rate: Math.max(0.01, Number(form.rate) || 1),

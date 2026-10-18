@@ -20,6 +20,8 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property string $host 主机地址
  * @property string|int $port 端口
  * @property int|null $server_port 服务器端口
+ * @property bool $entry_points_enabled 是否随机选择订阅入口
+ * @property array|null $entry_points 额外订阅入口地址与连接端口
  * @property array|null $group_ids 分组IDs
  * @property bool $plan_restriction_enabled 是否限制可用套餐
  * @property array|null $allowed_plan_ids 允许使用的套餐IDs
@@ -161,6 +163,8 @@ class Server extends Model
         'auto_online_cooldown_enabled' => 'boolean',
         'gfw_check_enabled' => 'boolean',
         'tcp_check_enabled' => 'boolean',
+        'entry_points_enabled' => 'boolean',
+        'entry_points' => 'array',
         'bandwidth_check_enabled' => 'boolean',
         'gfw_auto_hidden' => 'boolean',
         'gfw_auto_action_at' => 'integer',

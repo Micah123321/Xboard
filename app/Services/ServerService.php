@@ -88,7 +88,17 @@ class ServerService
             })
             ->values();
 
-        $servers = collect($servers)->map(function ($server) use ($user) {
+        $entries = app(ServerEntryPointService::class);
+        $servers = collect($servers)->map(function ($server) use ($user, $entries) {
+            $entry = $entries->selectForSubscription($server);
+            if ($entry === null) {
+                return null;
+            }
+            // Only mutate this response, leaving persisted endpoints and node listeners intact.
+            $server = clone $server;
+            $server->host = $entry['host'];
+            $server->port = $entry['port'];
+            $server->makeHidden(['entry_points_enabled', 'entry_points']);
             // 判断动态端口
             if (str_contains($server->port, '-')) {
                 $port = $server->port;
@@ -100,7 +110,7 @@ class ServerService
             $server->password = $server->generateServerPassword($user);
             $server->rate = $server->getCurrentRate();
             return $server;
-        })->toArray();
+        })->filter()->values()->toArray();
 
         return $servers;
     }

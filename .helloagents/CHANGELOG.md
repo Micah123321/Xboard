@@ -2,6 +2,8 @@
 
 ## 2026-10-18
 
+- **[node-access-traffic / service-coverage]**: 补齐GeoSite未选中的交易所、钱包与通用类别，快照扩为72组11451规则、422上游依赖；增加加密货币/金融/工具/推送/遥测/社交/游戏/电商/效率/教育分类。OKX、OKLink、OneKey、ITDOG、OneSignal、BytePlus依据官方文档与源码识别，区分浏览器、钱包和交易所，不以访问推断交易。20类筛选与分批历史重分类保持4条SQL及原扣费不变；PHP87项690断言、管理员构建、Chrome16项mock交互通过。无新增迁移、节点改动或线上发布；说明见docs/access-traffic-service-coverage.md。
+
 - **[node-access-traffic / ai-and-inference]**: 新增AI与即时通讯分类；补OpenAI/Claude/Gemini等独立域名、夸克网盘及Telegram官方IPv4/IPv6专用网段识别，37组5786条GeoSite规则排除共享广告/遥测误判。增加独立低可信度上下行流量线索及CSV/HTML说明，不把未知流量直接归类视频；新快照优先于过期运行时数据。历史重分类支持IP依据并保持扣费不变。PHP84项540断言、管理员构建及Chrome15项mock交互通过；未发布，无新增迁移或节点改动，说明见docs/access-traffic-service-inference.md。
 
 - **[node-access-traffic / query-and-classification]**: 合并流量汇总、分类、采集区间与异常统计扫描，窗口计数复用分页分组，旧数据库回退轻量计数；补充待处理/计费缺口覆盖索引，百万条隔离 SQLite 完整响应对照一致，中位耗时 2.64s→1.55s（约41%），正常请求8→4条SQL。用户列及报告增加邮箱，过滤::/0.0.0.0占位目标而保留计费与报告幂等。接入24组5414条GeoSite本地规则、MIT许可与原子更新/失败回退，新增EOS云存储与历史分批重分类；页面展示识别依据及数据库状态。PHP76项438断言、Go四包与Linux构建、管理员构建及Chrome14项mock交互通过；未生产部署、迁移或MySQL实测。说明见docs/access-traffic-query-optimization.md。

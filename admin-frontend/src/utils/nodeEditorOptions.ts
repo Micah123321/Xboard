@@ -13,6 +13,19 @@ export interface NodeRateRangeForm {
   rate: number
 }
 
+export interface NodeEntryPointForm {
+  key: string
+  host: string
+  port: string
+}
+
+export const NODE_ENTRY_POINT_LIMIT = 20
+let entryPointSequence = 0
+
+export function createNodeEntryPoint(host = '', port = ''): NodeEntryPointForm {
+  return { key: `entry-point-${++entryPointSequence}`, host, port }
+}
+
 export interface NodeFormModel {
   id?: number
   originalType: AdminNodeType | ''
@@ -37,6 +50,8 @@ export interface NodeFormModel {
   machineId: number | null
   host: string
   port: string
+  entryPointsEnabled: boolean
+  entryPoints: NodeEntryPointForm[]
   serverPort: string
   parentId: number | null
   childRateEnabled: boolean
@@ -309,6 +324,8 @@ export function createEmptyNodeForm(): NodeFormModel {
     machineId: null,
     host: '',
     port: '',
+    entryPointsEnabled: false,
+    entryPoints: [],
     serverPort: '',
     parentId: null,
     childRateEnabled: false,
@@ -508,6 +525,61 @@ export function getNodeProtocolHint(type: AdminNodeType | '' | string): string {
   return hints[type] ?? '请选择协议后继续配置。'
 }
 
+function nodeEntryHostKey(value: string): string | null {
+  const host = value.trim()
+  const bareHost = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host
+  if (bareHost.includes(':')) {
+    if (!/^[0-9a-fA-F:.]+$/.test(bareHost)) return null
+    try {
+      // The URL parser validates and canonicalizes equivalent IPv6 spellings.
+      return new URL(`http://[${bareHost}]/`).hostname.slice(1, -1)
+    } catch {
+      return null
+    }
+  }
+  if (host !== bareHost) return null
+  const normalized = host.toLowerCase().replace(/\.$/, '')
+  if (/^[\d.]+$/.test(normalized)) {
+    return /^(?:0|[1-9]\d{0,2})(?:\.(?:0|[1-9]\d{0,2})){3}$/.test(normalized)
+      && normalized.split('.').every((part) => Number(part) <= 255) ? normalized : null
+  }
+  return normalized.length > 0 && normalized.length <= 253
+    && normalized.split('.').every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))
+    ? normalized : null
+}
+
+export function normalizeNodeEntryHost(value: string): string {
+  const host = value.trim()
+  return host.includes(':') ? nodeEntryHostKey(host) ?? host : host
+}
+
+function isNodeEntryPort(value: string): boolean {
+  return /^\d+$/.test(value.trim()) && Number(value) >= 1 && Number(value) <= 65535
+}
+
+function validateNodeEntryPoints(form: NodeFormModel): string | null {
+  if (form.entryPoints.length > NODE_ENTRY_POINT_LIMIT) return '额外入口最多 20 条'
+  if (form.entryPointsEnabled && form.entryPoints.length === 0) return '开启随机入口前，请至少添加一条额外入口'
+  const mainHost = nodeEntryHostKey(form.host)
+  const mainPortValid = isNodeEntryPort(form.port)
+  if (form.entryPointsEnabled) {
+    if (!mainHost) return '主入口地址需为域名、IPv4 或 IPv6，请勿填写 URL'
+    if (!mainPortValid) return '主入口连接端口需为 1-65535 的单一整数'
+  }
+  const seen = new Set<string>()
+  if (mainHost && mainPortValid) seen.add(`${mainHost}|${Number(form.port)}`)
+  for (const [index, entry] of form.entryPoints.entries()) {
+    if (!entry.host.trim() || !entry.port.trim()) return `请完整填写额外入口 ${index + 1} 的地址与连接端口`
+    const host = nodeEntryHostKey(entry.host)
+    if (!host) return `额外入口 ${index + 1} 的地址需为域名、IPv4 或 IPv6，请勿填写 URL`
+    if (!isNodeEntryPort(entry.port)) return `额外入口 ${index + 1} 的连接端口需为 1-65535 的单一整数`
+    const key = `${host}|${Number(entry.port)}`
+    if (seen.has(key)) return `额外入口 ${index + 1} 与主入口或其他额外入口重复`
+    seen.add(key)
+  }
+  return null
+}
+
 export function validateNodeForm(form: NodeFormModel, plans: readonly Pick<AdminPlanListItem, 'id'>[] = []): string | null {
   if (form.subscriptionLabelId == null && form.planRestrictionEnabled) {
     if (form.allowedPlanIds.length === 0) return '启用套餐限制后，请至少选择一个套餐'
@@ -519,6 +591,8 @@ export function validateNodeForm(form: NodeFormModel, plans: readonly Pick<Admin
   if (!form.type) {
     return '请选择协议类型'
   }
+  const entryPointsError = validateNodeEntryPoints(form)
+  if (entryPointsError) return entryPointsError
   if (form.rateTimeEnable) {
     const validRanges = form.rateTimeRanges.filter((item) => item.start.trim() && item.end.trim() && Number(item.rate) > 0)
     if (validRanges.length === 0) {

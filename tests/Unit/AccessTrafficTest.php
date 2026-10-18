@@ -507,6 +507,52 @@ class AccessTrafficTest extends TestCase
         self::assertSame($accountBefore, (array) DB::table('v2_user')->where('id', 1)->first());
     }
 
+    public function test_crypto_and_other_service_categories_refresh_historic_filters_without_extra_queries_or_charging(): void
+    {
+        $samples = [
+            ['static.okx.com', 'crypto'], ['static.oklink.com', 'crypto'],
+            ['data.onekey.so', 'crypto'], ['utility.onekeycn.com', 'crypto'], ['uni.onekey-asset.com', 'crypto'],
+            ['www.itdog.cn', 'tools'], ['api.onesignal.com', 'push'], ['toblog.tobsnssdk.com', 'telemetry'],
+        ];
+        foreach ($samples as $index => [$domain, $category]) {
+            $name = 'service-' . $index;
+            $id = $this->service->receive(1, $this->payload($name, [$this->entry($domain, 3, 5)]), $this->now);
+            $this->bill($name); $this->service->process($id);
+        }
+        $query = new AccessTrafficQueryService();
+        $filters = $query->filters(['start_time' => $this->now - 1000, 'end_time' => $this->now + 1, 'pageSize' => 1]);
+        DB::connection()->enableQueryLog(); DB::connection()->flushQueryLog();
+        $all = $query->index($filters);
+        self::assertCount(4, DB::connection()->getQueryLog());
+        DB::connection()->disableQueryLog();
+        self::assertSame(8, $all['total']);
+        self::assertSame(64, $all['summary']['raw_total']);
+        self::assertSame(64, $all['summary']['identified_bytes']);
+        self::assertSame(88, $all['summary']['billed_total']);
+        self::assertSame(40, collect($all['analysis'])->firstWhere('category', 'crypto')['raw_total']);
+        foreach (array_keys(AccessTrafficClassifier::LABELS) as $category) {
+            self::assertSame($category, $query->filters(['category' => $category])['category']);
+        }
+        $before = DB::table('v2_access_traffic')->orderBy('id')->get(['raw_u', 'raw_d', 'billed_u', 'billed_d', 'rate'])->toArray();
+        $account = (array) DB::table('v2_user')->where('id', 1)->first();
+        DB::table('v2_access_traffic')->update(['service' => '', 'category' => 'unknown', 'confidence' => 'unknown', 'reason' => 'previous subset']);
+        $reclassifier = new \App\Services\AccessTrafficReclassifier();
+        $maximum = (int) DB::table('v2_access_traffic')->max('id');
+        $last = 0; $updated = 0;
+        while ($last < $maximum) {
+            $chunk = $reclassifier->chunk($last, $maximum, 2);
+            $last = $chunk['last_id']; $updated += $chunk['updated'];
+        }
+        self::assertSame(8, $updated);
+        self::assertSame(5, $this->queryResult(['category' => 'crypto'])['total']);
+        self::assertSame(1, $this->queryResult(['category' => 'tools'])['total']);
+        self::assertSame(1, $this->queryResult(['category' => 'push'])['total']);
+        self::assertSame(1, $this->queryResult(['category' => 'telemetry'])['total']);
+        self::assertEquals($before, DB::table('v2_access_traffic')->orderBy('id')->get(['raw_u', 'raw_d', 'billed_u', 'billed_d', 'rate'])->toArray());
+        self::assertSame($account, (array) DB::table('v2_user')->where('id', 1)->first());
+        self::assertSame(0, $reclassifier->chunk(0, $maximum)['updated']);
+    }
+
     public function test_coverage_exposes_uncollected_reports_and_partial_batches(): void
     {
         $this->bill('uncaptured');

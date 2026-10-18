@@ -43,7 +43,7 @@ Rows: id(string), user_id, node_id, node_name, domain, ip, port, network, domain
 
 Summary: raw_u/raw_d/raw_total, billed_u/billed_d/billed_total, identified_bytes, unidentified_bytes, identified_percent, unattributed_bytes, report_count, partial_report_count, unsettled_report_count. All summaries cover the entire filtered set, not just the page.
 
-Analysis array: category, category_label, raw_total, share(percent), confidence, reason. Categories: ai, messaging, video, web, download, update, sync, storage, cdn, unknown. Separate activity_hint/activity_confidence/activity_reason describe low-confidence traffic-direction clues; they do not change service category. Classifications are evidence-based inferences; generic CDN stays cdn. Never describe a title, page or user intent as observed. Match normalized domains on label-boundary suffixes only.
+Analysis array: category, category_label, raw_total, share(percent), confidence, reason. Categories: crypto, finance, tools, push, telemetry, social, games, shopping, productivity, education, ai, messaging, video, web, download, update, sync, storage, cdn, unknown. Separate activity_hint/activity_confidence/activity_reason describe low-confidence traffic-direction clues; they do not change service category. Classifications are evidence-based inferences; generic CDN stays cdn. Never describe a title, page or user intent as observed. Match normalized domains on label-boundary suffixes only.
 
 Meta: timezone, bucket_seconds, retention_days, enabled, first_collected_at(nullable), last_collected_at(nullable), coverage(complete|partial|none), reason. Complete applies only to the collected reports, not proof of all traffic across uncaptured intervals/nodes; expose collection gaps.
 

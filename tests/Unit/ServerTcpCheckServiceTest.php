@@ -12,13 +12,33 @@ use Tests\TestCase;
 
 class ServerTcpCheckServiceTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase {
+        refreshDatabase as private refreshDatabaseWithConfiguredConnection;
+    }
+
+    public function refreshDatabase(): void
+    {
+        config()->set('database.default', 'sqlite');
+        config()->set('database.connections.sqlite.database', ':memory:');
+        \Illuminate\Support\Facades\DB::purge('sqlite');
+        $this->refreshDatabaseWithConfiguredConnection();
+    }
 
     protected function setUp(): void
     {
         parent::setUp();
 
+        config()->set('cache.default', 'array');
+        config()->set('cache.stores.redis', ['driver' => 'array']);
+        config()->set('queue.default', 'sync');
         Cache::flush();
+        $redis = \Mockery::mock();
+        $redis->shouldReceive('publish')->andReturn(1);
+        $redis->shouldReceive('sadd')->andReturn(1);
+        \Illuminate\Support\Facades\Redis::swap($redis);
+        $setting = new \App\Support\Setting();
+        (new \ReflectionProperty(\App\Support\Setting::class, 'cache'))->setValue($setting, Cache::store('array'));
+        $this->app->instance(\App\Support\Setting::class, $setting);
     }
 
     public function test_tcp_checked_child_does_not_fall_back_to_parent_runtime_cache(): void
@@ -49,6 +69,7 @@ class ServerTcpCheckServiceTest extends TestCase
             $child = $this->makeServer([
                 'name' => 'reachable-child',
                 'host' => '127.0.0.1',
+                'port' => '1',
                 'server_port' => $port,
                 'parent_id' => $this->makeServer(['name' => 'parent'])->id,
                 'auto_online' => true,
@@ -74,6 +95,7 @@ class ServerTcpCheckServiceTest extends TestCase
         $child = $this->makeServer([
             'name' => 'unreachable-child',
             'host' => '127.0.0.1',
+            'port' => '1',
             'server_port' => $port,
             'parent_id' => $this->makeServer(['name' => 'parent'])->id,
             'auto_online' => true,

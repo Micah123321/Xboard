@@ -83,7 +83,7 @@ class AccessTrafficDomainDatabase
         $download = function (string $name) use (&$texts, &$data): string {
             if (!preg_match('/^[a-z0-9][a-z0-9_.!-]{0,100}$/D', $name)) throw new RuntimeException('Invalid GeoSite group.');
             if (isset($texts[$name])) return $texts[$name];
-            if (count($texts) >= 256) throw new RuntimeException('GeoSite include limit exceeded.');
+            if (count($texts) >= 512) throw new RuntimeException('GeoSite include limit exceeded.');
             $response = Http::connectTimeout(10)->timeout(25)->retry(2, 250, throw: false)->withOptions(['allow_redirects' => false,
                 'progress' => static function ($total, $downloaded): void {
                     if ($total > 1024 * 1024 || $downloaded > 1024 * 1024) throw new RuntimeException('GeoSite source file too large.');

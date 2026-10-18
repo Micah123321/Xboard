@@ -48,8 +48,16 @@ const row = (domain = 'cdn.example', override = {}) => ({
   billed_u: null, billed_d: null, billed_total: null, rate: null, service: 'Generic CDN', category: 'cdn', confidence: 'low',
   reason: '通用 CDN 域名匹配，实际用途未知', connections: 3, share: 12.5, coverage: 'partial', ...override,
 })
+const serviceExamples = [
+  ['static.okx.com', 'OKX 交易所静态资源', 'crypto'],
+  ['static.oklink.com', 'OKLink 区块链浏览器静态资源', 'crypto'],
+  ['utility.onekeycn.com', 'OneKey 钱包 API', 'crypto'],
+  ['www.itdog.cn', 'ITDOG 网络测速与诊断工具', 'tools'],
+  ['api.onesignal.com', 'OneSignal 消息推送', 'push'],
+  ['toblog.tobsnssdk.com', 'BytePlus SDK 日志与统计上报', 'telemetry'],
+]
 const traffic = params => ({
-  data: params.get('search') === 'empty' ? [] : [row(params.get('search') === 'fast' ? 'fast.example' : params.get('search') === 'slow' ? 'slow.example' : params.get('page') === '2' ? 'page-two.example' : 'cdn.example'), row('', { id: 'row-2', ip: '', ip_unavailable_reason: '节点上报了未指定地址，未采集到真实目标 IP', domain_source: 'unknown', service: '', category: 'unknown', confidence: 'unknown', reason: '目的地未归属', billed_u: 2000, billed_d: 18000, billed_total: 20000, rate: 2, network: 'unknown', coverage: 'complete', raw_u: 1000, raw_d: 2097152, raw_total: 2098152, activity_hint: '疑似下载 / 内容接收', activity_confidence: 'low', activity_reason: '接收占主导，仅为流量形态线索。真实目标未采集。' }), row('chatgpt.com', { id: 'row-ai', service: 'ChatGPT / OpenAI', category: 'ai', confidence: 'high', reason: '匹配域名后缀 chatgpt.com，服务归属可信度高' }), row('', { id: 'row-ip', ip: '91.108.56.137', domain_source: 'ip', service: 'Telegram', category: 'messaging', confidence: 'medium', reason: '目标 IP 匹配 Telegram 官方专用网段 91.108.56.0/22' })],
+  data: params.get('search') === 'empty' ? [] : params.get('search') === 'service-coverage' ? serviceExamples.map(([domain, service, category], index) => row(domain, { id: `coverage-${index}`, service, category, confidence: 'high', reason: '匹配经过核实的官方服务域名，未采集具体交易或消息内容' })) : [row(params.get('search') === 'fast' ? 'fast.example' : params.get('search') === 'slow' ? 'slow.example' : params.get('page') === '2' ? 'page-two.example' : 'cdn.example'), row('', { id: 'row-2', ip: '', ip_unavailable_reason: '节点上报了未指定地址，未采集到真实目标 IP', domain_source: 'unknown', service: '', category: 'unknown', confidence: 'unknown', reason: '目的地未归属', billed_u: 2000, billed_d: 18000, billed_total: 20000, rate: 2, network: 'unknown', coverage: 'complete', raw_u: 1000, raw_d: 2097152, raw_total: 2098152, activity_hint: '疑似下载 / 内容接收', activity_confidence: 'low', activity_reason: '接收占主导，仅为流量形态线索。真实目标未采集。' }), row('chatgpt.com', { id: 'row-ai', service: 'ChatGPT / OpenAI', category: 'ai', confidence: 'high', reason: '匹配域名后缀 chatgpt.com，服务归属可信度高' }), row('', { id: 'row-ip', ip: '91.108.56.137', domain_source: 'ip', service: 'Telegram', category: 'messaging', confidence: 'medium', reason: '目标 IP 匹配 Telegram 官方专用网段 91.108.56.0/22' })],
   total: params.get('search') === 'empty' ? 0 : 41,
   summary: { raw_u: 8000, raw_d: 3137728, raw_total: 3145728, billed_u: 2000, billed_d: 18000, billed_total: 20000, identified_bytes: 1047576, unidentified_bytes: 2098152, identified_percent: 33.30, unattributed_bytes: 2098152, report_count: 4, partial_report_count: 1, unsettled_report_count: 1 },
   analysis: [{ category: 'cdn', category_label: '通用 CDN', raw_total: 1027576, share: 32.67, confidence: 'low', reason: '域名后缀依据，实际用途未知' }, { category: 'ai', category_label: 'AI 服务', raw_total: 10000, share: 0.32, confidence: 'high', reason: 'OpenAI 域名规则' }, { category: 'messaging', category_label: '即时通讯', raw_total: 10000, share: 0.32, confidence: 'medium', reason: '官方服务专用网段' }, { category: 'unknown', category_label: '未知', raw_total: 2098152, share: 66.70, confidence: 'unknown', reason: '没有目的地证据' }],
@@ -131,6 +139,24 @@ try {
   assert.ok(await page.getByText('AI 服务（推断） · 服务识别可信度 高', { exact: true }).count())
   assert.ok(await page.getByText('流量形态（低可信度）：疑似下载 / 内容接收', { exact: true }).count())
   record('AI and dedicated IP services are separated from low confidence activity hints')
+
+  await page.getByRole('textbox', { name: '域名 / IP 搜索', exact: true }).fill('service-coverage')
+  await apply()
+  await visible('static.okx.com')
+  for (const [, service] of serviceExamples) assert.ok(await page.getByText(service + ' · 请求域名', { exact: true }).count(), service)
+  for (const label of ['加密货币', '开发与网络工具', '消息推送', '统计与遥测']) {
+    await page.locator('.filter-grid .el-select').nth(0).click()
+    await page.getByRole('option', { name: label, exact: true }).click()
+    await apply()
+    assert.equal(requests.at(-1).category, { 加密货币: 'crypto', 开发与网络工具: 'tools', 消息推送: 'push', 统计与遥测: 'telemetry' }[label])
+  }
+  await page.locator('.records-card').screenshot({ path: join(artifacts, 'service-coverage.png') })
+  record('verified exchange wallet tools push and telemetry services render with working category filters')
+  await page.getByRole('textbox', { name: '域名 / IP 搜索', exact: true }).fill('')
+  await page.locator('.filter-grid .el-select').nth(0).click()
+  await page.getByRole('option', { name: '通用 CDN', exact: true }).click()
+  await apply()
+  await visible('cdn.example')
 
   await page.getByRole('button', { name: 'Go to next page' }).click()
   await visible('page-two.example')

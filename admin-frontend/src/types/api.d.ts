@@ -946,7 +946,7 @@ export interface AdminTrafficLogResult extends AdminPaginationResult<AdminTraffi
   summary: TrafficAmount
 }
 
-export type AccessTrafficCategory = 'ai' | 'messaging' | 'video' | 'web' | 'download' | 'update' | 'sync' | 'storage' | 'cdn' | 'unknown'
+export type AccessTrafficCategory = 'crypto' | 'finance' | 'tools' | 'push' | 'telemetry' | 'social' | 'games' | 'shopping' | 'productivity' | 'education' | 'ai' | 'messaging' | 'video' | 'web' | 'download' | 'update' | 'sync' | 'storage' | 'cdn' | 'unknown'
 export type AccessTrafficConfidence = 'high' | 'medium' | 'low' | 'unknown'
 export type AccessTrafficCoverage = 'complete' | 'partial' | 'none'
 
@@ -1146,6 +1146,11 @@ export interface AdminNodeBandwidthHealth {
   success_count: number
 }
 
+export interface AdminNodeEntryPoint {
+  host: string
+  port: number
+}
+
 export interface AdminNodeItem {
   id: number
   name: string
@@ -1153,6 +1158,8 @@ export interface AdminNodeItem {
   code?: string | null
   host: string
   port: number | string | null
+  entry_points_enabled?: boolean
+  entry_points?: AdminNodeEntryPoint[]
   server_port?: number | null
   group_ids?: Array<number | string> | null
   plan_restriction_enabled?: boolean
@@ -1293,6 +1300,8 @@ export interface AdminNodeSavePayload {
   enabled?: boolean
   host: string
   port: number | string
+  entry_points_enabled: boolean
+  entry_points: AdminNodeEntryPoint[]
   server_port: number | string
   tags?: string[]
   rate: number
