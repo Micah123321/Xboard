@@ -2,6 +2,12 @@
 
 ## 2026-10-18
 
+- **[release / classification-priority]**: 发布复核修复 NVIDIA、联想和网易通用组覆盖专业分类的问题；Hugging Face 保持 AI、网易云课堂保持教育、Filez 保持网盘，同步重建快照并新增离线回归。生产部署模板统一后端 `unless-stopped`，避免主机重启后服务缺失。
+
+- **[node-access-traffic / calendar-day-review]**: 按北京时间10月17全天及18日截至17:13:41只读复评1394834明细，前10000日/目标组覆盖99.8908%未知量。两小时分段克服单条聚合15秒上限，日期互斥、数据守恒；逐日unknown覆盖8.3384%→23.8228%、48.2456%→61.4829%，新增45.865GiB/958组。补Zenodo、Pixiv、Oculus、DLsite、网易、游戏平台下载及有来源的社区视频/下载规则，124组13753规则；保留93.133GiB缺目标与48.068GiB仅IP缺口。PHP89项866断言、10项日期采样检查通过。18日未结束不冒称全天，未生产发布/重分类，报告见docs/access-traffic-calendar-review-2026-10-17-18.md。
+
+- **[node-access-traffic / unknown-sample-review]**: 生产只读采样北京时间13:56:49–16:56:49的unknown前2000目标，覆盖99.9472%未知字节；同批样本规则覆盖3.5644%→68.7057%，新增识别26.521GiB、263组。补鸣潮/库洛、独立AI网关精确主机、jsDelivr、Google Public DNS等证据分级规则，GeoSite扩至96组12461规则；官方/维护清单/站点自述区分可信度，流量频次不加权成准确率。正反例证据保留于resources/data/access-traffic/reviewed-evidence.json；PHP89项800断言及采样SQL11项检查通过，历史重分类保持原始量/计费/账户不变。未部署或更新生产分类，报告见docs/access-traffic-unknown-review-2026-10-18.md。
+
 - **[node-access-traffic / service-coverage]**: 补齐GeoSite未选中的交易所、钱包与通用类别，快照扩为72组11451规则、422上游依赖；增加加密货币/金融/工具/推送/遥测/社交/游戏/电商/效率/教育分类。OKX、OKLink、OneKey、ITDOG、OneSignal、BytePlus依据官方文档与源码识别，区分浏览器、钱包和交易所，不以访问推断交易。20类筛选与分批历史重分类保持4条SQL及原扣费不变；PHP87项690断言、管理员构建、Chrome16项mock交互通过。无新增迁移、节点改动或线上发布；说明见docs/access-traffic-service-coverage.md。
 
 - **[node-access-traffic / ai-and-inference]**: 新增AI与即时通讯分类；补OpenAI/Claude/Gemini等独立域名、夸克网盘及Telegram官方IPv4/IPv6专用网段识别，37组5786条GeoSite规则排除共享广告/遥测误判。增加独立低可信度上下行流量线索及CSV/HTML说明，不把未知流量直接归类视频；新快照优先于过期运行时数据。历史重分类支持IP依据并保持扣费不变。PHP84项540断言、管理员构建及Chrome15项mock交互通过；未发布，无新增迁移或节点改动，说明见docs/access-traffic-service-inference.md。

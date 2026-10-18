@@ -553,6 +553,40 @@ class AccessTrafficTest extends TestCase
         self::assertSame(0, $reclassifier->chunk(0, $maximum)['updated']);
     }
 
+    public function test_reviewed_game_gateway_cdn_and_dns_rules_reclassify_without_changing_traffic_or_accounts(): void
+    {
+        $examples = ['cdn-huoshan-hw-mc.aki-game.net', 'codex.ccbvv.com', 'cdn.jsdelivr.net', 'other.ccbvv.com', ''];
+        foreach ($examples as $index => $domain) {
+            $entry = $this->entry($domain, 3, 5);
+            if ($domain === '') $entry = array_replace($entry, ['ip' => '8.8.4.4', 'domain_source' => 'ip']);
+            $name = 'reviewed-' . $index;
+            $id = $this->service->receive(1, $this->payload($name, [$entry]), $this->now);
+            $this->bill($name); $this->service->process($id);
+        }
+        $trafficBefore = DB::table('v2_access_traffic')->orderBy('id')->get(['raw_u', 'raw_d', 'billed_u', 'billed_d', 'rate'])->toArray();
+        $accountBefore = (array) DB::table('v2_user')->where('id', 1)->first();
+        DB::table('v2_access_traffic')->update(['service' => '', 'category' => 'unknown', 'confidence' => 'unknown', 'reason' => 'previous rules']);
+        $reclassifier = new \App\Services\AccessTrafficReclassifier();
+        $through = (int) DB::table('v2_access_traffic')->max('id');
+        $last = 0;
+        while ($last < $through) $last = $reclassifier->chunk($last, $through, 2)['last_id'];
+        $result = $this->queryResult();
+        self::assertSame(5, $result['total']);
+        self::assertSame(40, $result['summary']['raw_total']);
+        self::assertSame(32, $result['summary']['identified_bytes']);
+        self::assertSame(55, $result['summary']['billed_total']);
+        foreach (['games', 'ai', 'cdn', 'tools', 'unknown'] as $category) self::assertSame(1, $this->queryResult(['category' => $category])['total']);
+        $rows = collect($result['data'])->keyBy('domain');
+        self::assertSame('medium', $rows['codex.ccbvv.com']['confidence']);
+        self::assertStringContainsString('完整域名', $rows['codex.ccbvv.com']['reason']);
+        self::assertSame('medium', $rows['cdn-huoshan-hw-mc.aki-game.net']['confidence']);
+        self::assertSame('high', $rows['cdn.jsdelivr.net']['confidence']);
+        self::assertSame('unknown', $rows['other.ccbvv.com']['category']);
+        self::assertEquals($trafficBefore, DB::table('v2_access_traffic')->orderBy('id')->get(['raw_u', 'raw_d', 'billed_u', 'billed_d', 'rate'])->toArray());
+        self::assertSame($accountBefore, (array) DB::table('v2_user')->where('id', 1)->first());
+        self::assertSame(0, $reclassifier->chunk(0, $through)['updated']);
+    }
+
     public function test_coverage_exposes_uncollected_reports_and_partial_batches(): void
     {
         $this->bill('uncaptured');

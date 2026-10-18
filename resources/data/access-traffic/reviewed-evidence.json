@@ -1,0 +1,278 @@
+{
+  "version": 1,
+  "reviewed_at": "2026-10-18",
+  "policy": {
+    "high": "官方资料明确列出的专用域名或服务地址；表示服务归属证据强度，不代表用户具体操作。",
+    "medium": "维护的服务清单，或独立站点公开自述；保留来源及范围限制。",
+    "low": "只有流量形态线索，不据此给未知目标指定平台。",
+    "frequency_effect": "流量、频次和涉及用户数只影响核实优先级，不自动提高置信度。",
+    "evaluation": "同一探索样本上的规则覆盖率，不是独立标注的分类准确率。"
+  },
+  "targets": [
+    {
+      "domain": "cdn-huoshan-hw-mc.aki-game.net",
+      "source_type": "curated_list_with_first_party_corrobation",
+      "category": "games",
+      "confidence": "medium",
+      "service_contains": "库洛",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/kurogames",
+      "supporting_source": "https://prod-alicdn-gamestarter.kurogame.com/launcher/game/G153/50004_obOHXFrFanqsaIEOmuKroCcbZkQRBC7c/index.json",
+      "limitation": "官方启动器确认aki-game.net用于鸣潮资源，当前具体子域和下载文件仍按维护清单推断。"
+    },
+    {
+      "domain": "wutheringwaves.kurogames.com",
+      "source_type": "curated_list",
+      "category": "games",
+      "confidence": "medium",
+      "service_contains": "库洛",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/kurogames"
+    },
+    {
+      "domain": "codex.ccbvv.com",
+      "source_type": "self_description",
+      "match": "full",
+      "category": "ai",
+      "confidence": "medium",
+      "service_contains": "独立 AI API 网关",
+      "source": "https://codex.ccbvv.com/",
+      "limitation": "仅该完整主机；不代表OpenAI官方，也未验证真实上游模型、消息内容或训练用途。"
+    },
+    {
+      "domain": "cdn.jsdelivr.net",
+      "source_type": "first_party_documentation",
+      "category": "cdn",
+      "confidence": "high",
+      "service_contains": "jsDelivr",
+      "source": "https://www.jsdelivr.com/",
+      "limitation": "公共资源CDN归属，不用于反推客户访问了哪个具体应用。"
+    },
+    {
+      "domain": "static.higgsfield.ai",
+      "source_type": "first_party_documentation",
+      "category": "ai",
+      "confidence": "high",
+      "service_contains": "Higgsfield",
+      "source": "https://higgsfield.ai/ai-video",
+      "limitation": "官方页面引用静态影像资源；不表示用户实际生成了视频。"
+    },
+    {
+      "domain": "update.hwdns.net",
+      "source_type": "first_party_source_code",
+      "match": "full",
+      "category": "update",
+      "confidence": "medium",
+      "service_contains": "更新资源代理",
+      "source": "https://github.com/clash-verge-rev/clash-verge-rev/blob/409e59df/scripts/updater.mjs",
+      "limitation": "软件源码引用该更新代理，但代理可能服务其他软件，不归因成用户一定更新了某个指定软件。"
+    },
+    {
+      "domain": "hls-cdn77.xvideos-cdn.com",
+      "source_type": "curated_list",
+      "category": "video",
+      "confidence": "medium",
+      "service_contains": "XVideos",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/xvideos",
+      "limitation": "只识别服务平台，不记录具体影片。"
+    },
+    {
+      "domain": "lf26-cdn-tos.bytegecko.com",
+      "source_type": "curated_list",
+      "category": "web",
+      "confidence": "medium",
+      "service_contains": "字节跳动",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/bytedance"
+    },
+    {
+      "domain": "anono-cloneing.mushroomtrack.com",
+      "source_type": "curated_list",
+      "category": "video",
+      "confidence": "medium",
+      "service_contains": "Jable",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/jable",
+      "limitation": "域名含track不作为遥测证据；依据维护清单识别服务平台，具体内容未知。"
+    },
+    {
+      "domain": "crl3.digicert.com",
+      "source_type": "curated_list",
+      "category": "tools",
+      "confidence": "medium",
+      "service_contains": "DigiCert",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/digicert",
+      "limitation": "公共证书服务不等于访问了任何特定网站。"
+    },
+    {
+      "domain": "lf-package-cn.feishucdn.com",
+      "source_type": "curated_list",
+      "category": "productivity",
+      "confidence": "medium",
+      "service_contains": "飞书",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/feishu"
+    },
+    {
+      "domain": "pu.tedcdn.com",
+      "source_type": "curated_list",
+      "category": "education",
+      "confidence": "medium",
+      "service_contains": "TED",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/ted"
+    },
+    {
+      "domain": "zenodo.org",
+      "source_type": "first_party_documentation",
+      "category": "education",
+      "confidence": "high",
+      "service_contains": "Zenodo",
+      "source": "https://about.zenodo.org/",
+      "limitation": "科研资料仓库归属，不推断下载了哪篇论文、软件或数据集。"
+    },
+    {
+      "domain": "vdownload.hembed.com",
+      "source_type": "community_rule",
+      "category": "video",
+      "confidence": "medium",
+      "service_contains": "Hembed",
+      "source": "https://gist.github.com/iOSleep/a0edef9a791845b1bd1a3df237b9753a",
+      "supporting_source": "https://github.com/fangkuia/XPTV/blob/main/X/xptv.plugin",
+      "limitation": "社区清单的视频资源归属，仅中等可信度，不断定运营主体或具体视频。"
+    },
+    {
+      "domain": "vdownload-3.hembed.com",
+      "source_type": "community_rule",
+      "category": "video",
+      "confidence": "medium",
+      "service_contains": "Hembed",
+      "source": "https://gist.github.com/iOSleep/a0edef9a791845b1bd1a3df237b9753a"
+    },
+    {
+      "domain": "surrit.com",
+      "source_type": "community_rule",
+      "match": "full",
+      "category": "video",
+      "confidence": "medium",
+      "service_contains": "Surrit",
+      "source": "https://github.com/fangkuia/XPTV/blob/main/X/xptv.plugin",
+      "limitation": "仅当前完整主机；按社区清单识别视频分发，不认定具体内容。"
+    },
+    {
+      "domain": "ssscdn.io",
+      "source_type": "community_source_code",
+      "match": "full",
+      "category": "download",
+      "confidence": "medium",
+      "service_contains": "SSS",
+      "source": "https://greasyfork.org/en/scripts/565176-sss-automatic-download/code",
+      "limitation": "开源下载工具引用的资源主机，不代表特定上游内容或下载行为已验证。"
+    },
+    {
+      "domain": "i.pximg.net",
+      "source_type": "curated_list",
+      "category": "social",
+      "confidence": "medium",
+      "service_contains": "Pixiv",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/pixiv"
+    },
+    {
+      "domain": "securecdn-nrt6-1.oculus.com",
+      "source_type": "curated_list",
+      "category": "games",
+      "confidence": "medium",
+      "service_contains": "Oculus",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/oculus",
+      "limitation": "VR平台服务，具体App、游戏或视频用途未采集。"
+    },
+    {
+      "domain": "play.dl.dlsite.com",
+      "source_type": "curated_list",
+      "category": "shopping",
+      "confidence": "medium",
+      "service_contains": "DLsite",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/dlsite"
+    },
+    {
+      "domain": "trts.baishancdnx.cn",
+      "source_type": "curated_list",
+      "match": "full",
+      "category": "download",
+      "confidence": "medium",
+      "service_contains": "游戏平台下载",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/category-game-platforms-download",
+      "limitation": "只使用清单明确列出的完整主机，不把整个白山云网络认定为游戏下载。"
+    },
+    {
+      "domain": "api.abyss-prod-r18.dotabyss.dmmgames.com",
+      "source_type": "first_party_documentation",
+      "match": "full",
+      "category": "games",
+      "confidence": "high",
+      "service_contains": "Dot Abyss",
+      "source": "https://api.abyss-prod-r18.dotabyss.dmmgames.com/information/index",
+      "limitation": "官方公开公告确认的游戏接口，仅精确主机，不扩大至整个dmmgames.com。"
+    },
+    {
+      "domain": "h73na-12.gph.easebar.com",
+      "source_type": "curated_list",
+      "category": "web",
+      "confidence": "medium",
+      "service_contains": "网易",
+      "source": "https://github.com/v2fly/domain-list-community/blob/master/data/netease",
+      "limitation": "网易服务归属，不依编号断定具体游戏。"
+    }
+  ],
+  "dedicated_ips": [
+    {
+      "ip": "8.8.4.4",
+      "category": "tools",
+      "confidence": "high",
+      "service_contains": "Google Public DNS",
+      "source": "https://developers.google.com/speed/public-dns/docs/using"
+    },
+    {
+      "ip": "2001:4860:4860::8888",
+      "category": "tools",
+      "confidence": "high",
+      "service_contains": "Google Public DNS",
+      "source": "https://developers.google.com/speed/public-dns/docs/using"
+    }
+  ],
+  "negative_domains": [
+    "other.ccbvv.com",
+    "sub.codex.ccbvv.com",
+    "codex.ccbvv.com.attacker.test",
+    "fakecodex.ccbvv.com",
+    "fakejsdelivr.net",
+    "higgsfield.ai.attacker.test",
+    "task1.65535.space",
+    "hiadwwa.003939.xyz",
+    "some-ai.example.test",
+    "evilhembed.com",
+    "hembed.com.attacker.test",
+    "surrit.com.attacker.test",
+    "sub.surrit.com",
+    "sub.ssscdn.io",
+    "other.baishancdnx.cn",
+    "sub.trts.baishancdnx.cn",
+    "other.dmmgames.com",
+    "alist-public-download-p08.imoutoheaven.org",
+    "patch-arkre-labs.ecchi.xxx",
+    "ojfn.hzrmzz.com"
+  ],
+  "negative_ips": [
+    "103.147.22.131",
+    "103.46.230.61",
+    "151.101.76.158",
+    "8.8.4.3",
+    "8.8.8.9",
+    "2001:4860:4860::8889"
+  ],
+  "review_windows": [
+    {
+      "dates": [
+        "2026-10-17",
+        "2026-10-18"
+      ],
+      "timezone": "Asia/Shanghai",
+      "day18_status": "截至采样时刻，未结束",
+      "method": "按自然日分桶、两小时只读聚合；目标证据分级；固定样本覆盖对照"
+    }
+  ]
+}

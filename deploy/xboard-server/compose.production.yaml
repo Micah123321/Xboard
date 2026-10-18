@@ -10,7 +10,7 @@ services:
       - "${USER_PORT:-7003}:80"
   web:
     image: ${XBOARD_IMAGE:-ghcr.io/micah123321/xboard:new}
-    restart: on-failure
+    restart: unless-stopped
     depends_on: [redis]
     command: php artisan octane:start --host=0.0.0.0 --port=7001
     environment: &xboard-environment
@@ -27,7 +27,7 @@ services:
       - ./plugins:/www/plugins
   horizon:
     image: ${XBOARD_IMAGE:-ghcr.io/micah123321/xboard:new}
-    restart: on-failure
+    restart: unless-stopped
     depends_on: [redis]
     command: php artisan horizon
     environment: *xboard-environment
@@ -49,7 +49,7 @@ services:
       - "${ADMIN_PORT:-7002}:80"
   ws-server:
     image: ${XBOARD_IMAGE:-ghcr.io/micah123321/xboard:new}
-    restart: on-failure
+    restart: unless-stopped
     depends_on: [redis]
     command: php artisan ws-server start
     environment: *xboard-environment

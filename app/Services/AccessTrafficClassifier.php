@@ -25,7 +25,7 @@ class AccessTrafficClassifier
                         if (!IpUtils::checkIp($ip, $range)) continue;
                         return ['service' => $rule['service'], 'category' => $rule['category'], 'confidence' => $rule['confidence'],
                             'reason' => '目标 IP 匹配服务专用网段 ' . $range . '；来源：' . $rule['source']
-                                . '。据此推断服务归属，具体聊天、文件或媒体内容未知。'];
+                                . '。据此推断服务归属，具体请求内容及用户操作未被采集。'];
                     }
                 }
             }
@@ -40,9 +40,10 @@ class AccessTrafficClassifier
         $rules = config('access_traffic.rules', []);
         foreach ($rules as $rule) {
             [$suffix, $service, $category] = $rule;
-            if ($domain === $suffix || str_ends_with($domain, '.' . $suffix)) {
+            $exact = ($rule[5] ?? 'suffix') === 'full';
+            if ($domain === $suffix || (!$exact && str_ends_with($domain, '.' . $suffix))) {
                 return compact('service', 'category') + ['confidence' => $rule[3] ?? (in_array($category, ['video', 'update'], true) ? 'high' : 'medium'),
-                    'reason' => '匹配域名后缀 ' . $suffix . (isset($rule[4]) ? '；来源：' . $rule[4] : '')
+                    'reason' => ($exact ? '匹配完整域名 ' : '匹配域名后缀 ') . $suffix . (isset($rule[4]) ? '；来源：' . $rule[4] : '')
                         . '，可信度表示服务归属；具体交易、转账或消息未被采集，具体 HTTPS 内容及用户意图未知。'];
             }
         }

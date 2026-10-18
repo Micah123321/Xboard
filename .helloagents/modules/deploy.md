@@ -15,6 +15,7 @@
 - 用户端后端上游使用 `XBOARD_USER_BACKEND_UPSTREAM`，管理端后端上游使用 `XBOARD_ADMIN_BACKEND_UPSTREAM`；`XBOARD_BACKEND_UPSTREAM` 仅作为旧模板兼容变量保留
 - `scheduler` 服务固定执行 `php artisan schedule:work`，用于持续触发 `sync:server-gfw-checks`、`sync:server-auto-online` 和其他 Laravel Scheduler 任务
 - 模板默认使用外部 MySQL，不在 compose 中创建数据库服务，避免改变现有生产拓扑
+- 生产模板中的 HTTP、Horizon、Scheduler 和 WebSocket 统一使用 `restart: unless-stopped`；生产覆写文件也须保留该策略，现有容器可用 `docker update --restart unless-stopped` 同步修复。
 - `.env.example` 同时覆盖 Docker Compose 变量和 Laravel 运行变量，但不得包含真实 `APP_KEY`、数据库密码、邮箱密码或真实业务域名
 - `scripts/init.sh` 只创建挂载目录并在 `.env` 不存在时复制模板，不执行数据库迁移
 - `scripts/deploy.sh` 只负责初始化、拉取镜像和启动服务，不自动执行生产数据库迁移

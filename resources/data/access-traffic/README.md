@@ -1,7 +1,15 @@
 # GeoSite service domain snapshot
 
 Source: https://github.com/v2fly/domain-list-community (MIT; see LICENSE.geosite).
-The 72 selected service groups and their includes were compiled into 11451 exact/suffix rules.
+The 124 selected service groups and their includes were compiled into 13753 exact/suffix rules.
+The Beijing calendar-day review for October 17-18 added academic repositories,
+creator/VR/digital-content services, application distribution and exact game CDN hosts.
+See docs/access-traffic-calendar-review-2026-10-17-18.md for per-day coverage and
+the explicit incomplete-day boundary for October 18.
+The October 18 three-hour review added game distribution, media, certificate, productivity
+and education service groups using observed unknown targets. Reviewed positive/negative
+examples and confidence evidence are in reviewed-evidence.json; see
+docs/access-traffic-unknown-review-2026-10-18.md for the measured coverage and limits.
 Coverage includes named crypto exchanges/wallets, finance, development/network tools,
 communications, social platforms, games, shopping, productivity and education category lists.
 AI and netdisk groups are included. Shared advertising/telemetry domains are omitted.

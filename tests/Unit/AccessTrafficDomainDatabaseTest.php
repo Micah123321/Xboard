@@ -43,13 +43,23 @@ class AccessTrafficDomainDatabaseTest extends TestCase
         $this->app['config']->set('access_traffic_geosite.snapshot_path', __DIR__ . '/../../resources/data/access-traffic/geosite.json');
         $db = new AccessTrafficDomainDatabase();
         self::assertGreaterThan(5000, $db->status()['rule_count']);
-        self::assertSame(72, $db->status()['group_count']);
+        self::assertSame(count((require __DIR__ . '/../../config/access_traffic_geosite.php')['groups']), $db->status()['group_count']);
         self::assertSame('Netflix', $db->lookup('api.netflix.com')['service']);
         self::assertSame('哔哩哔哩', $db->lookup('r.acgvideo.com')['service']);
         $classified = (new AccessTrafficClassifier())->classify('ykj-eos-dg5-01.eos-dongguan-6.cmecloud.cn', 'request');
         self::assertSame('storage', $classified['category']);
         self::assertStringContainsString('移动云 EOS', $classified['service']);
         self::assertStringContainsString('用途未知', $classified['reason']);
+        Http::assertNothingSent();
+    }
+
+    public function test_specific_service_categories_precede_general_vendor_groups(): void
+    {
+        $this->app['config']->set('access_traffic_geosite.snapshot_path', __DIR__ . '/../../resources/data/access-traffic/geosite.json');
+        $classifier = new AccessTrafficClassifier();
+        foreach (['huggingface.co' => 'ai', 'hf.co' => 'ai', 'hf.space' => 'ai', 'icourse163.org' => 'education', 'filez.com' => 'storage'] as $domain => $category) {
+            self::assertSame($category, $classifier->classify($domain, 'request')['category'], $domain);
+        }
         Http::assertNothingSent();
     }
 

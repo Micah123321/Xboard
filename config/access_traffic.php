@@ -9,11 +9,24 @@ return [
     'export_max_rows' => 100000,
     // Dedicated network ranges only; shared hosting/CDN ranges are not application evidence.
     'ip_rules' => [
+        ['ranges' => ['8.8.8.8/32', '8.8.4.4/32', '2001:4860:4860::8888/128', '2001:4860:4860::8844/128'],
+            'service' => 'Google Public DNS', 'category' => 'tools', 'confidence' => 'high',
+            'source' => 'https://developers.google.com/speed/public-dns/docs/using'],
         ['ranges' => preg_split('/\s+/', trim(file_get_contents(__DIR__ . '/../resources/data/access-traffic/telegram-cidr.txt'))),
             'service' => 'Telegram', 'category' => 'messaging', 'confidence' => 'medium',
             'source' => 'https://core.telegram.org/resources/cidr.txt'],
     ],
     'rules' => [
+        ['zenodo.org', 'Zenodo 科研数据仓库', 'education', 'high', 'https://about.zenodo.org/'],
+        ['hembed.com', 'Hembed 视频资源', 'video', 'medium', 'https://gist.github.com/iOSleep/a0edef9a791845b1bd1a3df237b9753a'],
+        ['surrit.com', 'Surrit 视频分发', 'video', 'medium', 'https://github.com/fangkuia/XPTV/blob/main/X/xptv.plugin', 'full'],
+        ['ssscdn.io', 'SSS 媒体下载资源', 'download', 'medium', 'https://greasyfork.org/en/scripts/565176-sss-automatic-download/code', 'full'],
+        ['api.abyss-prod-r18.dotabyss.dmmgames.com', 'DMM / Dot Abyss 游戏接口', 'games', 'high', 'https://api.abyss-prod-r18.dotabyss.dmmgames.com/information/index', 'full'],
+        // Self-described gateways only identify the exact host, without claiming an upstream model.
+        ['codex.ccbvv.com', 'ccb codex 独立 AI API 网关', 'ai', 'medium', 'https://codex.ccbvv.com/', 'full'],
+        ['jsdelivr.net', 'jsDelivr 公共资源 CDN', 'cdn', 'high', 'https://www.jsdelivr.com/'],
+        ['higgsfield.ai', 'Higgsfield AI 影像服务', 'ai', 'high', 'https://higgsfield.ai/ai-video'],
+        ['update.hwdns.net', '软件更新资源代理', 'update', 'medium', 'https://github.com/clash-verge-rev/clash-verge-rev/blob/main/scripts/updater.mjs', 'full'],
         ['askdiandian.com', '点点 AI', 'ai', 'high', 'https://www.diandianlife.top/protocol?protocolName=terms'],
         ['diandianlife.top', '点点 AI', 'ai', 'high', 'https://www.diandianlife.top/protocol?protocolName=terms'],
         ['static.okx.com', 'OKX 交易所静态资源', 'crypto', 'high', 'https://tr.okx.com/en'],
