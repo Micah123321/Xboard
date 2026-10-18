@@ -67,9 +67,6 @@ class TicketController extends Controller
         if (!$ticket) {
             return $this->fail([400, __('Ticket does not exist')]);
         }
-        if ((int) admin_setting('ticket_must_wait_reply', 0) && $request->user()->id == $this->getLastMessage($ticket->id)->user_id) {
-            return $this->fail(codeResponse: [400, __('Please wait for the technical enginneer to reply')]);
-        }
         $ticketService = new TicketService();
         if (
             !$ticketService->reply(
@@ -101,13 +98,6 @@ class TicketController extends Controller
             return $this->fail([500, __('Close failed')]);
         }
         return $this->success(true);
-    }
-
-    private function getLastMessage($ticketId)
-    {
-        return TicketMessage::where('ticket_id', $ticketId)
-            ->orderBy('id', 'DESC')
-            ->first();
     }
 
     public function withdraw(TicketWithdraw $request)

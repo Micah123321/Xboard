@@ -122,7 +122,6 @@ export const systemConfigSections: SystemConfigSectionSchema[] = [
       { key: 'tos_url', label: '用户条款 (TOS) URL', type: 'url', fullWidth: true, nullable: true, placeholder: 'https://example.com/tos' },
       { key: 'frontend_enable', label: '开放用户前端', type: 'switch', defaultValue: true, helper: '关闭后首页返回空 404，API 不受影响。' },
       { key: 'stop_register', label: '停止新用户注册', type: 'switch' },
-      { key: 'ticket_must_wait_reply', label: '工单等待回复限制', type: 'switch' },
       { key: 'try_out_plan_id', label: '注册试用套餐', type: 'select', optionSource: 'plans', valueType: 'number', defaultValue: 0, helper: '选择 0 表示关闭试用。' },
       { key: 'try_out_hour', label: '试用时长（小时）', type: 'number', min: 0, step: 1, valueType: 'number', defaultValue: 1 },
       { key: 'currency', label: '货币单位', type: 'text', placeholder: 'CNY' },

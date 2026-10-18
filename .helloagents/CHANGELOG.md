@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-10-19
+
+- **[ticket / continuous-reply]**: 移除用户工单回复必须等待管理员的拦截与管理端开关；旧配置不再接受保存，管理端及客户端兼容字段固定为 false，已有开启配置无需数据库迁移即可失效。Micah 用户端已支持连续回复，无需修改，mi-node 不涉及。内存 SQLite 工单回归 10 项 44 断言、PHP 语法检查、管理端类型检查及独立生产构建通过；覆盖连续追加、管理员回复后再次追加、消息顺序、待回复状态、钩子、空消息、工单归属及现有关闭后重开行为。构建位于 output/ticket-continuous-reply/admin；未更新本地既有静态资产、未进行浏览器实测或生产部署。
+
 ## 2026-10-18
 
 - **[release / classification-priority]**: 发布复核修复 NVIDIA、联想和网易通用组覆盖专业分类的问题；Hugging Face 保持 AI、网易云课堂保持教育、Filez 保持网盘，同步重建快照并新增离线回归。生产部署模板统一后端 `unless-stopped`，避免主机重启后服务缺失。

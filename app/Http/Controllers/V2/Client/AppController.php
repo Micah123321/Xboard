@@ -26,7 +26,7 @@ class AppController extends Controller
                 'enable_invite_system' => (bool) admin_setting('app_enable_invite_system', true), // 是否开启邀请系统
                 'enable_telegram_bot' => (bool) admin_setting('telegram_bot_enable', false), // 是否开启 Telegram 机器人
                 'enable_ticket_system' => (bool) admin_setting('app_enable_ticket_system', true), // 是否开启工单系统
-                'ticket_must_wait_reply' => (bool) admin_setting('ticket_must_wait_reply', 0), // 工单是否需要等待管理员回复后才可继续发消息
+                'ticket_must_wait_reply' => false, // 兼容旧客户端，工单始终允许连续回复
                 'enable_commission_system' => (bool) admin_setting('app_enable_commission_system', true), // 是否开启佣金系统
                 'enable_traffic_log' => (bool) admin_setting('app_enable_traffic_log', true), // 是否开启流量日志
                 'enable_knowledge_base' => (bool) admin_setting('app_enable_knowledge_base', true), // 是否开启知识库
