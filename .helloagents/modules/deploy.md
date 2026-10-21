@@ -24,6 +24,8 @@
 - Docker entrypoint 启动前会对 `/www` 和 Redis 数据目录 `/data` 做运行时 chown；`/data` 权限修复允许失败并继续启动，用于兼容挂载 volume 的 Redis socket/数据目录。
 - 文档中的 Docker 命令必须按 compose 拓扑区分服务名：split/dev 模板使用 `web`，`compose.host.sample.yaml` / `compose.1panel.sample.yaml` 使用 `xboard`。
 
+- PHP2Shell 安全构建采用 PHP 8.2.35 官方源码及发布 SHA256；两份 Dockerfile 共享源码升级、按分支版本门禁和扩展冒烟检查。入口在业务更新前执行门禁，关闭 session.upload_progress 仅作附加防护。见 `docs/php2shell-runtime-security.md`。
+
 ## 依赖关系
 
 - 依赖 `ghcr.io/micah123321/xboard:new` 作为后端默认镜像

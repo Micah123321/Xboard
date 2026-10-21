@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-10-22
+
+- **[security / php2shell]**: 针对 CVE-2026-109618、CVE-2026-109619 升级镜像内 PHP 至 8.2.35。因上游镜像仍为 8.2.34，固定 Swoole 基础 digest，按官方发布 SHA256 校验源码并保留 configure 参数重建引擎；后续扩展同步使用新源码。生产与本地镜像接入按分支版本门禁、启动前检查及扩展/SQLite/Swoole 冒烟；关闭 session.upload_progress 仅作附加防护。版本边界2项26断言及旧8.2.34容器退出78验证通过；两份镜像amd64构建和扩展/协程检查通过，PHP8.2.35内85项893断言、JSON/multipart/正常上传与坏请求后续请求通过；修复Windows上下文脚本CRLF并加入LF规则，真实默认入口/Octane配置API返回200。候选阶段arm64未实测；生产发布独立核对明确提交、镜像ID及四类进程的实际PHP版本，结果见 output/releases/php2shell-deployment/deployment-result.json。说明见 docs/php2shell-runtime-security.md。
+
 ## 2026-10-19
 
 - **[ticket / continuous-reply]**: 移除用户工单回复必须等待管理员的拦截与管理端开关；旧配置不再接受保存，管理端及客户端兼容字段固定为 false，已有开启配置无需数据库迁移即可失效。Micah 用户端已支持连续回复，无需修改，mi-node 不涉及。内存 SQLite 工单回归 10 项 44 断言、PHP 语法检查、管理端类型检查及独立生产构建通过；覆盖连续追加、管理员回复后再次追加、消息顺序、待回复状态、钩子、空消息、工单归属及现有关闭后重开行为。构建位于 output/ticket-continuous-reply/admin；未更新本地既有静态资产、未进行浏览器实测或生产部署。

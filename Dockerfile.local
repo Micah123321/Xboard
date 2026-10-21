@@ -1,4 +1,16 @@
-FROM phpswoole/swoole:php8.2-alpine
+# Pin the existing Swoole/Alpine ABI and rebuild PHP from its verified release.
+FROM phpswoole/swoole:php8.2-alpine@sha256:98a3bbe5d35a169125fcf5581ade5a0befc55a3d797177ca66ca185eaf4045c4 AS php-runtime
+ENV PHP_VERSION=8.2.35 \
+    PHP_SHA256=5737b98601fe5ab1b8c5db0c82ed3158acb9283ed3081ffe2faffb9ac81455e6
+COPY .docker/php/check-runtime.php /usr/local/bin/xboard-check-php
+COPY .docker/php/smoke-runtime.php /usr/local/bin/xboard-smoke-php
+COPY .docker/php/runtime-entrypoint.sh /usr/local/bin/xboard-runtime-entrypoint
+COPY .docker/php/upgrade-runtime.sh /usr/local/bin/xboard-upgrade-php
+COPY .docker/php/zz-xboard-security.ini /usr/local/etc/php/conf.d/zz-xboard-security.ini
+RUN chmod +x /usr/local/bin/xboard-runtime-entrypoint \
+    && sh /usr/local/bin/xboard-upgrade-php
+
+FROM php-runtime AS app
 
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
@@ -18,7 +30,8 @@ COPY .docker /
 COPY . /www
 COPY .docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-RUN composer install --no-cache --no-dev \
+RUN php /usr/local/bin/xboard-smoke-php \
+    && composer install --no-cache --no-dev \
     && php artisan storage:link \
     && chown -R www:www /www \
     && chmod -R 775 /www \
@@ -31,4 +44,5 @@ ENV ENABLE_WEB=true \
     ENABLE_REDIS=false
 
 EXPOSE 7001
+ENTRYPOINT ["/usr/local/bin/xboard-runtime-entrypoint"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
