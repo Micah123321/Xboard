@@ -13,6 +13,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\Log;
 use ReflectionProperty;
 use Tests\TestCase;
 
@@ -124,6 +126,235 @@ class ServerEntryPointIntegrationTest extends TestCase
         } finally {
             fclose($recoverySocket);
         }
+    }
+
+    public function test_shadowsocks_pool_uses_forwarding_results_instead_of_open_tcp_ports(): void
+    {
+        $user = $this->user();
+        [$mainSocket, $mainPort] = $this->openTcpServer();
+        [$backupSocket, $backupPort] = $this->openTcpServer();
+        $parent = $this->node(['show' => false, 'type' => Server::TYPE_SHADOWSOCKS,
+            'protocol_settings' => ['cipher' => 'aes-128-gcm']]);
+        $node = $this->node(['parent_id' => $parent->id, 'type' => Server::TYPE_SHADOWSOCKS,
+            'host' => '127.0.0.1', 'port' => $mainPort, 'tcp_check_enabled' => true,
+            'protocol_settings' => ['cipher' => 'aes-128-gcm'], 'entry_points_enabled' => true,
+            'entry_points' => [['host' => '127.0.0.1', 'port' => $backupPort]]]);
+        Process::fake(fn () => Process::result(json_encode(['results' => [
+            ['host' => '127.0.0.1', 'port' => $mainPort, 'online' => false],
+            ['host' => '127.0.0.1', 'port' => $backupPort, 'online' => true],
+        ]])));
+        try {
+            self::assertSame(1, app(ServerTcpCheckService::class)->syncServer($node)['online']);
+            for ($i = 0; $i < 16; $i++) {
+                $servers = ServerService::getAvailableServers($user);
+                self::assertCount(1, $servers);
+                self::assertSame($backupPort, $servers[0]['port']);
+            }
+            Process::assertRan(function ($process) use ($parent, $user) {
+                $input = json_decode($process->input, true);
+                return $process->command === [config('entry_probe.binary')]
+                    && $input['password'] === $parent->generateServerPassword($user)
+                    && $input['method'] === 'aes-128-gcm' && count($input['entries']) === 2;
+            });
+            foreach (['general', 'clash.meta', 'sing-box'] as $flag) {
+                $response = $this->get('/api/v1/client/subscribe?' . http_build_query(['token' => $user->token, 'flag' => $flag]))->assertOk();
+                if ($flag === 'general') {
+                    self::assertStringContainsString('127.0.0.1:' . $backupPort, base64_decode($response->getContent(), true));
+                } elseif ($flag === 'clash.meta') {
+                    $config = \Symfony\Component\Yaml\Yaml::parse($response->getContent());
+                    self::assertCount(1, $config['proxies']);
+                    self::assertSame($backupPort, $config['proxies'][0]['port']);
+                } else {
+                    $outbounds = array_values(array_filter(json_decode($response->getContent(), true)['outbounds'],
+                        fn (array $outbound): bool => ($outbound['type'] ?? '') === 'shadowsocks'));
+                    self::assertCount(1, $outbounds);
+                    self::assertSame($backupPort, $outbounds[0]['server_port']);
+                }
+            }
+            self::assertSame((string) $mainPort, $node->fresh()->port);
+        } finally {
+            fclose($mainSocket);
+            fclose($backupSocket);
+        }
+    }
+
+    public function test_real_helper_rejects_tcp_only_entries(): void
+    {
+        if (!is_file((string) config('entry_probe.binary'))) {
+            $this->markTestSkipped('Build mi-entry-probe and set SERVER_ENTRY_PROBE_BINARY for the real process check.');
+        }
+        $this->user();
+        config()->set('entry_probe.timeout_seconds', 1);
+        [$socket, $port] = $this->openTcpServer();
+        $parent = $this->node(['show' => false, 'type' => Server::TYPE_SHADOWSOCKS,
+            'protocol_settings' => ['cipher' => 'aes-128-gcm']]);
+        $node = $this->node(['parent_id' => $parent->id, 'type' => Server::TYPE_SHADOWSOCKS,
+            'host' => '127.0.0.1', 'port' => $port, 'tcp_check_enabled' => true,
+            'protocol_settings' => ['cipher' => 'aes-128-gcm'], 'entry_points_enabled' => true,
+            'entry_points' => [['host' => '127.0.0.1', 'port' => $this->unusedTcpPort()]]]);
+        Log::spy();
+        try {
+            self::assertSame(1, app(ServerTcpCheckService::class)->syncServer($node)['offline']);
+            self::assertNull(app(ServerEntryPointService::class)->selectForSubscription($node));
+            Log::shouldNotHaveReceived('warning');
+            $connection = stream_socket_accept($socket, 0);
+            self::assertIsResource($connection, 'The helper must actually connect to the TCP-only entry.');
+            try {
+                self::assertNotSame('', fread($connection, 4096), 'The helper must send an encrypted request.');
+            } finally {
+                fclose($connection);
+            }
+        } finally {
+            fclose($socket);
+        }
+    }
+
+    public function test_shadowsocks_pool_hides_on_failure_and_recovers_while_child_is_hidden(): void
+    {
+        $user = $this->user();
+        $parent = $this->node(['show' => false, 'type' => Server::TYPE_SHADOWSOCKS,
+            'protocol_settings' => ['cipher' => '2022-blake3-aes-128-gcm']]);
+        $node = $this->node(['parent_id' => $parent->id, 'type' => Server::TYPE_SHADOWSOCKS,
+            'protocol_settings' => ['cipher' => '2022-blake3-aes-128-gcm'], 'tcp_check_enabled' => true,
+            'auto_online' => true, 'entry_points_enabled' => true,
+            'entry_points' => [['host' => 'backup.example', 'port' => 2443]]]);
+        $healthy = false;
+        Process::fake(function ($process) use (&$healthy, $parent, $user) {
+            $input = json_decode($process->input, true);
+            self::assertSame($parent->generateServerPassword($user), $input['password']);
+            return Process::result(json_encode(['results' => array_map(
+                fn (array $entry): array => $entry + ['online' => $healthy && $entry['port'] === 2443], $input['entries'])]));
+        });
+        $service = app(ServerTcpCheckService::class);
+        self::assertSame(1, $service->syncServer($node)['offline']);
+        self::assertFalse($node->fresh()->show);
+        self::assertSame([], ServerService::getAvailableServers($user));
+        $healthy = true;
+        self::assertSame(1, $service->syncServer($node->fresh())['online']);
+        self::assertTrue($node->fresh()->show);
+        self::assertSame(2443, ServerService::getAvailableServers($user)[0]['port']);
+        $healthy = false;
+        self::assertSame(1, $service->syncServer($node->fresh())['offline']);
+        self::assertSame([], ServerService::getAvailableServers($user));
+    }
+
+    public function test_shadowsocks_helper_failure_cannot_reuse_previous_healthy_result(): void
+    {
+        $user = $this->user();
+        $parent = $this->node(['show' => false, 'type' => Server::TYPE_SHADOWSOCKS]);
+        $node = $this->node(['parent_id' => $parent->id, 'type' => Server::TYPE_SHADOWSOCKS,
+            'tcp_check_enabled' => true, 'entry_points_enabled' => true,
+            'entry_points' => [['host' => 'backup.example', 'port' => 2443]]]);
+        $entries = app(ServerEntryPointService::class);
+        $entries->recordHealth($node, [['host' => 'backup.example', 'port' => 2443, 'online' => true]]);
+        $this->heartbeat($node);
+        self::assertCount(1, ServerService::getAvailableServers($user));
+        Process::fake(fn () => Process::result('', 'helper unavailable', 1));
+        self::assertSame(1, app(ServerTcpCheckService::class)->syncServer($node)['offline']);
+        self::assertNull($entries->selectForSubscription($node));
+        self::assertSame([], ServerService::getAvailableServers($user));
+    }
+
+    public function test_shadowsocks_probe_rejects_wrong_pairs_and_non_boolean_health(): void
+    {
+        $this->user();
+        $parent = $this->node(['show' => false, 'type' => Server::TYPE_SHADOWSOCKS]);
+        $node = $this->node(['parent_id' => $parent->id, 'type' => Server::TYPE_SHADOWSOCKS,
+            'tcp_check_enabled' => true, 'entry_points_enabled' => true,
+            'entry_points' => [['host' => 'backup.example', 'port' => 2443]]]);
+        foreach ([
+            [['host' => 'primary.example', 'port' => 1443, 'online' => true]],
+            [['host' => 'backup.example', 'port' => 2443, 'online' => true], ['host' => 'primary.example', 'port' => 1443, 'online' => true]],
+            [['host' => 'primary.example', 'port' => 1443, 'online' => 'true'], ['host' => 'backup.example', 'port' => 2443, 'online' => true]],
+        ] as $response) {
+            Process::fake(fn () => Process::result(json_encode(['results' => $response])));
+            self::assertSame(1, app(ServerTcpCheckService::class)->syncServer($node->fresh())['offline']);
+            self::assertNull(app(ServerEntryPointService::class)->selectForSubscription($node));
+        }
+    }
+
+    public function test_shadowsocks_probe_requires_an_active_runtime_account_and_never_falls_back_to_tcp(): void
+    {
+        $this->user()->update(['banned' => 1]);
+        $parent = $this->node(['show' => false, 'type' => Server::TYPE_SHADOWSOCKS]);
+        $node = $this->node(['parent_id' => $parent->id, 'type' => Server::TYPE_SHADOWSOCKS,
+            'tcp_check_enabled' => true, 'entry_points_enabled' => true,
+            'entry_points' => [['host' => 'backup.example', 'port' => 2443]]]);
+        Process::fake();
+        self::assertSame(1, app(ServerTcpCheckService::class)->syncServer($node)['offline']);
+        Process::assertNothingRan();
+        self::assertNull(app(ServerEntryPointService::class)->selectForSubscription($node));
+    }
+
+    public function test_shadowsocks_probe_rejects_incompatible_subscription_protocol_and_missing_dedicated_account(): void
+    {
+        $this->user();
+        $parent = $this->node(['show' => false, 'type' => Server::TYPE_SHADOWSOCKS,
+            'protocol_settings' => ['cipher' => 'aes-256-gcm']]);
+        $node = $this->node(['parent_id' => $parent->id, 'type' => Server::TYPE_SHADOWSOCKS,
+            'protocol_settings' => ['cipher' => 'aes-128-gcm'],
+            'tcp_check_enabled' => true, 'entry_points_enabled' => true,
+            'entry_points' => [['host' => 'backup.example', 'port' => 2443]]]);
+        Process::fake();
+        self::assertSame(1, app(ServerTcpCheckService::class)->syncServer($node)['offline']);
+        Process::assertNothingRan();
+        $node->update(['protocol_settings' => ['cipher' => 'aes-256-gcm']]);
+        config()->set('entry_probe.user_id', 999999);
+        self::assertSame(1, app(ServerTcpCheckService::class)->syncServer($node->fresh())['offline']);
+        Process::assertNothingRan();
+    }
+
+    public function test_scheduled_mixed_pools_keep_forwarding_and_tcp_health_separate(): void
+    {
+        $this->user();
+        [$socket, $port] = $this->openTcpServer();
+        $parent = $this->node(['show' => false, 'type' => Server::TYPE_SHADOWSOCKS,
+            'protocol_settings' => ['cipher' => 'aes-128-gcm']]);
+        $working = $this->node(['parent_id' => $parent->id, 'type' => Server::TYPE_SHADOWSOCKS,
+            'protocol_settings' => ['cipher' => 'aes-128-gcm'], 'tcp_check_enabled' => true,
+            'entry_points_enabled' => true, 'entry_points' => [['host' => 'backup.example', 'port' => 2443]]]);
+        $tcp = $this->node(['parent_id' => $parent->id, 'host' => '127.0.0.1', 'port' => $port,
+            'server_port' => $port, 'tcp_check_enabled' => true]);
+        $failed = $this->node(['parent_id' => $parent->id, 'type' => Server::TYPE_SHADOWSOCKS,
+            'protocol_settings' => ['cipher' => 'aes-128-gcm'], 'tcp_check_enabled' => true,
+            'entry_points_enabled' => true, 'entry_points' => [['host' => 'failed.example', 'port' => 3443]]]);
+        Process::fake(function ($process) {
+            $input = json_decode($process->input, true);
+            return Process::result(json_encode(['results' => array_map(
+                fn (array $entry): array => $entry + ['online' => $entry['port'] === 2443], $input['entries'])]));
+        });
+        try {
+            $result = app(ServerTcpCheckService::class)->sync();
+            self::assertSame(3, $result['checked']);
+            self::assertSame(2, $result['online']);
+            self::assertSame(1, $result['offline']);
+            self::assertSame(2443, app(ServerEntryPointService::class)->selectForSubscription($working)['port']);
+            self::assertNull(app(ServerEntryPointService::class)->selectForSubscription($failed));
+            self::assertNotSame(Server::STATUS_OFFLINE, $tcp->fresh()->available_status);
+        } finally {
+            fclose($socket);
+        }
+    }
+
+    public function test_shadowsocks_legacy_tcp_cache_and_changed_protocol_or_target_are_not_reused(): void
+    {
+        $parent = $this->node(['show' => false, 'type' => Server::TYPE_SHADOWSOCKS]);
+        $node = $this->node(['parent_id' => $parent->id, 'type' => Server::TYPE_SHADOWSOCKS,
+            'tcp_check_enabled' => true, 'entry_points_enabled' => true,
+            'entry_points' => [['host' => 'backup.example', 'port' => 2443]]]);
+        $entries = app(ServerEntryPointService::class);
+        $legacyKey = 'server_entry_health:' . $node->id . ':' . hash('sha256', json_encode([
+            (int) $node->parent_id, true, $entries->candidates($node),
+        ]));
+        Cache::put($legacyKey, ['checked_at' => time(), 'online' => [json_encode(['backup.example', 2443])]], 180);
+        self::assertNull($entries->selectForSubscription($node));
+        $entries->recordHealth($node, [['host' => 'backup.example', 'port' => 2443, 'online' => true]]);
+        self::assertNotNull($entries->selectForSubscription($node));
+        $parent->update(['protocol_settings' => ['cipher' => 'aes-256-gcm']]);
+        self::assertNull($entries->selectForSubscription($node->fresh()));
+        $entries->recordHealth($node->fresh(), [['host' => 'backup.example', 'port' => 2443, 'online' => true]]);
+        config()->set('entry_probe.target_url', 'https://probe.example/generate_204');
+        self::assertNull($entries->selectForSubscription($node->fresh()));
     }
 
     public function test_unknown_expired_and_changed_pool_health_never_reuses_failed_candidates(): void

@@ -99,9 +99,14 @@ class ServerEntryPointService
 
     private function healthCacheKey(Server $server): string
     {
-        $fingerprint = hash('sha256', json_encode([
+        $configuration = [
             (int) $server->parent_id, (bool) $server->entry_points_enabled, $this->candidates($server),
-        ]));
+        ];
+        if ($server->type === Server::TYPE_SHADOWSOCKS) {
+            $configuration[] = ['ss-https-v1', $server->protocol_settings, $server->parent?->type,
+                $server->parent?->protocol_settings, $server->parent?->created_at, config('entry_probe')];
+        }
+        $fingerprint = hash('sha256', json_encode($configuration));
         return 'server_entry_health:' . $server->id . ':' . $fingerprint;
     }
 }

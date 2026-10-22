@@ -1,3 +1,18 @@
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS entry-probe
+ARG TARGETOS
+ARG TARGETARCH
+RUN apk add --no-cache git ca-certificates
+WORKDIR /src
+# The helper is maintained in mi-node; pin its source rather than a moving branch.
+RUN git init . \
+    && git remote add origin https://github.com/Micah123321/mi-node.git \
+    && git fetch --depth=1 origin 9f5d4b66cf58463d36a49e4da9fe21c0ee030de8 \
+    && git checkout --detach FETCH_HEAD
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags='-s -w' -o /out/mi-entry-probe ./cmd/mi-entry-probe
+
 # Pin the existing Swoole/Alpine ABI and rebuild PHP from its verified release.
 FROM phpswoole/swoole:php8.2-alpine@sha256:98a3bbe5d35a169125fcf5581ade5a0befc55a3d797177ca66ca185eaf4045c4 AS php-runtime
 ENV PHP_VERSION=8.2.35 \
@@ -28,6 +43,7 @@ WORKDIR /www
 
 COPY .docker /
 COPY . /www
+COPY --from=entry-probe --chmod=0755 /out/mi-entry-probe /www/bin/mi-entry-probe
 COPY .docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 RUN php /usr/local/bin/xboard-smoke-php \

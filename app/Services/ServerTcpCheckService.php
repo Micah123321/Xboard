@@ -53,7 +53,13 @@ class ServerTcpCheckService
         $entries = app(ServerEntryPointService::class);
         $candidates = [];
         $slices = [];
+        $shadowsocks = [];
         foreach ($servers as $server) {
+            if ($server->entry_points_enabled && $server->type === Server::TYPE_SHADOWSOCKS) {
+                $shadowsocks[] = $server;
+                $slices[] = [count($candidates), 0];
+                continue;
+            }
             if ($server->entry_points_enabled) {
                 $pool = $entries->candidates($server);
             } else {
@@ -65,8 +71,10 @@ class ServerTcpCheckService
             $candidates = array_merge($candidates, $pool);
         }
         $health = $this->probeEntries($candidates);
+        $forwardingHealth = app(ServerShadowsocksProbeService::class)->probeServers($shadowsocks);
         foreach (array_values($servers) as $index => $server) {
-            $nodeHealth = array_slice($health, $slices[$index][0], $slices[$index][1]);
+            $nodeHealth = $forwardingHealth[$server->id]
+                ?? array_slice($health, $slices[$index][0], $slices[$index][1]);
             if ($server->entry_points_enabled) {
                 $entries->recordHealth($server, $nodeHealth);
             }

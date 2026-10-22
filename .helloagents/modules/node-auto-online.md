@@ -19,6 +19,7 @@
 - `ServerReconnectCooldownService` 使用 Cache/Redis 记录运行时状态：首次状态只记录不计数；后续在线 / 离线状态切换会写入 1 小时窗口内的切换时间戳。
 - 同一节点 1 小时内在线 / 离线切换次数超过 10 次时，`ServerReconnectCooldownService` 写入 6 小时冷却键；冷却期间 `ServerAutoOnlineService` 仅强制当前节点 `show=false`，不改写其子节点。
 - 子节点 `available_status`、在线用户、metrics 和负载状态默认可使用父入口运行缓存兜底，避免管理端展示和自动上线把仅由父入口上报的转发入口判定为离线；开启 `tcp_check_enabled` 的子节点会关闭该兜底，`sync:server-tcp-checks` 每分钟检测 `host:server_port`，连通写自身 `LAST_CHECK_AT`，失败清理自身 `LAST_CHECK_AT` / `LAST_PUSH_AT` 并触发当前子节点自动上线重算；墙检测否决、重连冷却和 `show` 写入仍只作用于当前子节点，不恢复父节点对子节点的批量显隐联动。
+- 开启随机入口时，按主入口和额外入口的连接端口分别记录健康，订阅仅从健康池选择；Shadowsocks 通过面板上的 `mi-entry-probe` 做真实 SS 加密 + TLS + HTTPS 204 往返，其他协议沿用 TCP 连接。旧 TCP 缓存、协议/父节点协议或探测配置变化均不能复用；工具缺失、无有效父节点用户、超时和全部转发失败时排除入口池，支持自动隐藏后的恢复探测。配套工具需要安装到面板及 Scheduler，详见 `docs/node-entry-points.md`。
 - 关闭自动上线或关闭重连冷却时，管理端后端接口会把 `auto_online_cooldown_enabled` 归零并清理该节点已有冷却缓存，避免后续重新开启时被旧缓存影响。
 - 重连冷却状态是短期保护策略，不做数据库审计；Redis 重启后冷却状态可能消失。
 

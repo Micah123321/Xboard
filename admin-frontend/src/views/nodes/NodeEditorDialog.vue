@@ -428,7 +428,7 @@ watch(
                   <ElSwitch v-model="form.entryPointsEnabled" aria-label="随机入口" />
                 </div>
               </ElFormItem>
-              <p class="entry-points-hint">启用 TCP 端口检测则仅从可用入口选择，全部故障暂不下发；已导入客户端需更新订阅才切换。</p>
+              <p class="entry-points-hint">启用 TCP 端口检测后，Shadowsocks 多入口会验证实际代理请求，排除端口可连但无法转发的入口；其他协议仅检测 TCP 连通。全部故障暂不下发，已导入客户端需更新订阅才切换。</p>
               <div v-if="form.entryPointsEnabled" class="entry-points-list">
                 <div v-for="(entry, index) in form.entryPoints" :key="entry.key" class="entry-point-row">
                   <ElFormItem :label="`额外入口 ${index + 1} 地址`" required>
@@ -493,7 +493,7 @@ watch(
                 <label v-if="form.parentId" class="switch-card">
                   <div>
                     <strong>TCP 端口检测</strong>
-                    <span>检测入口连接端口，失败时自动上线会隐藏该子节点。</span>
+                    <span>检测入口连接端口；Shadowsocks 多入口额外验证代理转发。全部入口失败时，开启自动上线会隐藏该子节点。</span>
                   </div>
                   <ElSwitch v-model="form.tcpCheckEnabled" />
                 </label>
