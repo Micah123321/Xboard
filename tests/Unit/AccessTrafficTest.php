@@ -407,6 +407,150 @@ class AccessTrafficTest extends TestCase
         self::assertSame(1, $query->countGroups($filters, 1));
     }
 
+    public function test_category_analysis_respects_case_insensitive_database_comparisons(): void
+    {
+        // Exercise historical values under a CI collation without requiring a MySQL server.
+        $schema = DB::selectOne("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'v2_access_traffic'")->sql;
+        $schema = preg_replace('/("category"\s+varchar(?:\(\d+\))?)/i', '$1 COLLATE NOCASE', $schema, 1, $changed);
+        self::assertSame(1, $changed);
+        DB::statement('DROP TABLE v2_access_traffic');
+        DB::statement($schema);
+        $categories = ['VIDEO', 'video', 'Unknown', 'unknown', 'future-category'];
+        $entries = array_map(fn ($i) => $this->entry('case-' . $i . '.test', 1, 2), array_keys($categories));
+        $id = $this->service->receive(1, $this->payload('collation', $entries, [1 => [5, 10]]), $this->now);
+        $this->service->process($id);
+        foreach ($categories as $i => $category) {
+            DB::table('v2_access_traffic')->where('report_id', $id)->where('domain', 'case-' . $i . '.test')->update(['category' => $category]);
+        }
+        $result = $this->queryResult();
+        self::assertSame(15, $result['summary']['raw_total']);
+        self::assertSame(9, $result['summary']['identified_bytes']);
+        self::assertSame(6, $result['summary']['unidentified_bytes']);
+        self::assertSame(1, $result['summary']['report_count']);
+        self::assertSame(['unknown', 'video'], array_column($result['analysis'], 'category'));
+        self::assertSame([6, 6], array_column($result['analysis'], 'raw_total'));
+    }
+
+    public function test_category_summary_counts_each_report_once_including_zero_byte_categories(): void
+    {
+        $entries = [$this->entry('video.googlevideo.com', 1, 2), $this->entry('example.test', 2, 3),
+            $this->entry('chatgpt.com', 0, 0)];
+        foreach (['settled', 'pending', 'failed'] as $state) {
+            $payload = $this->payload($state, $entries);
+            if ($state === 'pending') $payload['dropped_entries'] = 2;
+            if ($state === 'failed') $payload['coverage'] = 'partial';
+            $id = $this->service->receive(1, $payload, $this->now);
+            if ($state === 'settled') $this->bill($state, [1 => [3, 5]], 2);
+            if ($state === 'failed') $this->bill($state, [1 => [30, 50]], 2);
+            $this->service->process($id);
+        }
+        $result = $this->queryResult(['pageSize' => 1]);
+        self::assertSame(3, $result['summary']['report_count']);
+        self::assertSame(2, $result['summary']['partial_report_count']);
+        self::assertSame(2, $result['summary']['unsettled_report_count']);
+        self::assertSame(1, $result['meta']['collection_gaps']['failed_settlement_reports']);
+        self::assertSame('partial', $result['meta']['coverage']);
+        self::assertSame([9, 15, 24, 6, 10, 16], array_map(fn ($key) => $result['summary'][$key],
+            ['raw_u', 'raw_d', 'raw_total', 'billed_u', 'billed_d', 'billed_total']));
+        self::assertSame(9, $result['summary']['identified_bytes']);
+        self::assertSame(15, $result['summary']['unidentified_bytes']);
+        self::assertSame(['unknown', 'video', 'ai'], array_column($result['analysis'], 'category'));
+        self::assertSame([15, 9, 0], array_column($result['analysis'], 'raw_total'));
+        $zero = $this->queryResult(['category' => 'ai']);
+        self::assertSame(1, $zero['total']);
+        self::assertSame(0, $zero['summary']['raw_total']);
+        self::assertSame(0, $zero['summary']['billed_total']);
+        self::assertSame(3, $zero['summary']['report_count']);
+        self::assertSame(2, $zero['summary']['partial_report_count']);
+        self::assertSame(2, $zero['summary']['unsettled_report_count']);
+        self::assertSame(1, $zero['meta']['collection_gaps']['failed_settlement_reports']);
+        self::assertSame(['ai'], array_column($zero['analysis'], 'category'));
+        self::assertEquals(0, $zero['analysis'][0]['share']);
+    }
+
+    public function test_tied_pages_preserve_historical_group_keys_and_partial_billing(): void
+    {
+        $expected = [];
+        foreach (['first', 'mixed-rate', 'partial-billing', 'renamed', 'reason', 'confidence'] as $index => $name) {
+            DB::table('v2_server')->where('id', 1)->update(['name' => $name === 'renamed' ? 'Renamed node' : 'Node one']);
+            $bytes = $index < 3 ? 1 : 3;
+            $id = $this->service->receive(1, $this->payload($name,
+                [$this->entry('same.googlevideo.com', $bytes, $bytes)], [1 => [$bytes, $bytes]]), $this->now);
+            $this->bill($name, [1 => [$bytes, $bytes]], $name === 'mixed-rate' ? 2 : 1);
+            $this->service->process($id);
+            if ($name === 'partial-billing') {
+                DB::table('v2_access_traffic')->where('report_id', $id)->update(['billed_u' => null]);
+            }
+            if ($name === 'reason') {
+                DB::table('v2_access_traffic')->where('report_id', $id)->update(['reason' => 'Historical rule variant']);
+            }
+            if ($name === 'confidence') {
+                DB::table('v2_access_traffic')->where('report_id', $id)->update(['confidence' => 'low']);
+            }
+            if ($index === 0 || $index >= 3) {
+                $stored = DB::table('v2_access_traffic')->where('report_id', $id)->first();
+                $expected[] = ['id' => (string) $stored->id, 'node_name' => $name === 'renamed' ? 'Renamed node' : 'Node one',
+                    'domain' => 'same.googlevideo.com', 'reason' => $stored->reason, 'confidence' => $stored->confidence,
+                    'raw_total' => 6, 'connections' => $index === 0 ? 3 : 1];
+            }
+        }
+        foreach ($expected as $index => $details) {
+            $result = $this->queryResult(['pageSize' => 1, 'page' => $index + 1]);
+            self::assertSame(4, $result['total']);
+            self::assertCount(1, $result['data']);
+            foreach ($details as $key => $value) self::assertSame($value, $result['data'][0][$key], $key);
+            if ($index === 0) {
+                self::assertNull($result['data'][0]['billed_u']);
+                self::assertSame(4, $result['data'][0]['billed_d']);
+                self::assertNull($result['data'][0]['billed_total']);
+                self::assertNull($result['data'][0]['rate']);
+                self::assertSame(24, $result['summary']['raw_total']);
+                self::assertSame([12, 13, 24], array_map(fn ($key) => $result['summary'][$key], ['billed_u', 'billed_d', 'billed_total']));
+            }
+        }
+        $beyond = $this->queryResult(['pageSize' => 1, 'page' => 5]);
+        self::assertSame(4, $beyond['total']);
+        self::assertSame([], $beyond['data']);
+        self::assertSame(6, $beyond['summary']['report_count']);
+        self::assertSame(24, $beyond['summary']['raw_total']);
+    }
+
+    public function test_literal_historical_name_search_keeps_whole_overlapping_fragments(): void
+    {
+        $this->now = intdiv(time(), 300) * 300 - 450;
+        $entries = [
+            array_replace($this->entry('same.googlevideo.com', 1, 2), ['first_seen' => $this->now - 10, 'last_seen' => $this->now + 1]),
+            array_replace($this->entry('same.googlevideo.com', 2, 3), ['first_seen' => $this->now + 4, 'last_seen' => $this->now + 10]),
+            array_replace($this->entry('same.googlevideo.com', 4, 5), ['first_seen' => $this->now - 10, 'last_seen' => $this->now]),
+            array_replace($this->entry('same.googlevideo.com', 6, 7), ['first_seen' => $this->now + 5, 'last_seen' => $this->now + 10]),
+        ];
+        foreach (['Archive !_% node', 'Archive ab node', 'Current node'] as $index => $name) {
+            DB::table('v2_server')->where('id', 1)->update(['name' => $name]);
+            $id = $this->service->receive(1, $this->payload('search-' . $index, $entries, [1 => [13, 17]]), $this->now + 10);
+            $this->service->process($id);
+        }
+        $query = new AccessTrafficQueryService();
+        $filters = $query->filters(['start_time' => $this->now + 1, 'end_time' => $this->now + 5], $this->now + 20);
+        foreach (['domain', 'time'] as $groupBy) {
+            foreach (['Archive !_% node', '!_%', '!', '_', '%'] as $search) {
+                $result = $query->index(array_replace($filters, ['group_by' => $groupBy, 'search' => $search]));
+                self::assertSame(1, $result['total'], $search);
+                self::assertSame(1, $result['summary']['report_count']);
+                self::assertSame(8, $result['summary']['raw_total']);
+                self::assertSame('Archive !_% node', $result['data'][0]['node_name']);
+                self::assertSame(8, $result['data'][0]['raw_total']);
+                self::assertSame(2, $result['data'][0]['connections']);
+                self::assertSame($this->now - 10, $result['data'][0]['first_seen']);
+                self::assertSame($this->now + 10, $result['data'][0]['last_seen']);
+            }
+        }
+        $empty = $query->index($filters + ['search' => 'Absent node']);
+        self::assertSame(0, $empty['total']);
+        self::assertSame(0, $empty['summary']['report_count']);
+        self::assertSame([], $empty['analysis']);
+        self::assertSame('none', $empty['meta']['coverage']);
+    }
+
     public function test_placeholder_addresses_keep_wire_idempotency_but_not_fake_destinations(): void
     {
         foreach (['::', '0.0.0.0', '::ffff:0.0.0.0'] as $index => $ip) {
@@ -745,6 +889,78 @@ class AccessTrafficTest extends TestCase
         $this->app['config']->set('access_traffic.export_max_rows', 1);
         $this->expectException(\Illuminate\Validation\ValidationException::class);
         $controller->export(Request::create('/export'), $query);
+    }
+
+    public function test_streamed_page_keeps_snapshot_when_another_connection_prunes_details(): void
+    {
+        $id = $this->service->receive(1, $this->payload('snapshot', [$this->entry('snapshot.googlevideo.com', 3, 5)]), $this->now);
+        $this->service->process($id);
+        $path = tempnam(sys_get_temp_dir(), 'access-snapshot-');
+        $previous = DB::getDefaultConnection();
+        $deleted = false;
+        try {
+            foreach (['snapshot_reader', 'snapshot_writer'] as $name) {
+                $this->db->addConnection(['driver' => 'sqlite', 'database' => $path, 'foreign_key_constraints' => true], $name);
+            }
+            $reader = DB::connection('snapshot_reader');
+            $writer = DB::connection('snapshot_writer');
+            $reader->statement('PRAGMA journal_mode = WAL');
+            foreach (['v2_user', 'v2_access_report', 'v2_access_traffic', 'v2_traffic_report'] as $table) {
+                $schema = DB::selectOne("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", [$table]);
+                $reader->statement($schema->sql);
+                $rows = DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+                if ($rows) $reader->table($table)->insert($rows);
+            }
+            $reader->setEventDispatcher(new Dispatcher($this->app));
+            $reader->listen(function ($query) use ($writer, &$deleted): void {
+                if (!$deleted && str_contains($query->sql, 'as "g"')) {
+                    $deleted = true;
+                    $writer->table('v2_access_traffic')->delete();
+                    $writer->table('v2_access_report')->delete();
+                }
+            });
+            DB::setDefaultConnection('snapshot_reader');
+            $query = new AccessTrafficQueryService();
+            $result = $query->index($query->filters(['start_time' => $this->now - 1000, 'end_time' => $this->now + 1]));
+            self::assertTrue($deleted);
+            self::assertSame(0, $writer->table('v2_access_traffic')->count());
+            self::assertSame(1, $result['total']);
+            self::assertSame(1, $result['summary']['report_count']);
+            self::assertSame(8, $result['summary']['raw_total']);
+            self::assertSame('snapshot.googlevideo.com', $result['data'][0]['domain']);
+            self::assertSame(0, $reader->transactionLevel());
+        } finally {
+            DB::setDefaultConnection($previous);
+            foreach (['snapshot_reader', 'snapshot_writer'] as $name) DB::purge($name);
+            foreach ([$path, $path . '-wal', $path . '-shm'] as $file) if (is_file($file)) unlink($file);
+        }
+    }
+
+    public function test_report_time_bound_keeps_clock_tolerance_and_delayed_long_fragments(): void
+    {
+        $start = $this->now - 500;
+        foreach ([['boundary', $start - 300, $start - 1, $start],
+            ['delayed', $this->now, $start - 86400, $start + 5],
+            ['before', $start - 301, $start - 10, $start - 1]] as [$name, $observed, $first, $last]) {
+            $entry = array_replace($this->entry($name . '.googlevideo.com', 3, 5),
+                ['bucket_at' => $first, 'first_seen' => $first, 'last_seen' => $last]);
+            $payload = array_replace($this->payload($name, [$entry]), ['observed_at' => $observed]);
+            $id = $this->service->receive(1, $payload, $this->now);
+            $this->service->process($id);
+        }
+        $query = new AccessTrafficQueryService();
+        $filters = $query->filters(['start_time' => $start, 'end_time' => $start + 10], $this->now);
+        $result = $query->index($filters);
+        self::assertSame(2, $result['total']);
+        self::assertSame(16, $result['summary']['raw_total']);
+        self::assertSame(2, $result['summary']['report_count']);
+        self::assertSame($start - 300, $result['meta']['first_collected_at']);
+        self::assertSame($this->now, $result['meta']['last_collected_at']);
+        self::assertSame(['boundary.googlevideo.com', 'delayed.googlevideo.com'], array_column($result['data'], 'domain'));
+        $deep = $query->index(array_replace($filters, ['page' => 10001, 'pageSize' => 1]));
+        self::assertSame(2, $deep['total']);
+        self::assertSame([], $deep['data']);
+        self::assertSame($result['summary'], $deep['summary']);
     }
 
     public function test_activity_inside_bucket_is_found_and_historical_node_name_survives(): void

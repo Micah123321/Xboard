@@ -35,8 +35,21 @@ class AccessTrafficQueryService
 
     private function base(array $filters): Builder
     {
-        $query = DB::table('v2_access_traffic as e')->join('v2_access_report as r', 'r.id', '=', 'e.report_id')
-            ->where('e.last_seen', '>=', $filters['start_time'])->where('e.first_seen', '<', $filters['end_time']);
+        $query = DB::table('v2_access_traffic as e')->join('v2_access_report as r', 'r.id', '=', 'e.report_id');
+        if (DB::connection()->getDriverName() === 'mysql' && empty($filters['user_id']) && empty($filters['node_id']) && empty($filters['category'])) {
+            // MySQL 8 can prefer scanning all historical details. Drive the existing report
+            // time index first, then use the detail foreign-key index for each report.
+            $query = DB::query()->fromRaw('v2_access_report as r FORCE INDEX (v2_access_report_observed_at_index) STRAIGHT_JOIN v2_access_traffic as e FORCE INDEX (v2_access_traffic_report_id_foreign) ON e.report_id = r.id');
+        }
+        // normalize() has enforced last_seen <= observed_at + 300 since the first writer.
+        // This lower bound is safe for long/delayed fragments; an upper bound would not be.
+        $query->where('r.observed_at', '>=', max(0, $filters['start_time'] - 300));
+        return $this->applyFilters($query, $filters);
+    }
+
+    private function applyFilters(Builder $query, array $filters): Builder
+    {
+        $query->where('e.last_seen', '>=', $filters['start_time'])->where('e.first_seen', '<', $filters['end_time']);
         foreach (['user_id', 'node_id', 'category', 'network'] as $key) {
             if (isset($filters[$key]) && $filters[$key] !== '') $query->where('e.' . $key, $filters[$key]);
         }
@@ -49,6 +62,26 @@ class AccessTrafficQueryService
             });
         }
         return $query;
+    }
+
+    private function reportStatistics(array $filters): Builder
+    {
+        if (DB::connection()->getDriverName() === 'mysql') {
+            // MySQL creates the foreign-key index, so each report stops at its first match.
+            $matches = $this->applyFilters(DB::table('v2_access_traffic as e')->whereColumn('e.report_id', 'r.id'), $filters)
+                ->forceIndex('v2_access_traffic_report_id_foreign')->selectRaw('1')->limit(1);
+            $query = DB::table('v2_access_report as r')->where('r.observed_at', '>=', max(0, $filters['start_time'] - 300))->whereExists($matches);
+        } else {
+            // SQLite does not automatically index foreign keys; avoid a correlated full scan.
+            $reportIds = $this->base($filters)->select('e.report_id')->distinct();
+            $query = DB::query()->fromSub($reportIds, 'matched')->join('v2_access_report as r', 'r.id', '=', 'matched.report_id');
+        }
+        return $query
+            ->selectRaw('COUNT(*) as report_count')
+            ->selectRaw("COALESCE(SUM(CASE WHEN r.coverage = 'partial' OR r.dropped_entries > 0 THEN 1 ELSE 0 END), 0) as partial_report_count")
+            ->selectRaw('COALESCE(SUM(CASE WHEN r.settled_at IS NULL THEN 1 ELSE 0 END), 0) as unsettled_report_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN r.settlement_error IS NOT NULL THEN 1 ELSE 0 END), 0) as failed_report_count')
+            ->selectRaw('MIN(r.observed_at) as first_at, MAX(r.observed_at) as last_at');
     }
 
     private function groupColumns(array $filters): array
@@ -67,10 +100,10 @@ class AccessTrafficQueryService
         return (int) DB::query()->fromSub($groups, 'access_groups')->count();
     }
 
-    public function rows(array $filters): Builder
+    private function aggregates(array $filters, bool $withSummary = false): Builder
     {
-        $groups = $this->groupColumns($filters);
-        $query = $this->base($filters)->select($groups)->groupBy($groups)
+        // Keep the complete grouping key, but carry only aggregates into ranking/window tables.
+        $query = $this->base($filters)->groupBy($this->groupColumns($filters))
             ->selectRaw('MIN(e.id) as id, MIN(e.first_seen) as first_seen, MAX(e.last_seen) as last_seen')
             ->selectRaw('SUM(e.raw_u) as raw_u, SUM(e.raw_d) as raw_d, SUM(e.raw_u + e.raw_d) as raw_total')
             ->selectRaw('CASE WHEN COUNT(e.billed_u) = COUNT(*) THEN SUM(e.billed_u) ELSE NULL END as billed_u')
@@ -79,9 +112,30 @@ class AccessTrafficQueryService
             ->selectRaw('CASE WHEN COUNT(e.rate) = COUNT(*) AND MIN(e.rate) = MAX(e.rate) THEN MIN(e.rate) ELSE NULL END as rate')
             ->selectRaw('SUM(e.connections) as connections')
             ->selectRaw("CASE WHEN SUM(CASE WHEN r.coverage = 'partial' OR r.dropped_entries > 0 THEN 1 ELSE 0 END) > 0 THEN 'partial' ELSE 'complete' END as coverage");
-        // User details join after grouping, without widening or multiplying the detail scan.
-        return DB::query()->fromSub($query, 'g')->leftJoin('v2_user as u', 'u.id', '=', 'g.user_id')
-            ->select('g.*', 'u.email as user_email')->orderByDesc('g.raw_total')->orderBy('g.id');
+        if ($withSummary) {
+            // Partial settlements contribute known bytes to totals even when a group is NULL.
+            $query->addSelect(['e.category', 'e.confidence', 'e.domain', 'e.ip'])
+                ->selectRaw('SUM(e.billed_u) as known_billed_u, SUM(e.billed_d) as known_billed_d, SUM(e.billed_u + e.billed_d) as known_billed_total');
+        }
+        return $query;
+    }
+
+    private function withDetails(Builder $aggregates, array $filters): Builder
+    {
+        // MIN(id) is an actual member of each group. Fetch its descriptive fields after LIMIT,
+        // including the historical report name; no hash/collation approximation of the key.
+        $columns = array_map(fn ($column) => str_replace(['e.', 'r.'], ['detail.', 'report.'], $column), $this->groupColumns($filters));
+        return DB::query()->fromSub($aggregates, 'g')
+            ->join('v2_access_traffic as detail', 'detail.id', '=', 'g.id')
+            ->join('v2_access_report as report', 'report.id', '=', 'detail.report_id')
+            ->leftJoin('v2_user as u', 'u.id', '=', 'detail.user_id')
+            ->select($columns)->addSelect('g.*', 'u.email as user_email')
+            ->orderByDesc('g.raw_total')->orderBy('g.id');
+    }
+
+    public function rows(array $filters): Builder
+    {
+        return $this->withDetails($this->aggregates($filters), $filters);
     }
 
     public function row(object $row, int $total): array
@@ -110,36 +164,53 @@ class AccessTrafficQueryService
     public function context(array $filters): array
     {
         $base = $this->base($filters);
-        // All totals, categories and report metadata share one filtered detail scan.
-        $aggregate = (clone $base)->selectRaw('COALESCE(SUM(e.raw_u), 0) as raw_u, COALESCE(SUM(e.raw_d), 0) as raw_d, COALESCE(SUM(e.raw_u + e.raw_d), 0) as raw_total')
+        // Group once by category instead of evaluating two CASEs for every configured label.
+        $categories = (clone $base)->select('e.category')->groupBy('e.category')
+            ->selectRaw('SUM(e.raw_u) as raw_u, SUM(e.raw_d) as raw_d, SUM(e.raw_u + e.raw_d) as raw_total')
             ->selectRaw('COALESCE(SUM(e.billed_u), 0) as billed_u, COALESCE(SUM(e.billed_d), 0) as billed_d, COALESCE(SUM(e.billed_u + e.billed_d), 0) as billed_total')
-            ->selectRaw("COALESCE(SUM(CASE WHEN e.category <> 'unknown' THEN e.raw_u + e.raw_d ELSE 0 END), 0) as identified_bytes")
-            ->selectRaw("COALESCE(SUM(CASE WHEN e.category = 'unknown' THEN e.raw_u + e.raw_d ELSE 0 END), 0) as unidentified_bytes")
-            ->selectRaw("COALESCE(SUM(CASE WHEN e.domain = '' AND e.ip IN ('', '::', '0.0.0.0', '::ffff:0.0.0.0') THEN e.raw_u + e.raw_d ELSE 0 END), 0) as unattributed_bytes")
-            ->selectRaw('COUNT(DISTINCT r.id) as report_count')
-            ->selectRaw("COUNT(DISTINCT CASE WHEN r.coverage = 'partial' OR r.dropped_entries > 0 THEN r.id ELSE NULL END) as partial_report_count")
-            ->selectRaw('COUNT(DISTINCT CASE WHEN r.settled_at IS NULL THEN r.id ELSE NULL END) as unsettled_report_count')
-            ->selectRaw('COUNT(DISTINCT CASE WHEN r.settlement_error IS NOT NULL THEN r.id ELSE NULL END) as failed_report_count')
-            ->selectRaw('MIN(r.observed_at) as first_at, MAX(r.observed_at) as last_at');
-        foreach (AccessTrafficClassifier::LABELS as $category => $label) {
-            $aggregate->selectRaw("SUM(CASE WHEN e.category = ? THEN e.raw_u + e.raw_d ELSE NULL END) as category_{$category}_bytes", [$category])
-                ->selectRaw("MIN(CASE WHEN e.category = ? THEN CASE e.confidence WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END ELSE NULL END) as category_{$category}_confidence", [$category]);
+            ->selectRaw("SUM(CASE WHEN e.category <> 'unknown' THEN e.raw_u + e.raw_d ELSE 0 END) as identified_bytes")
+            ->selectRaw("SUM(CASE WHEN e.category = 'unknown' THEN e.raw_u + e.raw_d ELSE 0 END) as unidentified_bytes")
+            ->selectRaw("SUM(CASE WHEN e.domain = '' AND e.ip IN ('', '::', '0.0.0.0', '::ffff:0.0.0.0') THEN e.raw_u + e.raw_d ELSE 0 END) as unattributed_bytes")
+            ->selectRaw("MIN(CASE e.confidence WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END) as category_confidence");
+        // Reports can contain several categories. Deduplicate their ids once, independently
+        // of category groups, so coverage/settlement counts never count one report twice.
+        $reports = $this->reportStatistics($filters);
+        // Resolve labels using the database's comparison/collation rules, on the small
+        // category result only (including case-insensitive historical values on MySQL).
+        $labelCase = 'CASE c.category';
+        $labelBindings = [];
+        foreach (array_keys(AccessTrafficClassifier::LABELS) as $category) {
+            $labelCase .= ' WHEN ? THEN ?';
+            array_push($labelBindings, $category, $category);
         }
-        $stats = (array) $aggregate->first();
-        $summary = array_map('intval', array_intersect_key($stats, array_flip(['raw_u', 'raw_d', 'raw_total',
-            'billed_u', 'billed_d', 'billed_total', 'identified_bytes', 'unidentified_bytes', 'unattributed_bytes',
-            'report_count', 'partial_report_count', 'unsettled_report_count'])));
+        // Both scans share a statement snapshot, including during concurrent settlement.
+        $groups = DB::query()->fromSub($categories, 'c')->crossJoinSub($reports, 's')->select('c.*', 's.*')
+            ->selectRaw($labelCase . ' ELSE NULL END as analysis_category', $labelBindings)->get();
+        $stats = (array) ($groups->first() ?? (object) ['first_at' => null, 'last_at' => null, 'failed_report_count' => 0]);
+        $byteKeys = ['raw_u', 'raw_d', 'raw_total', 'billed_u', 'billed_d', 'billed_total',
+            'identified_bytes', 'unidentified_bytes', 'unattributed_bytes'];
+        $summary = array_fill_keys($byteKeys, 0);
+        foreach ($groups as $group) {
+            foreach ($byteKeys as $key) $summary[$key] += (int) $group->$key;
+        }
+        foreach (['report_count', 'partial_report_count', 'unsettled_report_count'] as $key) $summary[$key] = (int) ($stats[$key] ?? 0);
         $summary['identified_percent'] = $summary['raw_total'] ? round($summary['identified_bytes'] / $summary['raw_total'] * 100, 2) : 0;
         $analysis = [];
-        foreach (AccessTrafficClassifier::LABELS as $category => $label) {
-            if ($stats["category_{$category}_bytes"] === null) continue;
-            $bytes = (int) $stats["category_{$category}_bytes"];
-            $analysis[] = ['category' => $category, 'category_label' => $label, 'raw_total' => $bytes,
+        foreach ($groups as $group) {
+            $category = $group->analysis_category;
+            if (!isset(AccessTrafficClassifier::LABELS[$category])) continue;
+            $bytes = (int) $group->raw_total;
+            $analysis[] = ['category' => $category, 'category_label' => AccessTrafficClassifier::LABELS[$category], 'raw_total' => $bytes,
                 'share' => $summary['raw_total'] ? round($bytes / $summary['raw_total'] * 100, 2) : 0,
-                'confidence' => ['unknown', 'low', 'medium', 'high'][(int) $stats["category_{$category}_confidence"]],
+                'confidence' => ['unknown', 'low', 'medium', 'high'][(int) $group->category_confidence],
                 'reason' => $category === 'unknown' ? '目标证据或服务规则不足，具体用途未知。' : '依据目标域名规则或服务专用 IP 网段推断服务归属；具体聊天、视频、下载等操作仍属推断。'];
         }
         usort($analysis, fn ($a, $b) => $b['raw_total'] <=> $a['raw_total'] ?: strcmp($a['category'], $b['category']));
+        return $this->finishContext($filters, $summary, $analysis, $stats);
+    }
+
+    private function finishContext(array $filters, array $summary, array $analysis, array $stats): array
+    {
         $billing = DB::table('v2_traffic_report as b')->where('b.received_at', '>=', $filters['start_time'])
             ->where('b.received_at', '<', $filters['end_time']);
         if (isset($filters['node_id'])) $billing->where('b.node_id', $filters['node_id']);
@@ -169,13 +240,105 @@ class AccessTrafficQueryService
         return compact('summary', 'analysis', 'meta');
     }
 
+    private function streamedIndex(array $filters): array
+    {
+        $query = DB::query()->fromSub($this->aggregates($filters, true), 'g')
+            ->select(['g.id', 'g.first_seen', 'g.last_seen', 'g.raw_u', 'g.raw_d', 'g.raw_total',
+                'g.billed_u', 'g.billed_d', 'g.billed_total', 'g.rate', 'g.connections', 'g.coverage',
+                'g.known_billed_u', 'g.known_billed_d', 'g.known_billed_total']);
+        $labelCase = 'CASE g.category';
+        $labelBindings = [];
+        foreach (array_keys(AccessTrafficClassifier::LABELS) as $category) {
+            $labelCase .= ' WHEN ? THEN ?';
+            array_push($labelBindings, $category, $category);
+        }
+        // SQL comparisons retain the database collation; these expressions run per group.
+        $query->selectRaw($labelCase . ' ELSE NULL END as analysis_category', $labelBindings)
+            ->selectRaw("CASE g.confidence WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END as category_confidence")
+            ->selectRaw("CASE WHEN g.category <> 'unknown' THEN g.raw_total ELSE 0 END as identified_bytes")
+            ->selectRaw("CASE WHEN g.category = 'unknown' THEN g.raw_total ELSE 0 END as unidentified_bytes")
+            ->selectRaw("CASE WHEN g.domain = '' AND g.ip IN ('', '::', '0.0.0.0', '::ffff:0.0.0.0') THEN g.raw_total ELSE 0 END as unattributed_bytes");
+        $summary = array_fill_keys(['raw_u', 'raw_d', 'raw_total', 'billed_u', 'billed_d', 'billed_total',
+            'identified_bytes', 'unidentified_bytes', 'unattributed_bytes'], 0);
+        $categories = [];
+        $total = 0;
+        $keep = $filters['page'] * $filters['pageSize'];
+        $heap = new \SplPriorityQueue();
+        $heap->setExtractFlags(\SplPriorityQueue::EXTR_DATA);
+        foreach ($query->cursor() as $record) {
+            $total++;
+            foreach ($summary as $key => $value) {
+                $column = str_starts_with($key, 'billed_') ? 'known_' . $key : $key;
+                $summary[$key] += (int) $record->$column;
+            }
+            $category = $record->analysis_category;
+            if ($category !== null) {
+                $categories[$category] ??= ['bytes' => 0, 'confidence' => 3];
+                $categories[$category]['bytes'] += (int) $record->raw_total;
+                $categories[$category]['confidence'] = min($categories[$category]['confidence'], (int) $record->category_confidence);
+            }
+            // The largest priority is the worst retained rank: lower bytes, then higher id.
+            $heap->insert($record, [-(int) $record->raw_total, (int) $record->id]);
+            if ($heap->count() > $keep) $heap->extract();
+        }
+        $ranked = iterator_to_array($heap, false);
+        usort($ranked, fn ($a, $b) => (int) $b->raw_total <=> (int) $a->raw_total ?: (int) $a->id <=> (int) $b->id);
+        $ranked = array_slice($ranked, ($filters['page'] - 1) * $filters['pageSize'], $filters['pageSize']);
+        $columns = array_map(fn ($column) => str_replace(['e.', 'r.'], ['detail.', 'report.'], $column), $this->groupColumns($filters));
+        $details = DB::table('v2_access_traffic as detail')->join('v2_access_report as report', 'report.id', '=', 'detail.report_id')
+            ->leftJoin('v2_user as u', 'u.id', '=', 'detail.user_id')->select($columns)
+            ->addSelect('detail.id', 'u.email as user_email')->whereIn('detail.id', array_map(fn ($r) => $r->id, $ranked));
+        $records = DB::query()->fromSub($this->reportStatistics($filters), 'stats')
+            ->leftJoinSub($details, 'detail_page', fn ($join) => $join->whereRaw('1 = 1'))->select('stats.*', 'detail_page.*')->get();
+        $stats = (array) $records->first();
+        foreach (['report_count', 'partial_report_count', 'unsettled_report_count'] as $key) $summary[$key] = (int) $stats[$key];
+        $summary['identified_percent'] = $summary['raw_total'] ? round($summary['identified_bytes'] / $summary['raw_total'] * 100, 2) : 0;
+        $analysis = [];
+        foreach ($categories as $category => $values) {
+            $analysis[] = ['category' => $category, 'category_label' => AccessTrafficClassifier::LABELS[$category], 'raw_total' => $values['bytes'],
+                'share' => $summary['raw_total'] ? round($values['bytes'] / $summary['raw_total'] * 100, 2) : 0,
+                'confidence' => ['unknown', 'low', 'medium', 'high'][$values['confidence']],
+                'reason' => $category === 'unknown' ? '目标证据或服务规则不足，具体用途未知。' : '依据目标域名规则或服务专用 IP 网段推断服务归属；具体聊天、视频、下载等操作仍属推断。'];
+        }
+        usort($analysis, fn ($a, $b) => $b['raw_total'] <=> $a['raw_total'] ?: strcmp($a['category'], $b['category']));
+        $context = $this->finishContext($filters, $summary, $analysis, $stats);
+        $byId = $records->keyBy('id');
+        $rows = [];
+        foreach ($ranked as $record) {
+            $detail = (array) $byId->get($record->id);
+            foreach (['known_billed_u', 'known_billed_d', 'known_billed_total', 'analysis_category', 'category_confidence',
+                'identified_bytes', 'unidentified_bytes', 'unattributed_bytes'] as $key) unset($record->$key);
+            $detail = array_intersect_key($detail, array_flip(array_merge(array_map(fn ($c) => substr($c, strrpos($c, '.') + 1), $columns), ['user_email'])));
+            $email = $detail['user_email'];
+            unset($detail['user_email']);
+            $row = array_merge($detail, (array) $record);
+            $row['user_email'] = $email;
+            $rows[] = $this->row((object) $row, $summary['raw_total']);
+        }
+        return ['data' => $rows, 'total' => $total] + $context;
+    }
+
     public function index(array $filters): array
     {
+        $connection = DB::connection();
+        if ($filters['page'] * $filters['pageSize'] <= 10000 && $this->supportsWindowCount()
+            && ($connection->getDriverName() === 'sqlite' || ($connection->getDriverName() === 'mysql' && !$connection->isMaria()))) {
+            // Keep ranking, details and settlement metadata on one snapshot during pruning.
+            // Diagnostic callers may already have started a raw READ ONLY transaction.
+            if ($connection->transactionLevel() > 0 || $connection->getPdo()->inTransaction()) {
+                return $this->streamedIndex($filters);
+            }
+            if ($connection->getDriverName() === 'mysql') {
+                $connection->statement('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+            }
+            return $connection->transaction(fn () => $this->streamedIndex($filters));
+        }
         $context = $this->context($filters);
-        $query = $this->rows($filters);
+        $query = $this->aggregates($filters);
         $windowCount = $this->supportsWindowCount();
         if ($windowCount) $query->selectRaw('COUNT(*) OVER () AS total_groups');
-        $records = $query->forPage($filters['page'], $filters['pageSize'])->get();
+        $page = $query->orderByDesc('raw_total')->orderBy('id')->forPage($filters['page'], $filters['pageSize']);
+        $records = $this->withDetails($page, $filters)->get();
         $total = $windowCount && $records->isNotEmpty() ? (int) $records->first()->total_groups
             : ($windowCount && $filters['page'] === 1 ? 0 : $this->countGroups($filters));
         $rows = $records->map(function ($record) use ($context): array {

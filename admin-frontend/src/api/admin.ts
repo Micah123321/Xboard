@@ -701,10 +701,15 @@ export function closeTicket(id: number): Promise<ApiResponse<boolean>> {
   return unwrapPost<boolean>('/ticket/close', { id })
 }
 
+const ACCESS_TRAFFIC_TIMEOUT_MS = 60_000
+
 export function fetchAccessTraffic(
   params: AccessTrafficFilters & { page: number; pageSize: number },
 ): Promise<AccessTrafficResult> {
-  return adminClient.get<AccessTrafficResult>('/stat/getAccessTraffic', { params })
+  return adminClient.get<AccessTrafficResult>('/stat/getAccessTraffic', {
+    params,
+    timeout: ACCESS_TRAFFIC_TIMEOUT_MS,
+  })
     .then((res) => res.data)
 }
 
@@ -712,6 +717,7 @@ export function exportAccessTraffic(params: AccessTrafficFilters, format: 'csv' 
   return adminClient.get<Blob>('/stat/exportAccessTraffic', {
     params: { ...params, format },
     responseType: 'blob',
+    timeout: ACCESS_TRAFFIC_TIMEOUT_MS,
   }).then((res) => res.data)
 }
 

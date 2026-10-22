@@ -2,6 +2,8 @@
 
 ## 2026-10-22
 
+- **[node-access-traffic / full-day-query]**: 全天接口改一次流式分组同时统计汇总、类别和总数，以有界堆保留前10000排名，选页后补资料；MySQL报告时间索引先关联明细，并按首条匹配统计报告，保留完整分组/NULL计费/重叠片段/数据库collation，4条数据查询。独立请求一致性快照修复并发清理缺资料错误，SQLite避免无外键索引相关扫描。生产只读MySQL8.0.25复现约746万历史明细全扫；旧部署19.3s后SQL超时，候选13.48/14.05s完整返回；原口径非窗口独立计数oracle22.46s与候选14.05s同快照完整响应一致（59034组、268538805554字节）。96项1044断言、80次对照和双连接WAL清理回归通过。按用户要求访问流量列表及CSV/HTML导出超时15→60秒，管理端构建通过，产物output/access-query-2026-10-22/admin。无新增迁移或生产发布；说明见docs/access-traffic-query-performance-2026-10-22.md。
+
 - **[node-entry-points / forwarding-health]**: 修复 Shadowsocks 多入口仅凭 TCP 握手将转发失效入口加入随机池的问题；复用 mi-node 协议库新增面板侧独立 mi-entry-probe，执行 SS 加密、TLS 校验与 HTTPS 204 实际往返，覆盖 classic AEAD / SS2022。PHP 按批并发调用工具，隔离旧 TCP 健康缓存，校验父子协议一致，工具/响应/认证异常不回退 TCP；父节点有效基础账户是检测前提，支持已隐藏子节点恢复。隔离 SQLite 相关回归 48 项 629 断言通过，含真实 PHP→Go 子进程与 TCP 空转发验证；Go 两包测试、Windows 与 Linux amd64 构建、PHP 语法及管理端独立构建通过。工具、管理端产物与隔离验证环境位于 output/node-entry-forwarding；部署需先将工具安装至面板和 Scheduler，使用说明见 docs/node-entry-points.md。本次无新增迁移，未生产部署或使用线上用户凭据做实际代理请求。
 
 - **[security / php2shell]**: 针对 CVE-2026-109618、CVE-2026-109619 升级镜像内 PHP 至 8.2.35。因上游镜像仍为 8.2.34，固定 Swoole 基础 digest，按官方发布 SHA256 校验源码并保留 configure 参数重建引擎；后续扩展同步使用新源码。生产与本地镜像接入按分支版本门禁、启动前检查及扩展/SQLite/Swoole 冒烟；关闭 session.upload_progress 仅作附加防护。版本边界2项26断言及旧8.2.34容器退出78验证通过；两份镜像amd64构建和扩展/协程检查通过，PHP8.2.35内85项893断言、JSON/multipart/正常上传与坏请求后续请求通过；修复Windows上下文脚本CRLF并加入LF规则，真实默认入口/Octane配置API返回200。候选阶段arm64未实测；生产发布独立核对明确提交、镜像ID及四类进程的实际PHP版本，结果见 output/releases/php2shell-deployment/deployment-result.json。说明见 docs/php2shell-runtime-security.md。
