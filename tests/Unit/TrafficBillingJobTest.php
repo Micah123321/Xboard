@@ -123,6 +123,32 @@ class TrafficBillingJobTest extends TestCase
         self::assertSame(Carbon::parse('2026-08-31', 'Asia/Shanghai')->timestamp, DB::table('v2_stat_user')->value('record_at'));
     }
 
+    public function test_carried_quota_is_available_until_billed_total_is_exhausted_and_retry_charges_once(): void
+    {
+        $this->db->schema()->table('v2_user', function (Blueprint $table): void {
+            $table->bigInteger('transfer_enable')->default(0);
+            $table->bigInteger('temporary_transfer_enable')->default(0);
+            $table->bigInteger('expired_at')->nullable();
+            $table->boolean('banned')->default(false);
+        });
+        DB::table('v2_user')->where('id', 1)->update([
+            'transfer_enable' => 113, 'temporary_transfer_enable' => 13,
+        ]);
+        $users = new \App\Services\UserService();
+        self::assertSame([1], $users->getAvailableUsers()->pluck('id')->all());
+        $job = $this->job('carryover-after-purchase', [1 => [3, 5]]);
+        $job->settle();
+        self::assertFalse($job->settle());
+        $user = \App\Models\User::findOrFail(1);
+        self::assertSame(102, $user->getRemainingTraffic());
+        self::assertSame(113, $user->transfer_enable);
+        self::assertSame(13, $user->temporary_transfer_enable);
+        self::assertSame([1], $users->getAvailableUsers()->pluck('id')->all());
+        $this->job('carryover-exhaustion', [1 => [68, 0]])->settle();
+        self::assertSame(0, $user->fresh()->getRemainingTraffic());
+        self::assertSame([], $users->getAvailableUsers()->pluck('id')->all());
+    }
+
     public function test_snell_retry_bills_users_separately_and_retains_protocol_stats(): void
     {
         $server = array_replace($this->server, ['type' => 'snell']);

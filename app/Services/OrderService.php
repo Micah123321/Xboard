@@ -105,8 +105,17 @@ class OrderService
                 return false;
             }
 
+            if ($order->period === Plan::PERIOD_RESET_TRAFFIC
+                && (int) $this->user->plan_id !== (int) $order->plan_id) {
+                throw new ApiException('当前订阅已变更，请联系客服处理该重置订单');
+            }
             $plan = Plan::findOrFail($order->plan_id);
             HookManager::call('order.open.before', $order);
+
+            // Legacy orders already priced with a monetary credit keep that quote without a second credit.
+            $carryoverBytes = $this->user->plan_id !== null && (int) $order->surplus_amount === 0
+                ? $this->user->getRemainingTraffic() : 0;
+            $this->resetOrderTraffic();
 
             if ($order->refund_amount) {
                 $this->user->balance += $order->refund_amount;
@@ -119,12 +128,15 @@ class OrderService
 
             match ((string) $order->period) {
                 Plan::PERIOD_ONETIME => $this->buyByOneTime($plan),
-                Plan::PERIOD_RESET_TRAFFIC => $this->resetOrderTraffic(),
+                Plan::PERIOD_RESET_TRAFFIC => $this->user->transfer_enable = (int) ($plan->transfer_enable * 1073741824),
                 default => $this->buyByPeriod($order, $plan),
             };
 
             $this->setSpeedLimit($plan->speed_limit);
             $this->setDeviceLimit($plan->device_limit);
+            $this->user->setRelation('plan', $plan);
+            $this->user->next_reset_at = app(TrafficResetService::class)
+                ->calculateNextResetTime($this->user)?->timestamp;
 
             $eventId = match ((int) $order->type) {
                 Order::TYPE_NEW_PURCHASE => admin_setting('new_order_event_id', 0),
@@ -141,7 +153,10 @@ class OrderService
                 $this->user->refresh();
             }
 
-            // Apply the one-time bonus after resets so opening the plan cannot clear it.
+            // Restore the balance after configured reset events, then add any first-purchase bonus.
+            if ($carryoverBytes > 0) {
+                app(UserService::class)->addTemporaryTraffic($this->user, $carryoverBytes);
+            }
             $this->grantInviteFirstPurchaseTraffic($order, $plan);
             if (!$this->user->save()) {
                 throw new \RuntimeException('用户信息保存失败');
@@ -200,14 +215,10 @@ class OrderService
             if (!(int) admin_setting('plan_change_enable', 1))
                 throw new ApiException('目前不允许更改订阅，请联系客服或提交工单操作');
             $order->type = Order::TYPE_UPGRADE;
-            if ((int) admin_setting('surplus_enable', 1))
-                $this->getSurplusValue($user, $order);
-            if ($order->surplus_amount >= $order->total_amount) {
-                $order->refund_amount = (int) ($order->surplus_amount - $order->total_amount);
-                $order->total_amount = 0;
-            } else {
-                $order->total_amount = (int) ($order->total_amount - $order->surplus_amount);
-            }
+            // Unused quota is carried on fulfillment, rather than redeemed again as money.
+            $order->surplus_amount = 0;
+            $order->refund_amount = 0;
+            $order->surplus_order_ids = [];
         } else if (($user->expired_at === null || $user->expired_at > time()) && $order->plan_id == $user->plan_id) { // 用户订阅未过期或按流量订阅 且购买订阅与当前订阅相同 === 续费
             $order->type = Order::TYPE_RENEWAL;
         } else { // 新购
@@ -476,9 +487,6 @@ class OrderService
         }
         $this->user->transfer_enable = $plan->transfer_enable * 1073741824;
         $this->user->temporary_transfer_enable = 0;
-        // 从一次性转换到循环或者新购的时候，重置流量
-        if ($this->user->expired_at === NULL || $order->type === Order::TYPE_NEW_PURCHASE)
-            $this->resetOrderTraffic();
         $this->user->plan_id = $plan->id;
         $this->user->group_id = $plan->group_id;
         $this->user->expired_at = $this->getTime($order->period, $this->user->expired_at);
@@ -486,7 +494,6 @@ class OrderService
 
     private function buyByOneTime(Plan $plan)
     {
-        $this->resetOrderTraffic();
         $this->user->transfer_enable = $plan->transfer_enable * 1073741824;
         $this->user->temporary_transfer_enable = 0;
         $this->user->plan_id = $plan->id;
@@ -519,6 +526,7 @@ class OrderService
         if (!app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER)) {
             throw new \RuntimeException('Order traffic reset failed');
         }
+        $this->user->refresh();
     }
 
     private function openEvent($eventId)

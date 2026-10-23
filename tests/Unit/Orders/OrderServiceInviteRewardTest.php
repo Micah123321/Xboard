@@ -182,7 +182,7 @@ class OrderServiceInviteRewardTest extends TestCase
         ]);
         (new OrderService($order))->open();
 
-        $this->assertOpenedWithoutBonus($order);
+        $this->assertOpenedWithoutBonus($order, self::PLAN_BYTES - 42);
         self::assertSame(1, TrafficResetLog::count());
     }
 
@@ -209,7 +209,7 @@ class OrderServiceInviteRewardTest extends TestCase
         $order = $this->createOrder();
         (new OrderService($order))->open();
 
-        $this->assertOpenedWithoutBonus($order);
+        $this->assertOpenedWithoutBonus($order, 982);
         self::assertGreaterThan(time(), $this->buyer->fresh()->expired_at);
     }
 
@@ -347,7 +347,7 @@ class OrderServiceInviteRewardTest extends TestCase
     }
 
     #[DataProvider('purchasePeriods')]
-    public function test_two_preread_orders_reward_only_first_and_renewal_clears_bonus(string $period): void
+    public function test_two_preread_orders_reward_only_first_and_renewal_carries_unused_bonus(string $period): void
     {
         $firstOrder = $this->createOrder(['period' => $period]);
         $secondOrder = $this->createOrder(['period' => $period, 'type' => Order::TYPE_RENEWAL]);
@@ -361,8 +361,8 @@ class OrderServiceInviteRewardTest extends TestCase
         $this->assertOpenedWithBonus($firstOrder);
         $second->open();
 
-        $this->assertOpenedWithoutBonus($secondOrder);
-        self::assertSame([self::BONUS_BYTES, 0], $bonusesAtCompletion);
+        $this->assertOpenedWithoutBonus($secondOrder, self::PLAN_BYTES + self::BONUS_BYTES);
+        self::assertSame([self::BONUS_BYTES, self::PLAN_BYTES + self::BONUS_BYTES], $bonusesAtCompletion);
         self::assertSame(2, Order::where('status', Order::STATUS_COMPLETED)->count());
     }
 
@@ -453,8 +453,8 @@ class OrderServiceInviteRewardTest extends TestCase
         $this->assertNoOpenTransaction();
         $failReset = false;
         $service->open();
-        if ($period === Plan::PERIOD_RESET_TRAFFIC) $this->assertOpenedWithoutBonus($order);
-        else $this->assertOpenedWithBonus($order);
+        if ($period === Plan::PERIOD_RESET_TRAFFIC) $this->assertOpenedWithoutBonus($order, self::PLAN_BYTES - 42);
+        else $this->assertOpenedWithBonus($order, self::PLAN_BYTES - 42);
         self::assertSame(1, $opened);
     }
 
@@ -536,19 +536,265 @@ class OrderServiceInviteRewardTest extends TestCase
         self::assertSame(1, $opened);
     }
 
-    private function assertOpenedWithBonus(Order $order): void
+    public static function carryoverPurchases(): array
+    {
+        return [
+            'monthly renewal' => [Plan::PERIOD_MONTHLY, Order::TYPE_RENEWAL, 'active', null],
+            'quarterly renewal' => [Plan::PERIOD_QUARTERLY, Order::TYPE_RENEWAL, 'active', null],
+            'upgrade without reset event' => [Plan::PERIOD_MONTHLY, Order::TYPE_UPGRADE, 'active', null],
+            'upgrade with reset event' => [Plan::PERIOD_MONTHLY, Order::TYPE_UPGRADE, 'active', 'change_order_event_id'],
+            'renewal with reset event' => [Plan::PERIOD_MONTHLY, Order::TYPE_RENEWAL, 'active', 'renew_order_event_id'],
+            'expired repurchase' => [Plan::PERIOD_MONTHLY, Order::TYPE_NEW_PURCHASE, 'expired', null],
+            'onetime to monthly' => [Plan::PERIOD_MONTHLY, Order::TYPE_RENEWAL, 'onetime', null],
+            'monthly to onetime' => [Plan::PERIOD_ONETIME, Order::TYPE_UPGRADE, 'active', null],
+            'onetime renewal' => [Plan::PERIOD_ONETIME, Order::TYPE_RENEWAL, 'onetime', null],
+            'monthly reset package' => [Plan::PERIOD_RESET_TRAFFIC, Order::TYPE_RESET_TRAFFIC, 'active', null],
+            'onetime reset package' => [Plan::PERIOD_RESET_TRAFFIC, Order::TYPE_RESET_TRAFFIC, 'onetime', null],
+        ];
+    }
+
+    #[DataProvider('carryoverPurchases')]
+    public function test_purchase_carries_thirteen_gib_and_duplicate_open_does_not_restore_usage(
+        string $period, int $type, string $subscription, ?string $event
+    ): void {
+        $gib = 1024 ** 3;
+        $oldPlan = Plan::create([
+            'name' => 'Previous plan', 'group_id' => 1, 'transfer_enable' => 100,
+            'reset_traffic_method' => Plan::RESET_TRAFFIC_MONTHLY,
+        ]);
+        $expiresAt = match ($subscription) {
+            'onetime' => null,
+            'expired' => time() - 86400,
+            default => time() + 86400 * 10,
+        };
+        $this->buyer->update([
+            'plan_id' => $type === Order::TYPE_UPGRADE ? $oldPlan->id : $this->plan->id,
+            'transfer_enable' => 110 * $gib, 'temporary_transfer_enable' => 10 * $gib,
+            'u' => 10 * $gib, 'd' => 87 * $gib, 'expired_at' => $expiresAt,
+            'next_reset_at' => time() - 100, 'reset_count' => 4,
+        ]);
+        if ($event !== null) $this->config->set('v2board.' . $event, 1);
+        $order = $this->createOrder(['period' => $period, 'type' => $type, 'invite_user_id' => null]);
+        $service = new OrderService($order);
+        $service->open();
+
+        $this->assertOpenedWithoutBonus($order, 13 * $gib);
+        $buyer = $this->buyer->fresh();
+        self::assertSame(0, $buyer->u);
+        self::assertSame(0, $buyer->d);
+        self::assertSame(self::PLAN_BYTES + 13 * $gib, $buyer->getRemainingTraffic());
+        self::assertSame($event === null ? 5 : 6, $buyer->reset_count);
+        self::assertSame(97 * $gib, TrafficResetLog::oldest('id')->first()->old_total);
+        if ($period === Plan::PERIOD_ONETIME || ($period === Plan::PERIOD_RESET_TRAFFIC && $subscription === 'onetime')) {
+            self::assertNull($buyer->expired_at);
+            self::assertNull($buyer->next_reset_at);
+        } else {
+            self::assertGreaterThan(time(), $buyer->expired_at);
+            self::assertGreaterThan(time(), $buyer->next_reset_at);
+            if ($type === Order::TYPE_RENEWAL && $expiresAt !== null) {
+                self::assertGreaterThan($expiresAt, $buyer->expired_at);
+            }
+        }
+        if ($period === Plan::PERIOD_RESET_TRAFFIC) self::assertSame($expiresAt, $buyer->expired_at);
+
+        $buyer->update(['u' => 400, 'd' => 600]);
+        $afterUsage = $buyer->fresh()->getRawOriginal();
+        $service->open();
+        self::assertSame($afterUsage, $buyer->fresh()->getRawOriginal());
+        self::assertSame($event === null ? 1 : 2, TrafficResetLog::count());
+    }
+
+    public static function exhaustedBalances(): array
+    {
+        return ['exactly exhausted' => [1000], 'over quota' => [1500]];
+    }
+
+    #[DataProvider('exhaustedBalances')]
+    public function test_exhausted_quota_does_not_restore_already_used_temporary_traffic(int $used): void
+    {
+        $this->buyer->update([
+            'plan_id' => $this->plan->id, 'transfer_enable' => 1000,
+            'temporary_transfer_enable' => 500, 'u' => $used, 'd' => 0,
+        ]);
+        $order = $this->createOrder(['type' => Order::TYPE_RENEWAL, 'invite_user_id' => null]);
+        (new OrderService($order))->open();
+        $this->assertOpenedWithoutBonus($order);
+    }
+
+    public function test_consecutive_purchases_carry_only_latest_remaining_balance_and_auto_reset_clears_it(): void
+    {
+        $this->buyer->update([
+            'plan_id' => $this->plan->id, 'transfer_enable' => 20, 'u' => 3, 'd' => 4,
+            'temporary_transfer_enable' => 5,
+        ]);
+        $first = $this->createOrder(['type' => Order::TYPE_RENEWAL, 'invite_user_id' => null]);
+        (new OrderService($first))->open();
+        $this->assertOpenedWithoutBonus($first, 13);
+        $this->buyer->fresh()->update(['u' => 50, 'd' => 70]);
+        $second = $this->createOrder(['period' => Plan::PERIOD_RESET_TRAFFIC, 'type' => Order::TYPE_RESET_TRAFFIC]);
+        (new OrderService($second))->open();
+        $this->assertOpenedWithoutBonus($second, self::PLAN_BYTES + 13 - 120);
+        self::assertTrue((new TrafficResetService())->performReset($this->buyer->fresh(), TrafficResetLog::SOURCE_AUTO));
+        self::assertSame(self::PLAN_BYTES, $this->buyer->fresh()->transfer_enable);
+        self::assertSame(0, $this->buyer->fresh()->temporary_transfer_enable);
+    }
+
+    public function test_user_api_exposes_temporary_quota_without_adding_it_to_total_twice(): void
+    {
+        $this->database->getConnection()->getSchemaBuilder()->table('v2_user', function (Blueprint $table) {
+            $table->string('uuid')->nullable();
+            $table->integer('last_login_at')->nullable();
+            $table->boolean('banned')->default(false);
+            $table->boolean('remind_expire')->default(false);
+            $table->boolean('remind_traffic')->default(false);
+            $table->integer('commission_balance')->default(0);
+            $table->integer('discount')->nullable();
+            $table->double('commission_rate')->nullable();
+            $table->bigInteger('telegram_id')->nullable();
+        });
+        $container = Container::getInstance();
+        $responses = $this->createStub(\Illuminate\Contracts\Routing\ResponseFactory::class);
+        $responses->method('json')->willReturnCallback(
+            static fn ($data, $status = 200) => new \Illuminate\Http\JsonResponse($data, $status)
+        );
+        $container->instance(\Illuminate\Contracts\Routing\ResponseFactory::class, $responses);
+        $routes = new \Illuminate\Routing\RouteCollection();
+        $route = new \Illuminate\Routing\Route('GET', 'api/v1/client/subscribe', static fn () => null);
+        $routes->add($route->name('client.subscribe'));
+        $routes->refreshNameLookups();
+        $container->instance('url', new \Illuminate\Routing\UrlGenerator(
+            $routes, \Illuminate\Http\Request::create('https://panel.example.test')
+        ));
+        $container->alias('url', \Illuminate\Contracts\Routing\UrlGenerator::class);
+        $this->buyer->update(['plan_id' => $this->plan->id, 'transfer_enable' => 20, 'u' => 3, 'd' => 4]);
+        $order = $this->createOrder(['type' => Order::TYPE_RENEWAL, 'invite_user_id' => null]);
+        (new OrderService($order))->open();
+        $request = \Illuminate\Http\Request::create('/api/v1/user/getSubscribe');
+        $request->setUserResolver(fn () => $this->buyer->fresh());
+        $controller = new \App\Http\Controllers\V1\User\UserController(new \App\Services\Auth\LoginService());
+        foreach (['info', 'getSubscribe'] as $method) {
+            $response = $controller->$method($request);
+            self::assertSame(200, $response->getStatusCode());
+            $data = $response->getData(true)['data'];
+            self::assertSame(13, $data['temporary_transfer_enable']);
+            self::assertSame(self::PLAN_BYTES + 13, $data['transfer_enable']);
+        }
+        self::assertTrue((new TrafficResetService())->performReset($this->buyer->fresh(), TrafficResetLog::SOURCE_AUTO));
+        $data = $controller->getSubscribe($request)->getData(true)['data'];
+        self::assertSame(0, $data['temporary_transfer_enable']);
+        self::assertSame(self::PLAN_BYTES, $data['transfer_enable']);
+    }
+
+    public static function scheduledResetSources(): array
+    {
+        return [
+            'automatic' => [TrafficResetLog::SOURCE_AUTO],
+            'scheduler' => [TrafficResetLog::SOURCE_CRON],
+            'user access' => [TrafficResetLog::SOURCE_USER_ACCESS],
+        ];
+    }
+
+    #[DataProvider('scheduledResetSources')]
+    public function test_old_scheduled_reset_snapshot_cannot_clear_a_completed_purchase(string $source): void
+    {
+        $this->buyer->update([
+            'plan_id' => $this->plan->id, 'transfer_enable' => 20, 'u' => 3, 'd' => 4,
+            'expired_at' => time() + 86400, 'next_reset_at' => time() - 100,
+        ]);
+        $staleUser = $this->buyer->fresh();
+        self::assertTrue($staleUser->shouldResetTraffic());
+        $order = $this->createOrder(['type' => Order::TYPE_RENEWAL, 'invite_user_id' => null]);
+        (new OrderService($order))->open();
+        $this->buyer->fresh()->update(['u' => 5, 'd' => 7]);
+        $afterPurchase = $this->buyer->fresh()->getRawOriginal();
+
+        $resets = new TrafficResetService();
+        self::assertFalse($this->buyer->fresh()->shouldResetTraffic());
+        self::assertFalse($resets->checkAndReset($staleUser, $source));
+        self::assertSame($afterPurchase, $this->buyer->fresh()->getRawOriginal());
+        self::assertSame(1, TrafficResetLog::count());
+        self::assertSame(13, $this->buyer->fresh()->temporary_transfer_enable);
+
+        $this->buyer->fresh()->update(['next_reset_at' => time() - 100]);
+        $dueUser = $this->buyer->fresh();
+        self::assertTrue($resets->checkAndReset($dueUser, $source));
+        self::assertFalse($resets->checkAndReset($dueUser, $source));
+        self::assertSame(2, TrafficResetLog::count());
+        self::assertSame(0, $this->buyer->fresh()->temporary_transfer_enable);
+        self::assertSame(self::PLAN_BYTES, $this->buyer->fresh()->transfer_enable);
+    }
+
+    private function assertOpenedWithBonus(Order $order, int $carryoverBytes = 0): void
     {
         self::assertSame(Order::STATUS_COMPLETED, $order->fresh()->status);
-        self::assertSame(self::BONUS_BYTES, $this->buyer->fresh()->temporary_transfer_enable);
-        self::assertSame(self::PLAN_BYTES + self::BONUS_BYTES, $this->buyer->fresh()->transfer_enable);
+        self::assertSame(self::BONUS_BYTES + $carryoverBytes, $this->buyer->fresh()->temporary_transfer_enable);
+        self::assertSame(self::PLAN_BYTES + self::BONUS_BYTES + $carryoverBytes, $this->buyer->fresh()->transfer_enable);
         $this->assertNoOpenTransaction();
     }
 
-    private function assertOpenedWithoutBonus(Order $order): void
+    public function test_round_trip_upgrades_keep_full_price_when_unused_traffic_is_carried(): void
+    {
+        $gib = 1024 ** 3;
+        $oldPlan = Plan::create(['name' => 'Original plan', 'group_id' => 1, 'transfer_enable' => 100,
+            'reset_traffic_method' => Plan::RESET_TRAFFIC_MONTHLY]);
+        $this->buyer->update(['plan_id' => $oldPlan->id, 'transfer_enable' => 100 * $gib,
+            'temporary_transfer_enable' => 0, 'u' => 0, 'd' => 0, 'expired_at' => time() + 86400 * 30]);
+        $this->createOrder(['plan_id' => $oldPlan->id, 'status' => Order::STATUS_COMPLETED, 'invite_user_id' => null]);
+        $this->config->set('v2board.surplus_enable', 1);
+        foreach ([$this->plan, $oldPlan] as $target) {
+            $order = $this->createOrder(['plan_id' => $target->id, 'invite_user_id' => null]);
+            $service = new OrderService($order);
+            $service->setOrderType($this->buyer->fresh());
+            self::assertSame(Order::TYPE_UPGRADE, $order->type);
+            self::assertSame(1000, $order->total_amount);
+            self::assertSame(0, $order->surplus_amount);
+            self::assertSame(0, $order->refund_amount);
+            $order->save();
+            $service->open();
+        }
+        self::assertSame(301 * $gib, $this->buyer->fresh()->transfer_enable);
+        self::assertSame(2000, (int) Order::where('type', Order::TYPE_UPGRADE)->sum('total_amount'));
+        self::assertSame(0, $this->buyer->fresh()->balance);
+    }
+
+    public function test_preexisting_monetary_credit_order_does_not_also_carry_traffic(): void
+    {
+        $this->buyer->update(['plan_id' => $this->plan->id, 'transfer_enable' => self::PLAN_BYTES,
+            'temporary_transfer_enable' => 0, 'u' => 0, 'd' => 0, 'expired_at' => time() + 86400]);
+        $order = $this->createOrder(['type' => Order::TYPE_UPGRADE, 'surplus_amount' => 900,
+            'total_amount' => 100, 'invite_user_id' => null]);
+        (new OrderService($order))->open();
+        $this->assertOpenedWithoutBonus($order);
+        self::assertSame(100, $order->fresh()->total_amount);
+        self::assertSame(900, $order->fresh()->surplus_amount);
+    }
+
+    public function test_stale_reset_order_cannot_change_the_current_plan_quota_or_schedule(): void
+    {
+        $newPlan = Plan::create(['name' => 'Replacement plan', 'group_id' => 3, 'transfer_enable' => 1000,
+            'reset_traffic_method' => Plan::RESET_TRAFFIC_MONTHLY]);
+        $this->buyer->update(['plan_id' => $newPlan->id, 'transfer_enable' => 1013 * 1024 ** 3,
+            'temporary_transfer_enable' => 13 * 1024 ** 3, 'next_reset_at' => time() + 86400]);
+        $order = $this->createOrder(['period' => Plan::PERIOD_RESET_TRAFFIC,
+            'type' => Order::TYPE_RESET_TRAFFIC, 'invite_user_id' => null]);
+        $before = $this->buyer->fresh()->getRawOriginal();
+        try {
+            (new OrderService($order))->open();
+            self::fail('Expected stale reset fulfillment to stop.');
+        } catch (\App\Exceptions\ApiException $exception) {
+            self::assertNotSame('', $exception->getMessage());
+        }
+        self::assertSame($before, $this->buyer->fresh()->getRawOriginal());
+        self::assertSame(Order::STATUS_PROCESSING, $order->fresh()->status);
+        self::assertSame(0, TrafficResetLog::count());
+        $this->assertNoOpenTransaction();
+    }
+
+    private function assertOpenedWithoutBonus(Order $order, int $carryoverBytes = 0): void
     {
         self::assertSame(Order::STATUS_COMPLETED, $order->fresh()->status);
-        self::assertSame(0, $this->buyer->fresh()->temporary_transfer_enable);
-        self::assertSame(self::PLAN_BYTES, $this->buyer->fresh()->transfer_enable);
+        self::assertSame($carryoverBytes, $this->buyer->fresh()->temporary_transfer_enable);
+        self::assertSame(self::PLAN_BYTES + $carryoverBytes, $this->buyer->fresh()->transfer_enable);
         $this->assertNoOpenTransaction();
     }
 
@@ -635,6 +881,7 @@ class OrderServiceInviteRewardTest extends TestCase
             $table->integer('total_amount');
             $table->integer('balance_amount')->default(0);
             $table->integer('refund_amount')->default(0);
+            $table->integer('surplus_amount')->default(0);
             $table->text('surplus_order_ids')->nullable();
             $table->integer('paid_at')->nullable();
             $table->string('callback_no')->nullable();

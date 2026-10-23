@@ -23,11 +23,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $invite_user_id 邀请人
  * @property int|null $plan_id 订阅ID
  * @property int|null $group_id 权限组ID
- * @property int|null $transfer_enable 流量(KB)
+ * @property int|null $transfer_enable 合计流量额度（套餐与临时流量，字节）
  * @property int|null $speed_limit 限速Mbps
  * @property int|null $u 上行流量
  * @property int|null $d 下行流量
- * @property int|null $temporary_transfer_enable 管理员分配的一次性临时流量
+ * @property int|null $temporary_transfer_enable 临时流量额度（含订单结转、赠送和管理员分配，字节）
  * @property int|null $banned 是否封禁
  * @property int|null $remind_expire 到期提醒
  * @property int|null $remind_traffic 流量提醒

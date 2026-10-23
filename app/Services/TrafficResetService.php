@@ -25,17 +25,21 @@ class TrafficResetService
       return false;
     }
 
-    return $this->performReset($user, $triggerSource);
+    return $this->performReset($user, $triggerSource, onlyIfDue: true);
   }
 
   /**
    * Perform the traffic reset for a user.
    */
-  public function performReset(User $user, string $triggerSource = TrafficResetLog::SOURCE_MANUAL): bool
+  public function performReset(User $user, string $triggerSource = TrafficResetLog::SOURCE_MANUAL, bool $onlyIfDue = false): bool
   {
     try {
-      return $this->runResetTransaction(function () use ($user, $triggerSource) {
+      return $this->runResetTransaction(function () use ($user, $triggerSource, $onlyIfDue) {
         $lockedUser = $this->lockUserForReset($user);
+        // A purchase may have moved the reset date while this task waited for the user lock.
+        if ($onlyIfDue && !$lockedUser->shouldResetTraffic()) {
+          return false;
+        }
         $oldUpload = $lockedUser->u ?? 0;
         $oldDownload = $lockedUser->d ?? 0;
         $oldTotal = $oldUpload + $oldDownload;
