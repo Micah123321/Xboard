@@ -79,6 +79,9 @@ class Plugin extends AbstractPlugin implements PaymentInterface
 
     public function notify($params): array|bool
     {
+        if (($params['trade_status'] ?? null) !== 'TRADE_SUCCESS') {
+            return false;
+        }
         $sign = $params['sign'];
         unset($params['sign'], $params['sign_type']);
         ksort($params);
@@ -90,7 +93,8 @@ class Plugin extends AbstractPlugin implements PaymentInterface
 
         return [
             'trade_no' => $params['out_trade_no'],
-            'callback_no' => $params['trade_no']
+            'callback_no' => $params['trade_no'],
+            'payment_amount' => $params['money'] ?? null
         ];
     }
 }

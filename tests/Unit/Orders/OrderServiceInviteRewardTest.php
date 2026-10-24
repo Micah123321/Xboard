@@ -32,6 +32,7 @@ class OrderServiceInviteRewardTest extends TestCase
     private const PLAN_BYTES = 108447924224; // 101 GiB.
     private const BONUS_BYTES = 10844792422; // Fractional bytes are rounded down.
 
+    private array $previousGuardableColumns;
     private Container $previousContainer;
     private $previousFacade;
     private $previousResolver;
@@ -45,6 +46,9 @@ class OrderServiceInviteRewardTest extends TestCase
 
     protected function setUp(): void
     {
+        $guardableColumns = new \ReflectionProperty(Model::class, 'guardableColumns');
+        $this->previousGuardableColumns = $guardableColumns->getValue();
+        $guardableColumns->setValue(null, []);
         $this->previousContainer = Container::getInstance();
         $this->previousFacade = Facade::getFacadeApplication();
         $this->previousResolver = Model::getConnectionResolver();
@@ -108,6 +112,7 @@ class OrderServiceInviteRewardTest extends TestCase
         Facade::clearResolvedInstances();
         Facade::setFacadeApplication($this->previousFacade);
         Container::setInstance($this->previousContainer);
+        (new \ReflectionProperty(Model::class, 'guardableColumns'))->setValue(null, $this->previousGuardableColumns);
     }
 
     public static function paidPurchases(): array
@@ -334,7 +339,7 @@ class OrderServiceInviteRewardTest extends TestCase
         Order::whereKey($order->id)->update(['status' => Order::STATUS_CANCELLED]);
         $userBefore = $this->buyer->fresh()->getRawOriginal();
 
-        self::assertTrue((new OrderService($order))->paid('late-payment'));
+        self::assertFalse((new OrderService($order))->paid('late-payment'));
         self::assertSame(Order::STATUS_CANCELLED, $order->fresh()->status);
         self::assertSame($userBefore, $this->buyer->fresh()->getRawOriginal());
         self::assertSame(0, TrafficResetLog::count());
@@ -724,6 +729,336 @@ class OrderServiceInviteRewardTest extends TestCase
         self::assertSame(self::PLAN_BYTES, $this->buyer->fresh()->transfer_enable);
     }
 
+    public static function matchingCancelledAmounts(): array
+    {
+        return ['decimal string' => ['10.25'], 'extra zero precision' => ['10.2500'], 'JSON decimal' => [10.25]];
+    }
+
+    #[DataProvider('matchingCancelledAmounts')]
+    public function test_cancelled_order_is_fulfilled_only_once_for_its_original_fee_inclusive_price(mixed $amount): void
+    {
+        $order = $this->createOrder(['status' => Order::STATUS_PENDING, 'handling_amount' => 25, 'invite_user_id' => null]);
+        $stale = new OrderService($order->fresh());
+        self::assertTrue((new OrderService($order))->cancel());
+        $other = $this->createOrder(['status' => Order::STATUS_CANCELLED, 'handling_amount' => 25]);
+        $snapshot = ['trade_no' => $order->trade_no, 'payment_amount' => $amount];
+        self::assertTrue($stale->paid('late-receipt', $snapshot));
+        $this->assertOpenedWithoutBonus($order);
+        self::assertSame(1025, $order->fresh()->payment_amount);
+        self::assertSame(Order::STATUS_CANCELLED, $other->fresh()->status);
+        $this->buyer->fresh()->update(['u' => 5, 'd' => 7]);
+        $before = $this->buyer->fresh()->getRawOriginal();
+        self::assertTrue($stale->paid('late-receipt', $snapshot));
+        self::assertSame($before, $this->buyer->fresh()->getRawOriginal());
+        self::assertSame(1, TrafficResetLog::count());
+    }
+
+    public static function invalidCancelledReceipts(): array
+    {
+        return [
+            'one cent short' => [['payment_amount' => '10.24']],
+            'overpayment' => [['payment_amount' => '10.26']],
+            'fee omitted' => [['payment_amount' => '10.00']],
+            'missing amount' => [['payment_amount' => null]],
+            'subcent' => [['payment_amount' => '10.251']],
+            'exponent' => [['payment_amount' => '1.025e1']],
+            'thousands separator' => [['payment_amount' => '1,025']],
+            'negative' => [['payment_amount' => '-10.25']],
+            'boolean' => [['payment_amount' => true]],
+            'array' => [['payment_amount' => ['10.25']]],
+            'infinite' => [['payment_amount' => INF]],
+            'invalid number' => [['payment_amount' => NAN]],
+            'different order' => [['trade_no' => 'another-order']],
+            'missing order' => [['trade_no' => null]],
+            'different payment' => [['payment_id' => 99]],
+            'not successful' => [['paid' => false]],
+            'invalid integer evidence' => [['expected_amount' => '1025']],
+        ];
+    }
+
+    #[DataProvider('invalidCancelledReceipts')]
+    public function test_cancelled_order_stays_unchanged_for_unmatched_receipts(array $override): void
+    {
+        $order = $this->createOrder(['status' => Order::STATUS_CANCELLED, 'handling_amount' => 25]);
+        $beforeUser = $this->buyer->fresh()->getRawOriginal();
+        $beforeOrder = $order->fresh()->getRawOriginal();
+        $snapshot = array_replace(['trade_no' => $order->trade_no, 'payment_amount' => '10.25'], $override);
+        self::assertFalse((new OrderService($order))->paid('late-receipt', $snapshot));
+        self::assertSame($beforeUser, $this->buyer->fresh()->getRawOriginal());
+        self::assertSame($beforeOrder, $order->fresh()->getRawOriginal());
+        self::assertSame(0, TrafficResetLog::count());
+    }
+
+    public function test_duplicate_cancellation_refunds_once_and_late_payment_reclaims_balance_once(): void
+    {
+        $this->buyer->update(['balance' => 200]);
+        $order = $this->createOrder(['status' => Order::STATUS_PENDING, 'balance_amount' => 600,
+            'total_amount' => 400, 'handling_amount' => 25, 'invite_user_id' => null]);
+        $first = new OrderService($order->fresh());
+        $second = new OrderService($order->fresh());
+        $paid = new OrderService($order->fresh());
+        self::assertTrue($first->cancel());
+        self::assertTrue($second->cancel());
+        self::assertSame(800, $this->buyer->fresh()->balance);
+        $receipt = ['trade_no' => $order->trade_no, 'payment_amount' => '4.25'];
+        self::assertTrue($paid->paid('late-receipt', $receipt));
+        self::assertSame(200, $this->buyer->fresh()->balance);
+        self::assertTrue($paid->paid('late-receipt', $receipt));
+        self::assertFalse($second->cancel());
+        self::assertSame(200, $this->buyer->fresh()->balance);
+        self::assertSame(Order::STATUS_COMPLETED, $order->fresh()->status);
+    }
+
+    public function test_late_payment_waits_until_returned_balance_is_available_again(): void
+    {
+        $this->buyer->update(['balance' => 0]);
+        $order = $this->createOrder(['status' => Order::STATUS_PENDING, 'total_amount' => 700, 'balance_amount' => 300]);
+        $service = new OrderService($order);
+        self::assertTrue($service->cancel());
+        $this->buyer->fresh()->update(['balance' => 0]);
+        $receipt = ['trade_no' => $order->trade_no, 'payment_amount' => '7.00'];
+        self::assertFalse($service->paid('late-receipt', $receipt));
+        self::assertSame(Order::STATUS_CANCELLED, $order->fresh()->status);
+        self::assertNull($order->fresh()->paid_at);
+        $this->buyer->fresh()->update(['balance' => 300]);
+        self::assertTrue($service->paid('late-receipt', $receipt));
+        self::assertSame(0, $this->buyer->fresh()->balance);
+        self::assertSame(Order::STATUS_COMPLETED, $order->fresh()->status);
+    }
+
+    public function test_failed_late_fulfillment_rolls_back_balance_receipt_and_success_hooks_then_retries(): void
+    {
+        $order = $this->createOrder(['status' => Order::STATUS_PENDING, 'total_amount' => 700, 'balance_amount' => 300]);
+        $service = new OrderService($order);
+        self::assertTrue($service->cancel());
+        $before = $this->buyer->fresh()->getRawOriginal();
+        $orderBefore = $order->fresh()->getRawOriginal();
+        $fail = true;
+        $opened = 0;
+        HookManager::register('traffic.reset.after', function () use (&$fail) {
+            if ($fail) throw new RuntimeException('fixture opening failure');
+        });
+        HookManager::register('order.open.after', function () use (&$opened) { $opened++; });
+        $receipt = ['trade_no' => $order->trade_no, 'payment_amount' => '7.00'];
+        self::assertFalse($service->paid('late-receipt', $receipt));
+        self::assertSame($before, $this->buyer->fresh()->getRawOriginal());
+        self::assertSame($orderBefore, $order->fresh()->getRawOriginal());
+        self::assertSame(0, TrafficResetLog::count());
+        self::assertSame(0, $opened);
+        $fail = false;
+        self::assertTrue($service->paid('late-receipt', $receipt));
+        self::assertSame(0, $this->buyer->fresh()->balance);
+        self::assertSame(1, $opened);
+        self::assertSame(1, TrafficResetLog::count());
+    }
+
+    public function test_paid_order_wins_over_an_old_cancel_request_without_returning_balance(): void
+    {
+        $order = $this->createOrder(['status' => Order::STATUS_PENDING, 'balance_amount' => 300]);
+        $staleCancellation = new OrderService($order->fresh());
+        self::assertTrue((new OrderService($order))->paid('receipt'));
+        self::assertFalse($staleCancellation->cancel());
+        self::assertSame(0, $this->buyer->fresh()->balance);
+        self::assertSame(Order::STATUS_COMPLETED, $order->fresh()->status);
+    }
+
+    public function test_late_upgrade_becomes_renewal_if_the_user_already_has_that_plan(): void
+    {
+        $expiresAt = time() + 86400 * 20;
+        $this->buyer->update(['plan_id' => $this->plan->id, 'expired_at' => $expiresAt]);
+        $order = $this->createOrder(['status' => Order::STATUS_CANCELLED, 'type' => Order::TYPE_UPGRADE]);
+        self::assertTrue((new OrderService($order))->paid('receipt', [
+            'trade_no' => $order->trade_no, 'payment_amount' => '10.00',
+        ]));
+        self::assertSame(Order::TYPE_RENEWAL, $order->fresh()->type);
+        self::assertGreaterThan($expiresAt + 86400 * 27, $this->buyer->fresh()->expired_at);
+        self::assertSame(1000, $order->fresh()->total_amount);
+    }
+
+    public function test_legacy_credit_is_restored_once_and_consumed_credit_is_not_reused(): void
+    {
+        $credit = $this->createOrder(['status' => Order::STATUS_COMPLETED]);
+        $order = $this->createOrder(['status' => Order::STATUS_PENDING, 'total_amount' => 100,
+            'surplus_amount' => 900, 'refund_amount' => 200, 'surplus_order_ids' => [$credit->id]]);
+        $service = new OrderService($order);
+        self::assertTrue($service->cancel());
+        self::assertSame(0, $this->buyer->fresh()->balance);
+        $receipt = ['trade_no' => $order->trade_no, 'payment_amount' => '1.00'];
+        $credit->update(['status' => Order::STATUS_DISCOUNTED]);
+        self::assertFalse($service->paid('receipt', $receipt));
+        self::assertSame(0, $this->buyer->fresh()->balance);
+        $credit->update(['status' => Order::STATUS_COMPLETED]);
+        self::assertTrue($service->paid('receipt', $receipt));
+        self::assertTrue($service->paid('receipt', $receipt));
+        self::assertSame(200, $this->buyer->fresh()->balance);
+        self::assertSame(Order::STATUS_DISCOUNTED, $credit->fresh()->status);
+    }
+
+    public function test_signed_tokenpay_callback_restores_cancelled_order_and_emits_success_only_after_commit(): void
+    {
+        $order = $this->createOrder(['status' => Order::STATUS_PENDING, 'invite_user_id' => null]);
+        $notify = $this->makeTokenPayNotifier($order);
+        self::assertTrue((new OrderService($order))->cancel());
+        $completed = 0;
+        HookManager::register('payment.notify.success', function () use (&$completed) {
+            $this->assertNoOpenTransaction();
+            $completed++;
+        });
+        $connection = $this->database->getConnection();
+        $connection->beginTransaction();
+        self::assertSame('ok', $notify());
+        self::assertSame(0, $completed);
+        $connection->rollBack();
+        self::assertSame(Order::STATUS_CANCELLED, $order->fresh()->status);
+        self::assertSame(0, TrafficResetLog::count());
+        self::assertSame('ok', $notify());
+        self::assertSame('ok', $notify());
+        $this->assertOpenedWithoutBonus($order);
+        self::assertSame(1, $completed);
+        self::assertSame(1000, $order->fresh()->payment_amount);
+    }
+
+    public function test_cancellation_between_verification_and_claim_is_rechecked_and_recovered(): void
+    {
+        $order = $this->createOrder(['status' => Order::STATUS_PENDING, 'balance_amount' => 300]);
+        $notify = $this->makeTokenPayNotifier($order);
+        HookManager::register('payment.notify.verified', function () use ($order) {
+            self::assertTrue((new OrderService($order->fresh()))->cancel());
+            self::assertSame(300, $this->buyer->fresh()->balance);
+        });
+        self::assertSame('ok', $notify());
+        self::assertSame(Order::STATUS_COMPLETED, $order->fresh()->status);
+        self::assertSame(0, $this->buyer->fresh()->balance);
+    }
+
+    public static function invalidTokenPayNotifications(): array
+    {
+        return [
+            'different original price' => [['ActualAmount' => '9.99'], 400],
+            'only token amount matches' => [['ActualAmount' => null, 'PayAmount' => '10.00'], 400],
+            'wrong order' => [['OutOrderId' => 'unrelated-order'], 400],
+            'not paid' => [['Status' => 0], 422],
+            'fractional status' => [['Status' => 1.5], 422],
+        ];
+    }
+
+    #[DataProvider('invalidTokenPayNotifications')]
+    public function test_signed_tokenpay_notification_must_match_original_order_price_and_success(array $override, int $status): void
+    {
+        $order = $this->createOrder(['status' => Order::STATUS_CANCELLED]);
+        $notify = $this->makeTokenPayNotifier($order);
+        self::assertSame($status, $notify($override)->getStatusCode());
+        self::assertSame(Order::STATUS_CANCELLED, $order->fresh()->status);
+        self::assertNull($order->fresh()->paid_at);
+        self::assertSame(0, TrafficResetLog::count());
+    }
+
+    public function test_generic_callback_rechecks_changed_fee_and_gateway_after_verification(): void
+    {
+        $order = $this->createOrder(['status' => Order::STATUS_CANCELLED]);
+        $notify = $this->makeTokenPayNotifier($order);
+        HookManager::register('payment.notify.verified', function () use ($order) {
+            Order::whereKey($order->id)->update(['handling_amount' => 25]);
+        });
+        self::assertSame(400, $notify()->getStatusCode());
+        self::assertSame(Order::STATUS_CANCELLED, $order->fresh()->status);
+        HookManager::remove('payment.notify.verified');
+        $order->fresh()->update(['handling_amount' => 0]);
+        HookManager::register('payment.notify.verified', function () use ($order) {
+            Order::whereKey($order->id)->update(['payment_id' => 99]);
+        });
+        self::assertSame(400, $notify()->getStatusCode());
+        self::assertSame(Order::STATUS_CANCELLED, $order->fresh()->status);
+        self::assertSame(0, TrafficResetLog::count());
+    }
+
+    public function test_failed_pending_payment_restores_pending_state_for_gateway_retry(): void
+    {
+        $order = $this->createOrder(['status' => Order::STATUS_PENDING]);
+        $notify = $this->makeTokenPayNotifier($order);
+        $fail = true;
+        HookManager::register('traffic.reset.after', function () use (&$fail) {
+            if ($fail) throw new RuntimeException('fixture payment opening failure');
+        });
+        self::assertSame(400, $notify()->getStatusCode());
+        self::assertSame(Order::STATUS_PENDING, $order->fresh()->status);
+        self::assertNull($order->fresh()->paid_at);
+        self::assertNull($order->fresh()->callback_no);
+        self::assertSame(0, TrafficResetLog::count());
+        $fail = false;
+        self::assertSame('ok', $notify());
+        self::assertSame(Order::STATUS_COMPLETED, $order->fresh()->status);
+        self::assertSame(1, TrafficResetLog::count());
+    }
+
+    public function test_restoring_cancelled_order_prevents_pending_order_from_reusing_same_credit(): void
+    {
+        $credit = $this->createOrder(['status' => Order::STATUS_COMPLETED]);
+        $quote = ['total_amount' => 100, 'surplus_amount' => 900, 'surplus_order_ids' => [$credit->id]];
+        $cancelled = $this->createOrder($quote + ['status' => Order::STATUS_CANCELLED]);
+        $pending = $this->createOrder($quote + ['status' => Order::STATUS_PENDING]);
+        self::assertTrue((new OrderService($cancelled))->paid('receipt-a', [
+            'trade_no' => $cancelled->trade_no, 'payment_amount' => '1.00',
+        ]));
+        $before = $this->buyer->fresh()->getRawOriginal();
+        self::assertFalse((new OrderService($pending))->paid('receipt-b'));
+        self::assertSame(Order::STATUS_COMPLETED, $cancelled->fresh()->status);
+        self::assertSame(Order::STATUS_PENDING, $pending->fresh()->status);
+        self::assertNull($pending->fresh()->paid_at);
+        self::assertSame($before, $this->buyer->fresh()->getRawOriginal());
+        self::assertSame(Order::STATUS_DISCOUNTED, $credit->fresh()->status);
+        self::assertSame(1, TrafficResetLog::count());
+    }
+
+    public function test_after_commit_hook_failures_do_not_hide_completed_payment_or_drop_payment_event(): void
+    {
+        $order = $this->createOrder(['status' => Order::STATUS_PENDING]);
+        $notify = $this->makeTokenPayNotifier($order);
+        HookManager::register('order.cancel.after', function () { throw new RuntimeException('fixture cancel hook failure'); });
+        self::assertTrue((new OrderService($order))->cancel());
+        HookManager::register('order.open.after', function () { throw new RuntimeException('fixture open hook failure'); });
+        $payments = 0;
+        HookManager::register('payment.notify.success', function () use (&$payments) {
+            $payments++;
+            throw new RuntimeException('fixture payment hook failure');
+        });
+        self::assertSame('ok', $notify());
+        self::assertSame('ok', $notify());
+        self::assertSame(Order::STATUS_COMPLETED, $order->fresh()->status);
+        self::assertSame(1, $payments);
+        self::assertSame(1, TrafficResetLog::count());
+    }
+
+    private function makeTokenPayNotifier(Order $order): callable
+    {
+        require_once __DIR__ . '/../../../plugins/TokenPay/Plugin.php';
+        $config = ['token_pay_apitoken' => 'fixture-signing-key', 'token_pay_currency' => 'USDT_TRC20'];
+        $payment = \App\Models\Payment::create([
+            'uuid' => 'fixture-tokenpay', 'payment' => 'TokenPay', 'config' => $config, 'enable' => true,
+        ]);
+        $order->update(['payment_id' => $payment->id]);
+        $plugin = new \Plugin\TokenPay\Plugin('tokenpay');
+        $plugin->boot();
+        $manager = $this->createStub(\App\Services\Plugin\PluginManager::class);
+        $manager->method('getEnabledPaymentPlugins')->willReturn([$plugin]);
+        app()->instance(\App\Services\Plugin\PluginManager::class, $manager);
+        $responses = $this->createStub(\Illuminate\Contracts\Routing\ResponseFactory::class);
+        $responses->method('json')->willReturnCallback(
+            static fn ($data, $status = 200) => new \Illuminate\Http\JsonResponse($data, $status)
+        );
+        app()->instance(\Illuminate\Contracts\Routing\ResponseFactory::class, $responses);
+        return static function (array $override = []) use ($order, $config) {
+            $params = array_replace([
+                'OutOrderId' => $order->trade_no, 'Id' => 'tokenpay-fixture-receipt',
+                'ActualAmount' => '10.00', 'Status' => 1, 'Currency' => 'USDT_TRC20',
+            ], $override);
+            ksort($params);
+            $params['Signature'] = md5(stripslashes(urldecode(http_build_query($params))) . $config['token_pay_apitoken']);
+            $request = \Illuminate\Http\Request::create('/notify', 'POST', $params);
+            return (new \App\Http\Controllers\V1\Guest\PaymentController())->notify('TokenPay', 'fixture-tokenpay', $request);
+        };
+    }
+
     private function assertOpenedWithBonus(Order $order, int $carryoverBytes = 0): void
     {
         self::assertSame(Order::STATUS_COMPLETED, $order->fresh()->status);
@@ -869,8 +1204,20 @@ class OrderServiceInviteRewardTest extends TestCase
             $table->integer('created_at');
             $table->integer('updated_at');
         });
+        $schema->create('v2_payment', function (Blueprint $table) {
+            $table->id();
+            $table->string('uuid')->nullable();
+            $table->boolean('enable')->default(true);
+            $table->integer('created_at')->nullable();
+            $table->integer('updated_at')->nullable();
+            $table->string('name')->nullable();
+            $table->string('payment')->nullable();
+            $table->text('config')->nullable();
+        });
         $schema->create('v2_order', function (Blueprint $table) {
             $table->id();
+            $table->integer('payment_id')->nullable();
+            $table->integer('handling_amount')->nullable();
             $table->integer('user_id');
             $table->integer('plan_id');
             $table->integer('invite_user_id')->nullable();

@@ -10,7 +10,8 @@ use Curl\Curl;
 class Plugin extends AbstractPlugin implements PaymentInterface
 {
     private const FIXED_RETURN_URL = 'https://www.spkun.com/dashboard/finance/orders';
-    private const PAYMENT_AMOUNT_KEYS = ['ActualAmount', 'PayAmount', 'Amount', 'Money', 'OrderMoney'];
+    // ActualAmount is the original fiat quote; token amounts are not order prices.
+    private const PAYMENT_AMOUNT_KEYS = ['ActualAmount'];
     private const PAYMENT_METHOD_KEYS = ['PayTypeName', 'PayType', 'Method', 'Channel', 'Currency'];
     private const PAYMENT_IP_KEYS = ['PayIp', 'PayIP', 'IP', 'Ip', 'ClientIp', 'ClientIP'];
 
@@ -113,7 +114,7 @@ class Plugin extends AbstractPlugin implements PaymentInterface
             return false;
         }
 
-        if (!isset($params['Status']) || (int) $params['Status'] !== 1) {
+        if (!in_array($params['Status'] ?? null, [1, '1'], true)) {
             return false;
         }
 

@@ -30,6 +30,7 @@ require_once __DIR__ . '/../../plugins-core/Bepusdt/Plugin.php';
 
 class BepusdtPaymentTest extends TestCase
 {
+    private array $previousGuardableColumns;
     private Container $previousContainer;
     private $previousFacade;
     private $previousResolver;
@@ -47,6 +48,9 @@ class BepusdtPaymentTest extends TestCase
 
     protected function setUp(): void
     {
+        $guardableColumns = new \ReflectionProperty(Model::class, 'guardableColumns');
+        $this->previousGuardableColumns = $guardableColumns->getValue();
+        $guardableColumns->setValue(null, []);
         $this->previousContainer = Container::getInstance();
         $this->previousFacade = Facade::getFacadeApplication();
         $this->previousResolver = Model::getConnectionResolver();
@@ -87,6 +91,7 @@ class BepusdtPaymentTest extends TestCase
             $table->integer('total_amount');
             $table->integer('handling_amount')->nullable();
             $table->integer('status')->default(0);
+            $table->integer('type')->default(Order::TYPE_NEW_PURCHASE);
             $table->integer('paid_at')->nullable();
             $table->string('callback_no')->nullable();
             $table->string('payment_channel')->nullable();
@@ -116,6 +121,7 @@ class BepusdtPaymentTest extends TestCase
         Facade::clearResolvedInstances();
         Facade::setFacadeApplication($this->previousFacade);
         Container::setInstance($this->previousContainer);
+        (new \ReflectionProperty(Model::class, 'guardableColumns'))->setValue(null, $this->previousGuardableColumns);
     }
 
     public function test_official_signature_example_and_unescaped_values(): void
@@ -295,11 +301,14 @@ class BepusdtPaymentTest extends TestCase
         self::assertSame(Order::STATUS_PENDING, Order::first()->status);
     }
 
-    public function test_cancelled_order_is_not_fulfilled_or_acknowledged_as_paid(): void
+    public function test_cancelled_order_with_same_signed_amount_is_paid_once(): void
     {
-        $this->expectDispatches(0);
+        $this->expectDispatches(1);
         Order::query()->update(['status' => Order::STATUS_CANCELLED]);
-        self::assertSame(400, $this->notify($this->callbackPayload())->getStatusCode());
+        self::assertSame('success', $this->notify($this->callbackPayload()));
+        self::assertSame('success', $this->notify($this->callbackPayload()));
+        self::assertSame(Order::STATUS_COMPLETED, Order::first()->status);
+        self::assertSame(1025, Order::first()->payment_amount);
     }
 
     public function test_amount_change_after_verification_is_rechecked(): void
@@ -337,6 +346,7 @@ class BepusdtPaymentTest extends TestCase
             Order::query()->update(['status' => Order::STATUS_COMPLETED]);
         });
         app()->instance(Dispatcher::class, $dispatcher);
+        Payment::query()->update(['payment' => 'Legacy']);
         self::assertSame('success', (new PaymentController())->notify('Legacy', 'payment-uuid', Request::create('/notify', 'POST')));
         self::assertSame('legacy-1', Order::first()->callback_no);
     }
@@ -362,6 +372,26 @@ class BepusdtPaymentTest extends TestCase
         self::assertSame(0, $completed);
         $connection->commit();
         self::assertSame(1, $completed);
+    }
+
+    public function test_callback_method_must_match_the_configured_gateway(): void
+    {
+        $this->expectDispatches(0);
+        Order::query()->update(['status' => Order::STATUS_CANCELLED]);
+        $response = (new PaymentController())->notify('TokenPay', 'payment-uuid', Request::create('/notify', 'POST'));
+        self::assertSame(500, $response->getStatusCode());
+        self::assertSame(Order::STATUS_CANCELLED, Order::first()->status);
+    }
+
+    public function test_cancelled_order_amount_mismatch_and_nonpaid_callbacks_preserve_cancellation(): void
+    {
+        $this->expectDispatches(0);
+        Order::query()->update(['status' => Order::STATUS_CANCELLED]);
+        self::assertSame(422, $this->notify($this->callbackPayload(['amount' => '10.24']))->getStatusCode());
+        self::assertSame('success', $this->notify($this->callbackPayload(['status' => 1])));
+        self::assertSame('success', $this->notify($this->callbackPayload(['status' => 3])));
+        self::assertSame(Order::STATUS_CANCELLED, Order::first()->status);
+        self::assertNull(Order::first()->paid_at);
     }
 
     private function expectDispatches(int $count): void

@@ -38,63 +38,49 @@ class PaymentController extends Controller
         }
     }
 
-    private function handleBepusdt(array $verify): bool
-    {
-        $userId = Order::where('trade_no', $verify['trade_no'])->value('user_id');
-        return DB::transaction(function () use ($verify, $userId) {
-            // Match fulfillment's user-before-order lock order for concurrent purchases.
-            if (!$userId || !User::lockForUpdate()->find($userId)) {
-                return false;
-            }
-            $order = Order::where('trade_no', $verify['trade_no'])->lockForUpdate()->first();
-            // Recheck under the lock: checkout may have changed the channel or fee.
-            if (!$order || (int) $order->user_id !== (int) $userId
-                || (int) $order->payment_id !== $verify['payment_id']
-                || $order->payment?->payment !== 'BEpusdt'
-                || (int) $order->total_amount + (int) $order->handling_amount !== $verify['expected_amount']) {
-                return false;
-            }
-            if (in_array((int) $order->status, [Order::STATUS_COMPLETED, Order::STATUS_DISCOUNTED], true)) {
-                return true;
-            }
-            if ((int) $order->status !== Order::STATUS_PENDING) {
-                return false;
-            }
-            if (!(new OrderService($order))->paid($verify['callback_no'], $verify)) {
-                // paid() catches dispatch failures; throwing here restores the pending order for retry.
-                throw new \RuntimeException('BEpusdt order fulfillment failed');
-            }
-            DB::afterCommit(fn () => HookManager::call('payment.notify.success', $order));
-            return true;
-        });
-    }
-
     /**
      * @param array<string, mixed> $verify
      */
-    private function handle(array $verify, string $method = '')
+    private function handle(array $verify, string $method = ''): bool
     {
-        if ($method === 'BEpusdt') {
-            return $this->handleBepusdt($verify);
-        }
         $tradeNo = (string) ($verify['trade_no'] ?? '');
         $callbackNo = (string) ($verify['callback_no'] ?? '');
         if ($tradeNo === '') {
             return false;
         }
-
-        $order = Order::where('trade_no', $tradeNo)->first();
-        if (!$order) {
-            return $this->fail([400202, 'order is not found']);
-        }
-        if ($order->status !== Order::STATUS_PENDING)
+        $userId = Order::where('trade_no', $tradeNo)->value('user_id');
+        return DB::transaction(function () use ($verify, $method, $tradeNo, $callbackNo, $userId) {
+            // Match fulfillment and cancellation's user-before-order lock order.
+            if (!$userId || !User::lockForUpdate()->find($userId)) {
+                return false;
+            }
+            $order = Order::where('trade_no', $tradeNo)->lockForUpdate()->first();
+            if (!$order || (int) $order->user_id !== (int) $userId
+                || (isset($verify['payment_id']) && (int) $order->payment_id !== (int) $verify['payment_id'])) {
+                return false;
+            }
+            // Recheck BEpusdt's signed quote under the lock in case checkout changed the fee.
+            if ($method === 'BEpusdt' && ($order->payment?->payment !== 'BEpusdt'
+                || (int) $order->total_amount + (int) $order->handling_amount !== ($verify['expected_amount'] ?? null))) {
+                return false;
+            }
+            if (!in_array((int) $order->status, [Order::STATUS_PENDING, Order::STATUS_CANCELLED], true)) {
+                return true;
+            }
+            if (!(new OrderService($order))->paid($callbackNo, $verify)) {
+                if ($method === 'BEpusdt') {
+                    throw new \RuntimeException('BEpusdt order fulfillment failed');
+                }
+                return false;
+            }
+            DB::afterCommit(function () use ($order) {
+                try {
+                    HookManager::call('payment.notify.success', $order);
+                } catch (\Exception $exception) {
+                    Log::error('Payment success hook failed after commit', ['order_id' => $order->id, 'exception' => $exception]);
+                }
+            });
             return true;
-        $orderService = new OrderService($order);
-        if (!$orderService->paid($callbackNo, $verify)) {
-            return false;
-        }
-
-        HookManager::call('payment.notify.success', $order);
-        return true;
+        });
     }
 }

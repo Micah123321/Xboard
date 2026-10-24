@@ -30,7 +30,7 @@ class PaymentService
         if (!$payment && $uuid) {
             $payment = Payment::where('uuid', $uuid)->first();
         }
-        if (($id || $uuid) && !$payment) {
+        if (($id || $uuid) && (!$payment || $payment->payment !== $method)) {
             throw new ApiException(__('Payment method is not available'));
         }
 
@@ -73,7 +73,12 @@ class PaymentService
     {
         if (!$this->config['enable'])
             throw new ApiException('gate is not enable');
-        return $this->payment->notify($params);
+        $verified = $this->payment->notify($params);
+        if (is_array($verified)) {
+            // Bind the signed callback to the configured gateway that verified it.
+            $verified['payment_id'] = (int) $this->config['id'];
+        }
+        return $verified;
     }
 
     public function pay($order)

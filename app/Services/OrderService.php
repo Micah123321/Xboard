@@ -109,6 +109,9 @@ class OrderService
                 && (int) $this->user->plan_id !== (int) $order->plan_id) {
                 throw new ApiException('当前订阅已变更，请联系客服处理该重置订单');
             }
+            if (!$this->hasAvailableSurplusCredit($order)) {
+                throw new ApiException('订单折抵来源已变更，请联系客服处理');
+            }
             $plan = Plan::findOrFail($order->plan_id);
             HookManager::call('order.open.before', $order);
 
@@ -171,7 +174,13 @@ class OrderService
         });
 
         if ($opened) {
-            DB::afterCommit(fn () => HookManager::call('order.open.after', $order));
+            DB::afterCommit(function () use ($order) {
+                try {
+                    HookManager::call('order.open.after', $order);
+                } catch (\Exception $exception) {
+                    Log::error('Order success hook failed after commit', ['order_id' => $order->id, 'exception' => $exception]);
+                }
+            });
         }
     }
 
@@ -339,32 +348,107 @@ class OrderService
         }
     }
 
-    public function paid(string $callbackNo, array $paymentSnapshot = [])
+    public function paid(string $callbackNo, array $paymentSnapshot = []): bool
     {
-        $order = $this->order;
-        if ((int) $order->status !== Order::STATUS_PENDING)
-            return true;
-
-        // Only the callback that claims the pending row may open the order.
-        $updated = Order::whereKey($order->id)
-            ->where('status', Order::STATUS_PENDING)
-            ->update([
-                'status' => Order::STATUS_PROCESSING,
-                'paid_at' => time(),
-                'callback_no' => $callbackNo,
-                ...$this->buildPaymentSnapshot($paymentSnapshot),
-            ]);
-        $order->refresh();
-        if (!$updated) {
-            return true;
-        }
+        $originalOrder = $this->order;
         try {
-            OrderHandleJob::dispatchSync($order->trade_no);
+            return DB::transaction(function () use ($originalOrder, $callbackNo, $paymentSnapshot) {
+                // Cancellation, payment and fulfillment all lock the user before the order.
+                $user = User::lockForUpdate()->findOrFail($originalOrder->user_id);
+                $order = Order::lockForUpdate()->findOrFail($originalOrder->id);
+                $this->order = $order;
+                if ((int) $order->user_id !== (int) $user->id) {
+                    return false;
+                }
+                if (!in_array((int) $order->status, [Order::STATUS_PENDING, Order::STATUS_CANCELLED], true)) {
+                    return true;
+                }
+                if (($paymentSnapshot['paid'] ?? null) === false
+                    || (isset($paymentSnapshot['trade_no']) && $paymentSnapshot['trade_no'] !== $order->trade_no)
+                    || (isset($paymentSnapshot['payment_id']) && (int) $paymentSnapshot['payment_id'] !== (int) $order->payment_id)) {
+                    return false;
+                }
+
+                if ((int) $order->status === Order::STATUS_CANCELLED) {
+                    if (!$this->canRestoreCancelledPayment($order, $callbackNo, $paymentSnapshot)) {
+                        return false;
+                    }
+                    // Keep the original quote, but classify against the current subscription.
+                    $order->type = match (true) {
+                        $order->period === Plan::PERIOD_RESET_TRAFFIC => Order::TYPE_RESET_TRAFFIC,
+                        $user->plan_id === null || ($user->expired_at !== null && $user->expired_at <= time()) => Order::TYPE_NEW_PURCHASE,
+                        (int) $user->plan_id === (int) $order->plan_id => Order::TYPE_RENEWAL,
+                        default => Order::TYPE_UPGRADE,
+                    };
+                    // cancel() has returned this balance credit; reclaim it exactly once.
+                    if ((int) $order->balance_amount > 0) {
+                        if ((int) $user->balance < (int) $order->balance_amount) {
+                            return false;
+                        }
+                        $user->balance -= (int) $order->balance_amount;
+                        if (!$user->save()) {
+                            throw new \RuntimeException('Failed to reclaim cancelled order balance.');
+                        }
+                    }
+                }
+
+                $order->fill([
+                    'status' => Order::STATUS_PROCESSING,
+                    'paid_at' => time(),
+                    'callback_no' => $callbackNo,
+                    ...$this->buildPaymentSnapshot($paymentSnapshot),
+                ]);
+                if (!$order->save()) {
+                    throw new \RuntimeException('Failed to save paid order.');
+                }
+                // Keep receipt, balance and fulfillment atomic, including failed synchronous jobs.
+                OrderHandleJob::dispatchSync($order->trade_no);
+                return true;
+            });
         } catch (\Exception $e) {
             Log::error($e);
             return false;
+        } finally {
+            $originalOrder->refresh();
+            $this->order = $originalOrder;
+        }
+    }
+
+    private function canRestoreCancelledPayment(Order $order, string $callbackNo, array $paymentSnapshot): bool
+    {
+        $expectedAmount = (int) $order->total_amount + (int) $order->handling_amount;
+        // Only signed callback amounts are evidence; never substitute the local order price.
+        $amount = array_key_exists('expected_amount', $paymentSnapshot)
+            ? (is_int($paymentSnapshot['expected_amount']) ? $paymentSnapshot['expected_amount'] : null)
+            : $this->callbackAmountInCents($paymentSnapshot['payment_amount'] ?? null);
+        if (($paymentSnapshot['trade_no'] ?? null) !== $order->trade_no
+            || trim($callbackNo) === '' || $expectedAmount <= 0 || $amount !== $expectedAmount) {
+            return false;
         }
         return true;
+    }
+
+    private function hasAvailableSurplusCredit(Order $order): bool
+    {
+        // Every fulfillment must claim legacy monetary credits only once, including pending orders.
+        if ($order->surplus_order_ids) {
+            $ids = array_unique($order->surplus_order_ids);
+            $credits = Order::whereIn('id', $ids)->where('user_id', $order->user_id)
+                ->where('status', Order::STATUS_COMPLETED)->lockForUpdate()->get(['id']);
+            if ($credits->count() !== count($ids)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private function callbackAmountInCents(mixed $amount): ?int
+    {
+        if ((!is_string($amount) && !is_int($amount) && !is_float($amount))
+            || !preg_match('/^([0-9]{1,12})(?:[.]([0-9]{1,2})0*)?$/D', (string) $amount, $matches)) {
+            return null;
+        }
+        return (int) $matches[1] * 100 + (int) str_pad($matches[2] ?? '', 2, '0');
     }
 
     /**
@@ -445,27 +529,45 @@ class OrderService
 
     public function cancel(): bool
     {
-        $order = $this->order;
-        HookManager::call('order.cancel.before', $order);
+        $originalOrder = $this->order;
         try {
-            DB::beginTransaction();
-            $order->status = Order::STATUS_CANCELLED;
-            if (!$order->save()) {
-                throw new \Exception('Failed to save order status.');
-            }
-            if ($order->balance_amount) {
-                $userService = new UserService();
-                if (!$userService->addBalance($order->user_id, $order->balance_amount)) {
-                    throw new \Exception('Failed to add balance.');
+            return DB::transaction(function () use ($originalOrder) {
+                $user = User::lockForUpdate()->findOrFail($originalOrder->user_id);
+                $order = Order::lockForUpdate()->findOrFail($originalOrder->id);
+                if ((int) $order->user_id !== (int) $user->id) {
+                    return false;
                 }
-            }
-            DB::commit();
-            HookManager::call('order.cancel.after', $order);
-            return true;
+                if ((int) $order->status === Order::STATUS_CANCELLED) {
+                    return true;
+                }
+                if ((int) $order->status !== Order::STATUS_PENDING) {
+                    return false;
+                }
+                HookManager::call('order.cancel.before', $order);
+                $order->status = Order::STATUS_CANCELLED;
+                if (!$order->save()) {
+                    throw new \RuntimeException('Failed to save order status.');
+                }
+                if ((int) $order->balance_amount > 0) {
+                    $user->balance += (int) $order->balance_amount;
+                    if (!$user->save()) {
+                        throw new \RuntimeException('Failed to return order balance.');
+                    }
+                }
+                DB::afterCommit(function () use ($order) {
+                    try {
+                        HookManager::call('order.cancel.after', $order);
+                    } catch (\Exception $exception) {
+                        Log::error('Order cancellation hook failed after commit', ['order_id' => $order->id, 'exception' => $exception]);
+                    }
+                });
+                return true;
+            });
         } catch (\Exception $e) {
-            DB::rollBack();
             Log::error($e);
             return false;
+        } finally {
+            $originalOrder->refresh();
         }
     }
 
