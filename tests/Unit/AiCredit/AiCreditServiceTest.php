@@ -132,7 +132,7 @@ class AiCreditServiceTest extends TestCase
             public function __construct() {}
             public function get(string $key, mixed $default = null): mixed { return $default; }
         });
-        $old = $this->order(['paid_at' => time() - 100]); $this->allowLegacy($old);
+        $old = $this->order(['paid_at' => AiCreditService::ordersSinceAt() - 100]); $this->allowLegacy($old);
         $renewal = $this->order(['status' => Order::STATUS_PROCESSING, 'type' => Order::TYPE_RENEWAL]);
         $service = new \App\Services\OrderService($renewal); $service->open();
         self::assertSame(Order::STATUS_COMPLETED, $renewal->fresh()->status);
@@ -223,7 +223,7 @@ class AiCreditServiceTest extends TestCase
 
     public function test_legacy_preview_is_read_only_and_backfill_is_once_per_current_subscription(): void
     {
-        $this->order(['paid_at' => time() - 200]); $latest = $this->order(['type' => Order::TYPE_RENEWAL, 'paid_at' => time() - 100]);
+        $this->order(['paid_at' => AiCreditService::ordersSinceAt() - 200]); $latest = $this->order(['type' => Order::TYPE_RENEWAL, 'paid_at' => AiCreditService::ordersSinceAt() - 100]);
         $this->allowLegacy($latest);
         $preview = $this->service->legacyPreview();
         self::assertSame(1, $preview['eligible_count']); self::assertSame(0, AiCreditGrant::count());
@@ -235,7 +235,7 @@ class AiCreditServiceTest extends TestCase
 
     public function test_preparing_legacy_before_renewal_preserves_both_entitlements(): void
     {
-        $old = $this->order(['paid_at' => time() - 100]); $this->allowLegacy($old);
+        $old = $this->order(['paid_at' => AiCreditService::ordersSinceAt() - 100]); $this->allowLegacy($old);
         $legacy = $this->service->prepareLegacy($this->user);
         self::assertSame($old->id, $legacy->order_id);
         $renewal = $this->grant(['type' => Order::TYPE_RENEWAL]);
@@ -246,17 +246,106 @@ class AiCreditServiceTest extends TestCase
 
     public function test_legacy_does_not_fall_back_when_latest_order_is_too_cheap(): void
     {
-        $this->order(['paid_at' => time() - 200]); $latest = $this->order(['total_amount' => 1500, 'paid_at' => time() - 100]);
+        $this->order(['paid_at' => AiCreditService::ordersSinceAt() - 200]); $latest = $this->order(['total_amount' => 1500, 'paid_at' => AiCreditService::ordersSinceAt() - 100]);
         $this->allowLegacy($latest); self::assertSame(0, $this->service->legacyPreview()['eligible_count']);
         self::assertNull($this->service->prepareLegacy($this->user));
     }
 
     public function test_expired_subscription_has_no_legacy_gift(): void
     {
-        $old = $this->order(['paid_at' => time() - 100]); $this->allowLegacy($old);
+        $old = $this->order(['paid_at' => AiCreditService::ordersSinceAt() - 100]); $this->allowLegacy($old);
         $this->user->update(['expired_at' => time() - 1]);
         self::assertSame(0, $this->service->legacyPreview()['eligible_count']);
         self::assertNull($this->service->prepareLegacy($this->user));
+    }
+
+    public function test_recent_order_cutoff_uses_beijing_payment_time_and_includes_october_twentieth(): void
+    {
+        $since = AiCreditService::ordersSinceAt();
+        self::assertSame('2026-10-19T16:00:00+00:00', gmdate('c', $since));
+        $before = $this->order(['paid_at' => $since - 1]);
+        $boundary = $this->order(['paid_at' => $since]);
+        $after = $this->order(['paid_at' => $since + 1]);
+        $this->allowLegacy($after);
+        $this->user->update(['expired_at' => time() - 1]);
+        $preview = $this->service->legacyPreview();
+        self::assertSame([$boundary->id, $after->id], array_column($preview['records'], 'order_id'));
+        self::assertSame(['order', 'order'], array_column($preview['records'], 'source'));
+        self::assertSame(2, $this->service->prepareHistorical($this->user));
+        self::assertSame(0, $this->service->prepareHistorical($this->user));
+        self::assertFalse(AiCreditGrant::where('order_id', $before->id)->exists());
+    }
+
+    public function test_recent_orders_and_older_current_subscription_form_a_deduplicated_union(): void
+    {
+        $since = AiCreditService::ordersSinceAt();
+        $older = $this->order(['paid_at' => $since - 86400]);
+        $current = $this->order(['paid_at' => $since - 3600, 'type' => Order::TYPE_RENEWAL]);
+        $other = User::create(['email' => 'recent@example.test', 'plan_id' => null, 'expired_at' => time() - 1]);
+        $recent = $this->order(['user_id' => $other->id, 'paid_at' => $since + 3600]);
+        $this->allowLegacy($recent);
+        $preview = $this->service->legacyPreview();
+        self::assertSame([$current->id, $recent->id], array_column($preview['records'], 'order_id'));
+        self::assertSame(['legacy', 'order'], array_column($preview['records'], 'source'));
+        self::assertSame(2, $this->service->backfill(200)['created']);
+        self::assertSame(0, $this->service->backfill(200)['created']);
+        self::assertSame(1, AiCreditGrant::where('legacy_user_id', $this->user->id)->count());
+        self::assertFalse(AiCreditGrant::where('order_id', $older->id)->exists());
+        self::assertSame(2, AiCreditGrant::count());
+    }
+
+    public function test_current_subscription_inside_recent_window_is_not_granted_twice(): void
+    {
+        $since = AiCreditService::ordersSinceAt();
+        $first = $this->order(['paid_at' => $since + 100]);
+        $latest = $this->order(['paid_at' => $since + 200, 'type' => Order::TYPE_RENEWAL]);
+        $this->allowLegacy($latest);
+        self::assertSame(2, $this->service->prepareHistorical($this->user));
+        self::assertNull($this->service->prepareLegacy($this->user));
+        self::assertSame(0, $this->service->backfill(200)['created']);
+        self::assertSame(2, AiCreditGrant::count());
+        self::assertSame(0, AiCreditGrant::whereNotNull('legacy_user_id')->count());
+    }
+
+    public function test_backfill_batch_limit_applies_to_orders_even_for_the_same_user(): void
+    {
+        $since = AiCreditService::ordersSinceAt();
+        $first = $this->order(['paid_at' => $since + 10]);
+        $second = $this->order(['paid_at' => $since + 20, 'type' => Order::TYPE_RENEWAL]);
+        $third = $this->order(['paid_at' => $since + 30, 'type' => Order::TYPE_RENEWAL]);
+        $this->allowLegacy($third);
+        $batch = $this->service->backfill(1);
+        self::assertSame(['created' => 1, 'skipped' => 0, 'has_more' => true], $batch);
+        self::assertSame([$first->id], AiCreditGrant::pluck('order_id')->all());
+        self::assertSame(1, $this->service->backfill(1)['created']);
+        self::assertSame(1, $this->service->backfill(1)['created']);
+        self::assertSame(0, $this->service->backfill(1)['created']);
+        self::assertSame(3, AiCreditGrant::count());
+    }
+
+    public function test_recent_window_still_excludes_free_manual_reset_and_threshold_orders(): void
+    {
+        $since = AiCreditService::ordersSinceAt();
+        foreach ([['total_amount' => 1500], ['total_amount' => 0], ['callback_no' => 'manual_operation'], ['period' => Plan::PERIOD_RESET_TRAFFIC], ['status' => Order::STATUS_CANCELLED]] as $extra) {
+            $this->order(array_replace(['paid_at' => $since + 100], $extra));
+        }
+        $good = $this->order(['paid_at' => $since + 200, 'total_amount' => 1501]);
+        $this->allowLegacy($good);
+        self::assertSame([$good->id], array_column($this->service->legacyPreview()['records'], 'order_id'));
+        self::assertSame(1, $this->service->prepareHistorical($this->user));
+    }
+
+    public function test_user_preparation_is_bounded_and_only_prepares_own_recent_orders(): void
+    {
+        $since = AiCreditService::ordersSinceAt();
+        for ($i = 0; $i < 3; $i++) $last = $this->order(['paid_at' => $since + 100 + $i]);
+        $other = User::create(['email' => 'private-recent@example.test']);
+        $last = $this->order(['user_id' => $other->id, 'paid_at' => $since + 200]);
+        $this->allowLegacy($last);
+        self::assertSame(2, $this->service->prepareHistorical($this->user, 2));
+        self::assertSame(1, $this->service->prepareHistorical($this->user, 2));
+        self::assertSame(0, AiCreditGrant::where('user_id', $other->id)->count());
+        self::assertSame(1, $this->service->prepareHistorical($other));
     }
 
     public function test_claim_encrypts_code_and_repeated_claim_returns_the_same_code(): void

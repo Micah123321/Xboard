@@ -26,7 +26,7 @@ class AiCreditController extends Controller
 
     public function refresh(Request $request)
     {
-        $this->service->prepareLegacy($request->user());
+        $this->service->prepareHistorical($request->user());
         return $this->success($this->service->overview($request->user()))->header('Cache-Control', 'no-store');
     }
 

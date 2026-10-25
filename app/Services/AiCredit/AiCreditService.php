@@ -50,6 +50,7 @@ class AiCreditService
     {
         $model = $this->available() ? AiCreditSetting::find(1) : null;
         $settings = array_replace(self::defaults(), $model?->settings ?? []);
+        $settings['orders_since_at'] = self::ordersSinceAt();
         $settings['bridge_token_set'] = (bool) $model?->bridge_token;
         $settings['provider_ready'] = $settings['bridge_token_set'] && $settings['bridge_url'] !== '';
         if ($public) {
@@ -138,7 +139,7 @@ class AiCreditService
             // Once evaluated after launch, an ineligible order must never become a legacy gift on a later refresh.
             DB::table('v2_order')->where('id', $order->id)->update(['ai_credit_evaluated_at' => time()]);
         }
-        if (!$this->active($settings) || AiCreditPolicy::orderReason($order, $settings)) return null;
+        if (!$this->active($settings) || (int) $order->paid_at < self::ordersSinceAt() || AiCreditPolicy::orderReason($order, $settings)) return null;
         if ((int) $order->type === Order::TYPE_UPGRADE
             && (!$previousPlan || (int) $previousPlan['id'] === (int) $plan->id || (int) $previousPlan['traffic_gb'] >= (int) $plan->transfer_enable)) return null;
         return $this->createGrant($order, $plan, $settings, 'order');
@@ -155,17 +156,20 @@ class AiCreditService
             'plan_id' => $plan->id, 'plan_name' => $plan->name, 'traffic_gb' => (int) $plan->transfer_enable,
             'paid_amount_cents' => AiCreditPolicy::paidCents($order, (bool) $settings['include_balance']),
             'amount_usd_cents' => $cents,
-            'policy_snapshot' => array_intersect_key($settings, array_flip(['version', 'rate_usd_per_gb', 'min_paid_cents', 'include_balance'])),
+            'policy_snapshot' => array_intersect_key($settings, array_flip(['version', 'rate_usd_per_gb', 'min_paid_cents', 'include_balance', 'orders_since_at'])),
             'source' => $source, 'status' => 'eligible',
         ]);
     }
 
-    private function legacyOrders(array $settings): Builder
+    public static function ordersSinceAt(): int
     {
-        // Choose the latest fulfilled subscription before checking its price: never fall back to an older, more expensive order.
-        return Order::query()->select('v2_order.*')->with('plan')
-            ->join('v2_user', 'v2_user.id', '=', 'v2_order.user_id')
-            ->whereColumn('v2_user.plan_id', 'v2_order.plan_id')->where('v2_user.banned', 0)
+        return (new \DateTimeImmutable('2026-10-20T00:00:00+08:00'))->getTimestamp();
+    }
+
+    private function currentSubscriptionOrder(Builder $query): void
+    {
+        // Check the latest fulfilled subscription before testing its price; an older paid plan is not a substitute.
+        $query->whereColumn('v2_user.plan_id', 'v2_order.plan_id')
             ->where(fn ($q) => $q->whereNull('v2_user.expired_at')->orWhere('v2_user.expired_at', '>', time()))
             ->where('v2_order.id', function ($q) {
                 $q->select('recent.id')->from('v2_order as recent')->whereColumn('recent.user_id', 'v2_order.user_id')
@@ -173,7 +177,27 @@ class AiCreditService
                     ->where('recent.period', '!=', Plan::PERIOD_RESET_TRAFFIC)
                     ->orderByDesc('recent.paid_at')->orderByDesc('recent.id')->limit(1);
             })
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('v2_ai_credit_grants as l')->whereColumn('l.legacy_user_id', 'v2_order.user_id'));
+    }
+
+    private function legacyOrders(array $settings, bool $currentOnly = false): Builder
+    {
+        $since = self::ordersSinceAt();
+        return Order::query()->select('v2_order.*')->with('plan')
+            ->join('v2_user', 'v2_user.id', '=', 'v2_order.user_id')->where('v2_user.banned', 0)
+            ->where(function (Builder $query) use ($currentOnly, $since) {
+                if ($currentOnly) {
+                    $this->currentSubscriptionOrder($query);
+                } else {
+                    $query->where('v2_order.paid_at', '>=', $since)
+                        ->orWhere(function (Builder $current) use ($since) {
+                            $current->where('v2_order.paid_at', '<', $since);
+                            $this->currentSubscriptionOrder($current);
+                        });
+                }
+            })
             ->where('v2_order.status', Order::STATUS_COMPLETED)->whereIn('v2_order.type', [1, 2, 3])
+            ->where('v2_order.period', '!=', Plan::PERIOD_RESET_TRAFFIC)
             ->whereNull('v2_order.ai_credit_evaluated_at')
             ->where('v2_order.id', '<=', (int) $settings['legacy_max_order_id'])
             ->where('v2_order.paid_at', '>', 0)->where('v2_order.paid_at', '<=', (int) $settings['activated_at'])
@@ -182,9 +206,14 @@ class AiCreditService
             ->where(fn ($q) => $q->where('v2_order.total_amount', '<=', 0)->orWhere('v2_order.payment_id', '>', 0))
             ->whereRaw('COALESCE(v2_order.total_amount, 0)' . ($settings['include_balance'] ? ' + COALESCE(v2_order.balance_amount, 0)' : '') . ' > ?', [(int) $settings['min_paid_cents']])
             ->when($settings['plan_ids'], fn ($q) => $q->whereIn('v2_order.plan_id', $settings['plan_ids']))
+            ->whereHas('plan', fn ($q) => $q->where('transfer_enable', '>', 0))
             ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('v2_ai_credit_grants as g')->whereColumn('g.order_id', 'v2_order.id'))
-            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('v2_ai_credit_grants as l')->whereColumn('l.legacy_user_id', 'v2_order.user_id'))
             ->orderBy('v2_order.id');
+    }
+
+    private function backfillSource(Order $order): string
+    {
+        return (int) $order->paid_at >= self::ordersSinceAt() ? 'order' : 'legacy';
     }
 
     public function prepareLegacy(User $user, bool $preserveBeforePurchase = false): ?AiCreditGrant
@@ -195,9 +224,27 @@ class AiCreditService
         return DB::transaction(function () use ($user, $settings) {
             $locked = User::lockForUpdate()->findOrFail($user->id);
             if (!$locked->isActive()) return null;
-            $order = $this->legacyOrders($settings)->where('v2_order.user_id', $locked->id)->lockForUpdate()->first();
+            $order = $this->legacyOrders($settings, true)->where('v2_order.user_id', $locked->id)->lockForUpdate()->first();
             if (!$order?->plan) return null;
-            return $this->createGrant($order, $order->plan, $settings, 'legacy');
+            return $this->createGrant($order, $order->plan, $settings, $this->backfillSource($order));
+        });
+    }
+
+    public function prepareHistorical(User $user, int $limit = 100): int
+    {
+        if (!$this->available()) return 0;
+        $settings = $this->settings();
+        if (!$this->active($settings) || !$settings['legacy_enabled'] || !$settings['activated_at']) return 0;
+        return DB::transaction(function () use ($user, $settings, $limit) {
+            $locked = User::lockForUpdate()->findOrFail($user->id);
+            if ($locked->banned) return 0;
+            $orders = $this->legacyOrders($settings)->where('v2_order.user_id', $locked->id)
+                ->limit(max(1, min(100, $limit)))->lockForUpdate()->get();
+            $created = 0;
+            foreach ($orders as $order) {
+                if ($order->plan && $this->createGrant($order, $order->plan, $settings, $this->backfillSource($order))?->wasRecentlyCreated) $created++;
+            }
+            return $created;
         });
     }
 
@@ -219,7 +266,7 @@ class AiCreditService
                 'trade_no' => $order->trade_no, 'plan_name' => $order->plan->name,
                 'traffic_gb' => (int) $order->plan->transfer_enable,
                 'paid_amount_cents' => AiCreditPolicy::paidCents($order, $settings['include_balance']),
-                'amount_usd' => AiCreditPolicy::money($cents),
+                'amount_usd' => AiCreditPolicy::money($cents), 'source' => $this->backfillSource($order),
             ];
         }
         return ['eligible_count' => count($records), 'total_amount_usd' => AiCreditPolicy::money($sum), 'records' => $records, 'truncated' => $orders->count() > $limit];
@@ -230,8 +277,15 @@ class AiCreditService
         $preview = $this->legacyPreview($limit);
         $created = 0;
         foreach ($preview['records'] as $record) {
-            $user = User::find($record['user_id']);
-            if ($user && $this->prepareLegacy($user)?->wasRecentlyCreated) $created++;
+            $created += DB::transaction(function () use ($record) {
+                $user = User::lockForUpdate()->find($record['user_id']);
+                $settings = $this->settings();
+                if (!$user || $user->banned || !$this->active($settings) || !$settings['legacy_enabled']) return 0;
+                // Revalidate this exact previewed order; a per-user preparation could exceed the chosen batch size.
+                $order = $this->legacyOrders($settings)->where('v2_order.user_id', $user->id)
+                    ->where('v2_order.id', $record['order_id'])->lockForUpdate()->first();
+                return $order?->plan && $this->createGrant($order, $order->plan, $settings, $this->backfillSource($order))?->wasRecentlyCreated ? 1 : 0;
+            });
         }
         return ['created' => $created, 'skipped' => count($preview['records']) - $created, 'has_more' => $preview['truncated']];
     }
