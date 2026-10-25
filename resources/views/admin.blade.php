@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%2716%27 fill=%27%231d1d1f%27/%3E%3Cpath d=%27M11 10l10 12m0-12L11 22%27 stroke=%27white%27 stroke-width=%273%27/%3E%3C/svg%3E" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ $title }}</title>
   <script>
@@ -80,7 +81,10 @@
 </head>
 
 <body>
-  <div id="root"></div>
+  <div id="app"></div>
+  @if(!$entry)
+    <div id="root"></div>
+  @endif
 </body>
 
 </html>
