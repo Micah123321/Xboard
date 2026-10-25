@@ -294,6 +294,31 @@ class AiCreditServiceTest extends TestCase
         self::assertSame(2, AiCreditGrant::count());
     }
 
+    public function test_historical_downgrades_and_changes_without_source_evidence_are_excluded_before_pagination(): void
+    {
+        $since = AiCreditService::ordersSinceAt();
+        $higher = Plan::create(['name' => '500GB', 'transfer_enable' => 500]);
+        $same = Plan::create(['name' => 'Other 200GB', 'transfer_enable' => 200]);
+        $this->order(['paid_at' => $since + 100, 'plan_id' => $higher->id]);
+        $downgrade = $this->order(['paid_at' => $since + 200, 'type' => Order::TYPE_UPGRADE]);
+        $lateral = $this->order(['paid_at' => $since + 300, 'plan_id' => $same->id, 'type' => Order::TYPE_UPGRADE]);
+        $this->order(['paid_at' => $since + 400, 'type' => Order::TYPE_RENEWAL]);
+        $upgrade = $this->order(['paid_at' => $since + 500, 'plan_id' => $higher->id, 'type' => Order::TYPE_UPGRADE]);
+        $other = User::create(['email' => 'missing-source@example.test']);
+        $unknown = $this->order(['user_id' => $other->id, 'paid_at' => $since + 600, 'type' => Order::TYPE_UPGRADE]);
+        $this->allowLegacy($unknown);
+        $preview = $this->service->legacyPreview();
+        $ids = array_column($preview['records'], 'order_id');
+        self::assertNotContains($downgrade->id, $ids); self::assertNotContains($lateral->id, $ids); self::assertNotContains($unknown->id, $ids);
+        self::assertContains($upgrade->id, $ids);
+        self::assertSame(3, $preview['eligible_count']);
+        self::assertSame(1, $this->service->backfill(1)['created']);
+        self::assertSame(1, $this->service->backfill(1)['created']);
+        self::assertSame(1, $this->service->backfill(1)['created']);
+        self::assertSame(0, $this->service->backfill(1)['created']);
+        self::assertSame(2500, AiCreditGrant::where('order_id', $upgrade->id)->value('amount_usd_cents'));
+    }
+
     public function test_current_subscription_inside_recent_window_is_not_granted_twice(): void
     {
         $since = AiCreditService::ordersSinceAt();

@@ -198,6 +198,28 @@ class AiCreditService
             })
             ->where('v2_order.status', Order::STATUS_COMPLETED)->whereIn('v2_order.type', [1, 2, 3])
             ->where('v2_order.period', '!=', Plan::PERIOD_RESET_TRAFFIC)
+            ->where(function (Builder $query) {
+                $query->where('v2_order.type', '!=', Order::TYPE_UPGRADE)
+                    ->orWhereExists(function ($source) {
+                        $source->selectRaw('1')->from('v2_order as previous_order')
+                            ->join('v2_plan as previous_plan', 'previous_plan.id', '=', 'previous_order.plan_id')
+                            ->join('v2_plan as target_plan', 'target_plan.id', '=', 'v2_order.plan_id')
+                            ->whereColumn('previous_plan.id', '!=', 'target_plan.id')
+                            ->whereColumn('previous_plan.transfer_enable', '<', 'target_plan.transfer_enable')
+                            ->where('previous_order.id', function ($latest) {
+                                $latest->select('prior.id')->from('v2_order as prior')
+                                    ->whereColumn('prior.user_id', 'v2_order.user_id')
+                                    ->whereIn('prior.status', [Order::STATUS_COMPLETED, Order::STATUS_DISCOUNTED])
+                                    ->where('prior.period', '!=', Plan::PERIOD_RESET_TRAFFIC)
+                                    ->where('prior.paid_at', '>', 0)
+                                    ->where(function ($before) {
+                                        $before->whereColumn('prior.paid_at', '<', 'v2_order.paid_at')
+                                            ->orWhere(fn ($same) => $same->whereColumn('prior.paid_at', 'v2_order.paid_at')->whereColumn('prior.id', '<', 'v2_order.id'));
+                                    })
+                                    ->orderByDesc('prior.paid_at')->orderByDesc('prior.id')->limit(1);
+                            });
+                    });
+            })
             ->whereNull('v2_order.ai_credit_evaluated_at')
             ->where('v2_order.id', '<=', (int) $settings['legacy_max_order_id'])
             ->where('v2_order.paid_at', '>', 0)->where('v2_order.paid_at', '<=', (int) $settings['activated_at'])
