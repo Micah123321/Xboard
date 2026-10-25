@@ -28,6 +28,7 @@ class PlanResource extends JsonResource
             ...$this->getPeriodPrices(),
             'capacity_limit' => $this->getFormattedCapacityLimit(),
             'transfer_enable' => $this->resource['transfer_enable'],
+            'ai_credit' => app(\App\Services\AiCredit\AiCreditService::class)->planBenefit($this->resource),
             'speed_limit' => $this->resource['speed_limit'],
             'device_limit' => $this->resource['device_limit'],
             'show' => (bool) $this->resource['show'],

@@ -113,6 +113,8 @@ class OrderService
                 throw new ApiException('订单折抵来源已变更，请联系客服处理');
             }
             $plan = Plan::findOrFail($order->plan_id);
+            $previousAiPlan = $this->user->plan_id ? Plan::find($this->user->plan_id) : null;
+            app(\App\Services\AiCredit\AiCreditService::class)->prepareLegacy($this->user, true);
             HookManager::call('order.open.before', $order);
 
             // Legacy orders already priced with a monetary credit keep that quote without a second credit.
@@ -169,6 +171,9 @@ class OrderService
             if (!$order->save()) {
                 throw new \RuntimeException('订单信息保存失败');
             }
+            app(\App\Services\AiCredit\AiCreditService::class)->onOrderCompleted(
+                $order, $plan, $previousAiPlan ? ['id' => $previousAiPlan->id, 'traffic_gb' => $previousAiPlan->transfer_enable] : null
+            );
 
             return true;
         });

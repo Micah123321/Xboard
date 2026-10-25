@@ -45,6 +45,15 @@ class AdminRoute
                 }
             });
 
+            $aiCredit = \App\Http\Controllers\V2\Admin\AiCreditController::class;
+            $router->get('/ai-credit/settings', [$aiCredit, 'settings']);
+            $router->post('/ai-credit/settings', [$aiCredit, 'settings']);
+            $router->get('/ai-credit/records', [$aiCredit, 'records']);
+            $router->post('/ai-credit/reconcile', [$aiCredit, 'reconcile']);
+            $router->post('/ai-credit/revoke', [$aiCredit, 'revoke']);
+            $router->post('/ai-credit/legacy/preview', [$aiCredit, 'preview']);
+            $router->post('/ai-credit/legacy/backfill', [$aiCredit, 'backfill']);
+
             // Config
             $router->group([
                 'prefix' => 'config'

@@ -36,6 +36,12 @@ class UserRoute
             $router->post('/getQuickLoginUrl', [UserController::class, 'getQuickLoginUrl']);
             $router->get('/getActiveSession', [UserController::class, 'getActiveSession']);
             $router->post('/removeActiveSession', [UserController::class, 'removeActiveSession']);
+            $aiCredit = \App\Http\Controllers\V1\User\AiCreditController::class;
+            $router->get('/ai-credit/overview', [$aiCredit, 'overview']);
+            $router->get('/ai-credit/records', [$aiCredit, 'records']);
+            $router->get('/ai-credit/detail', [$aiCredit, 'detail'])->middleware('throttle:60,1');
+            $router->post('/ai-credit/refresh', [$aiCredit, 'refresh'])->middleware('throttle:20,1');
+            $router->post('/ai-credit/claim', [$aiCredit, 'claim'])->middleware('throttle:20,1');
             // Order
             $router->post('/order/save', [OrderController::class, 'save']);
             $router->post('/order/checkout', [OrderController::class, 'checkout']);
