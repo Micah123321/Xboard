@@ -414,6 +414,63 @@ class AiCreditServiceTest extends TestCase
         self::assertSame(1, $this->client->created); self::assertSame('10.00', $this->client->records[$ref]['value']);
     }
 
+    public static function disabledRecoveryCases(): array
+    {
+        return [
+            'banned with upstream result' => [false, true],
+            'deleted with upstream result' => [true, true],
+            'banned before upstream issue' => [false, false],
+            'deleted before upstream issue' => [true, false],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('disabledRecoveryCases')]
+    public function test_interrupted_request_for_disabled_account_only_queries_original_result(bool $deleted, bool $remoteExists): void
+    {
+        $grant = $this->grant();
+        $this->client->loseResponse = $remoteExists;
+        $this->client->failBeforeIssue = !$remoteExists;
+        self::assertSame('reconciling', $this->service->claim($grant->id, $this->user)['status']);
+        $this->client->loseResponse = $this->client->failBeforeIssue = false;
+        if ($deleted) {
+            $this->user->delete();
+            Order::whereKey($grant->order_id)->delete();
+        } else $this->user->update(['banned' => true]);
+        $grant->refresh();
+        $ref = $grant->external_ref;
+        $grant->update(['next_attempt_at' => time() - 1]);
+
+        $result = $this->service->reconcile($grant->id);
+        self::assertSame($remoteExists ? 'issued' : 'reconciling', $result['status']);
+        self::assertSame($ref, $grant->fresh()->external_ref);
+        self::assertSame(1, $this->client->gets);
+        self::assertSame(1, $this->client->posts);
+        self::assertSame($remoteExists ? 1 : 0, $this->client->created);
+        if ($remoteExists) {
+            self::assertNull($grant->fresh()->last_error);
+            self::assertSame('revoked', $this->service->revoke($grant->id, 'Fixture account closed')['status']);
+            self::assertSame('expired', $this->client->records[$ref]['status']);
+        } else {
+            self::assertGreaterThan(time(), $grant->fresh()->next_attempt_at);
+            self::assertNull($grant->fresh()->lease_token);
+            $grant->refresh()->update(['next_attempt_at' => time() - 1]);
+            $this->service->reconcile($grant->id);
+            self::assertSame(2, $this->client->gets);
+            self::assertSame(1, $this->client->posts);
+        }
+    }
+
+    public function test_disabled_account_still_cannot_start_an_unrequested_grant(): void
+    {
+        $grant = $this->grant();
+        $this->user->update(['banned' => true]);
+        try { $this->service->process($grant->id, true); self::fail('Disabled account must not issue a new code'); }
+        catch (ApiException $e) { self::assertSame(403, $e->getCode()); }
+        self::assertSame('eligible', $grant->fresh()->status);
+        self::assertSame(0, $this->client->gets);
+        self::assertSame(0, $this->client->posts);
+    }
+
     public function test_live_lease_prevents_concurrent_claim_requests(): void
     {
         $grant = $this->grant(); $grant->update(['status' => 'generating', 'lease_token' => 'other-worker', 'lease_until' => time() + 60]);
@@ -558,13 +615,14 @@ class FakeAiCreditClient extends AiCreditClient
 {
     public array $records = [];
     public int $posts = 0;
+    public int $gets = 0;
     public int $created = 0;
     public bool $loseResponse = false;
     public bool $failBeforeIssue = false;
 
     public function request(string $method, string $baseUrl, string $token, string $externalRef, ?string $amount = null): ?array
     {
-        if ($method === 'GET') return $this->records[$externalRef] ?? null;
+        if ($method === 'GET') { $this->gets++; return $this->records[$externalRef] ?? null; }
         if ($method === 'EXPIRE') {
             if (($this->records[$externalRef]['status'] ?? null) === 'used') throw new ApiException('Fixture used', 409);
             $this->records[$externalRef]['status'] = 'expired';

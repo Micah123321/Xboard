@@ -390,16 +390,20 @@ class AiCreditService
     public function process(int $id, bool $start = false, ?int $userId = null): AiCreditGrant
     {
         $lease = (string) Str::uuid();
-        $grant = DB::transaction(function () use ($id, $start, $userId, $lease) {
+        $recoverOnly = false;
+        $grant = DB::transaction(function () use ($id, $start, $userId, $lease, &$recoverOnly) {
             $initial = AiCreditGrant::findOrFail($id);
             // Match the fulfillment lock order so claiming and new purchases do not deadlock.
-            $user = User::lockForUpdate()->findOrFail($initial->user_id);
+            $user = User::lockForUpdate()->find($initial->user_id);
             $order = Order::lockForUpdate()->find($initial->order_id);
             $grant = AiCreditGrant::lockForUpdate()->findOrFail($id);
             if ($userId !== null && (int) $grant->user_id !== $userId) throw new ApiException('福利记录不存在', 404);
-            if ($user->banned) throw new ApiException('账户已停用', 403);
+            $recoverOnly = !$user || $user->banned;
+            if ($recoverOnly && ($userId !== null || !in_array($grant->status, ['generating', 'reconciling'], true))) {
+                throw new ApiException('账户已停用', 403);
+            }
             if (!in_array($grant->status, ['eligible', 'failed', 'generating', 'reconciling'], true)) return $grant;
-            if (!$order || !in_array((int) $order->status, [Order::STATUS_COMPLETED, Order::STATUS_DISCOUNTED], true)) {
+            if (!$recoverOnly && (!$order || !in_array((int) $order->status, [Order::STATUS_COMPLETED, Order::STATUS_DISCOUNTED], true))) {
                 $grant->update(['status' => 'revoked', 'last_error' => '来源订单已失效']);
                 return $grant;
             }
@@ -414,8 +418,10 @@ class AiCreditService
         if ($grant->lease_token !== $lease) return $grant;
         try {
             [$url, $token] = $this->credentials($grant);
-            $data = $grant->attempts > 1 ? $this->client->request('GET', $url, $token, $grant->external_ref) : null;
+            // Disabled accounts may recover a previously accepted request, never create another code.
+            $data = ($recoverOnly || $grant->attempts > 1) ? $this->client->request('GET', $url, $token, $grant->external_ref) : null;
             if ($data === null) {
+                if ($recoverOnly) throw new ApiException('账户已停用，原发码请求保留并等待核对', 503);
                 if (!$this->active($this->settings())) throw new ApiException('活动已暂停，原请求保留并等待核对', 503);
                 $data = $this->client->request('POST', $url, $token, $grant->external_ref, AiCreditPolicy::money($grant->amount_usd_cents));
             }
