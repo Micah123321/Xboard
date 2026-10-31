@@ -163,7 +163,8 @@ class DeviceStateService
                     }
                 }
                 if (!empty($ips)) {
-                    $result[$userId] = array_unique($ips);
+                    // Keep contiguous indexes so sync.devices encodes IPs as a JSON list.
+                    $result[$userId] = array_values(array_unique($ips));
                 }
             }
         }
