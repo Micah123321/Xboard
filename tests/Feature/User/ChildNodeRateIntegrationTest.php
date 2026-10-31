@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use ReflectionProperty;
+use Symfony\Component\Yaml\Yaml;
 use Tests\TestCase;
 
 class ChildNodeRateIntegrationTest extends TestCase
@@ -34,6 +35,7 @@ class ChildNodeRateIntegrationTest extends TestCase
         parent::setUp();
         config()->set('cache.default', 'array');
         config()->set('cache.stores.redis', ['driver' => 'array']);
+        Cache::forgetDriver('redis');
         config()->set('queue.default', 'sync');
         Cache::flush();
         $redis = \Mockery::mock();
@@ -101,6 +103,60 @@ class ChildNodeRateIntegrationTest extends TestCase
             'parent_id' => $other->id, 'allowed_plan_ids' => [], 'child_rate_enabled' => false]);
         $this->postJson($url, $parentPayload)->assertStatus(422)->assertJsonValidationErrors('child_rate_enabled');
         self::assertNull($parent->fresh()->parent_id);
+    }
+
+    public function test_mieru_child_rate_switch_keeps_http_users_and_meta_subscription_credentials_in_sync(): void
+    {
+        $parent = $this->node(['name' => 'mieru-parent', 'type' => Server::TYPE_MIERU,
+            'protocol_settings' => ['transport' => 'TCP'], 'rate' => 1]);
+        $child = $this->node(['name' => 'mieru-child', 'type' => Server::TYPE_MIERU,
+            'protocol_settings' => ['transport' => 'TCP'], 'parent_id' => $parent->id,
+            'child_rate_enabled' => false, 'rate' => 4]);
+        $user = $this->user();
+        $subscription = function () use ($user): array {
+            $response = $this->get('/api/v1/client/subscribe?' . http_build_query([
+                'token' => $user->token, 'flag' => 'meta',
+            ]))->assertOk();
+            $config = Yaml::parse($response->getContent());
+            $proxies = collect($config['proxies'])->where('name', '4x mieru-child')->values();
+            self::assertCount(1, $proxies);
+            $proxy = $proxies->first();
+            self::assertSame('mieru', $proxy['type']);
+            self::assertSame('TCP', $proxy['transport']);
+            return $proxy;
+        };
+
+        $users = $this->users($parent)->assertOk()->json('users');
+        self::assertCount(1, $users);
+        self::assertSame($user->uuid, $users[0]['uuid']);
+        self::assertNull(collect($users)->firstWhere('billing_node_id', $child->id));
+        $proxy = $subscription();
+        self::assertSame($user->uuid, $proxy['username']);
+        self::assertSame($user->uuid, $proxy['password']);
+
+        $child->update(['child_rate_enabled' => true]);
+        $users = $this->users($parent)->assertOk()->json('users');
+        self::assertCount(2, $users);
+        self::assertSame($user->uuid, collect($users)->firstWhere('id', $user->id)['uuid']);
+        $alias = collect($users)->firstWhere('billing_node_id', $child->id);
+        self::assertNotNull($alias);
+        self::assertSame($user->id, $alias['billing_user_id']);
+        self::assertNotSame($user->uuid, $alias['uuid']);
+        self::assertSame(4.0, (float) $child->fresh()->rate);
+        $proxy = $subscription();
+        self::assertSame($alias['uuid'], $proxy['username']);
+        self::assertSame($alias['uuid'], $proxy['password']);
+        self::assertNotSame($user->uuid, $proxy['username']);
+        self::assertNotSame($user->uuid, $proxy['password']);
+
+        $child->update(['child_rate_enabled' => false]);
+        $users = $this->users($parent)->assertOk()->json('users');
+        self::assertCount(1, $users);
+        self::assertSame($user->uuid, $users[0]['uuid']);
+        self::assertNull(collect($users)->firstWhere('billing_node_id', $child->id));
+        $proxy = $subscription();
+        self::assertSame($user->uuid, $proxy['username']);
+        self::assertSame($user->uuid, $proxy['password']);
     }
 
     public function test_http_subscription_authentication_and_mixed_report_bill_separately_once(): void
