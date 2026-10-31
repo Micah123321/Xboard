@@ -100,9 +100,20 @@ class NodeDiscoveryService
             if (array_key_exists($key, $input)) $query->where($column, $positive($input[$key]));
         }
         $total = (clone $query)->count();
-        $items = $query->orderBy('d.node_id')->offset(($page - 1) * $pageSize)->limit($pageSize)
-            ->get(['d.node_id', 's.name as node_name', 's.machine_id', 'd.installation_id',
-                'd.version', 'd.os', 'd.arch', 'd.last_seen_at', 'd.auto_enroll_supported'])
+        $items = $this->formatRows($query->orderBy('d.node_id')->offset(($page - 1) * $pageSize)->limit($pageSize));
+        return ['items' => $items, 'page' => $page, 'page_size' => $pageSize, 'total' => $total];
+    }
+
+    public function inventory(): array
+    {
+        return $this->formatRows(DB::table('v2_node_update_discoveries as d')
+            ->join('v2_server as s', 's.id', '=', 'd.node_id')->orderBy('d.node_id'));
+    }
+
+    private function formatRows(\Illuminate\Database\Query\Builder $query): array
+    {
+        return $query->get(['d.node_id', 's.name as node_name', 's.machine_id', 'd.installation_id',
+            'd.version', 'd.os', 'd.arch', 'd.last_seen_at', 'd.auto_enroll_supported'])
             ->map(function ($row): array {
                 $item = (array) $row;
                 $item['auto_enroll_supported'] = (bool) $item['auto_enroll_supported'];
@@ -115,6 +126,5 @@ class NodeDiscoveryService
                 $item['last_seen_at'] = Carbon::parse($item['last_seen_at'], 'UTC')->format('Y-m-d\TH:i:s\Z');
                 return $item;
             })->all();
-        return ['items' => $items, 'page' => $page, 'page_size' => $pageSize, 'total' => $total];
     }
 }

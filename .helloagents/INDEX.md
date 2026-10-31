@@ -16,6 +16,8 @@ active_package:
 
 ## 活跃模块
 
+- [ai-credit-promotion](modules/ai-credit-promotion.md): 购买流量套餐赠 AI 余额兑换码、老用户补领与跨服务永久去重
+
 - [node-access-traffic](modules/node-access-traffic.md): 节点目标流量采集、域名消耗分析和管理员客户报告
 
 - [admin-frontend](modules/admin-frontend.md): 管理端登录、主布局、仪表盘、用户/节点/订阅/系统管理与管理 API 前端封装

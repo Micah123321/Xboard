@@ -62,7 +62,8 @@ class Plugin extends AbstractPlugin implements PaymentInterface
             'OutOrderId' => $order['trade_no'],
             'OrderUserKey' => (string) $order['user_id'],
             'Currency' => $this->getConfig('token_pay_currency'),
-            'RedirectUrl' => self::FIXED_RETURN_URL,
+            'RedirectUrl' => str_starts_with((string) $order['trade_no'], 'AIT')
+                ? $order['return_url'] : self::FIXED_RETURN_URL,
             'NotifyUrl' => $order['notify_url'],
         ];
 

@@ -36,6 +36,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '节点管理', kicker: 'Nodes' },
       },
       {
+        path: 'node-entry-sync',
+        name: 'NodeEntrySync',
+        component: () => import('@/views/nodes/EntrySyncView.vue'),
+        meta: { title: '入口 IP 同步', kicker: 'Entry Sync' },
+      },
+      {
         path: 'access-traffic',
         name: 'AccessTraffic',
         component: () => import('@/views/traffic/AccessTrafficView.vue'),
@@ -94,6 +100,24 @@ const routes: RouteRecordRaw[] = [
         name: 'SubscriptionCoupons',
         component: () => import('@/views/subscriptions/CouponsView.vue'),
         meta: { title: '优惠券管理', kicker: 'Coupons' },
+      },
+      {
+        path: 'marketing/activities',
+        name: 'MarketingActivities',
+        component: () => import('@/views/marketing/ActivitiesView.vue'),
+        meta: { title: '活动发布', kicker: 'Activities' },
+      },
+      {
+        path: 'marketing/ai-topup',
+        name: 'MarketingAiTopup',
+        component: () => import('@/views/marketing/AiTopupView.vue'),
+        meta: { title: 'AI 充值', kicker: 'Marketing' },
+      },
+      {
+        path: 'marketing/ai-credit',
+        name: 'MarketingAiCredit',
+        component: () => import('@/views/marketing/AiCreditView.vue'),
+        meta: { title: 'AI 中转福利', kicker: 'Marketing' },
       },
       {
         path: 'subscriptions/gift-cards',

@@ -71,9 +71,16 @@ class PaymentService
 
     public function notify($params)
     {
-        if (!$this->config['enable'])
-            throw new ApiException('gate is not enable');
         $verified = $this->payment->notify($params);
+        if (!$this->config['enable']) {
+            // Disabling new checkout must not discard a signed receipt for an existing AI purchase.
+            $tradeNo = is_array($verified) ? (string) ($verified['trade_no'] ?? '') : '';
+            if (!str_starts_with($tradeNo, 'AIT')
+                || !\App\Models\AiTopupOrder::where('trade_no', $tradeNo)
+                    ->where('payment_id', (int) $this->config['id'])->exists()) {
+                throw new ApiException('gate is not enable');
+            }
+        }
         if (is_array($verified)) {
             // Bind the signed callback to the configured gateway that verified it.
             $verified['payment_id'] = (int) $this->config['id'];
@@ -92,7 +99,7 @@ class PaymentService
 
         return $this->payment->pay([
             'notify_url' => $notifyUrl,
-            'return_url' => source_base_url('/#/order/' . $order['trade_no']),
+            'return_url' => $order['return_url'] ?? source_base_url('/#/order/' . $order['trade_no']),
             'trade_no' => $order['trade_no'],
             'total_amount' => $order['total_amount'],
             'user_id' => $order['user_id'],

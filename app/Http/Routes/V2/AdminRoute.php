@@ -34,7 +34,7 @@ class AdminRoute
         ], function ($router) {
             $router->group(['prefix' => 'server/update'], function ($route) {
                 $controller = \App\Http\Controllers\V2\Admin\NodeUpdateController::class;
-                foreach (['settings', 'release-source', 'releases', 'installations', 'discoveries', 'batches', 'batches/{id}', 'batches/{id}/tasks', 'tasks/{id}/events', 'coverage'] as $uri) {
+                foreach (['settings', 'release-source', 'releases', 'installations', 'discoveries', 'overview', 'batches', 'batches/{id}', 'batches/{id}/tasks', 'tasks/{id}/events', 'coverage'] as $uri) {
                     $route->get($uri, [$controller, 'handle']);
                 }
                 foreach (['settings', 'installations/policies', 'installations/{id}/policy'] as $uri) {
@@ -45,6 +45,12 @@ class AdminRoute
                 }
             });
 
+            $entrySync = \App\Http\Controllers\V2\Admin\NyaEntrySyncController::class;
+            $router->get('/server/entry-sync/settings', [$entrySync, 'settings']);
+            $router->post('/server/entry-sync/settings', [$entrySync, 'save']);
+            $router->get('/server/entry-sync/status', [$entrySync, 'status']);
+            $router->post('/server/entry-sync/run', [$entrySync, 'run'])->middleware('throttle:10,1,nya-entry-sync');
+
             $aiCredit = \App\Http\Controllers\V2\Admin\AiCreditController::class;
             $router->get('/ai-credit/settings', [$aiCredit, 'settings']);
             $router->post('/ai-credit/settings', [$aiCredit, 'settings']);
@@ -53,6 +59,16 @@ class AdminRoute
             $router->post('/ai-credit/revoke', [$aiCredit, 'revoke']);
             $router->post('/ai-credit/legacy/preview', [$aiCredit, 'preview']);
             $router->post('/ai-credit/legacy/backfill', [$aiCredit, 'backfill']);
+            $aiTopup = \App\Http\Controllers\V2\Admin\AiTopupController::class;
+            $activity = \App\Http\Controllers\V2\Admin\ActivityController::class;
+            $router->get('/activities/fetch', [$activity, 'fetch']);
+            $router->post('/activities/save', [$activity, 'save'])->middleware('throttle:30,1,activities-save');
+            $router->post('/activities/publish', [$activity, 'publish'])->middleware('throttle:30,1,activities-publish');
+            $router->post('/activities/delete', [$activity, 'delete'])->middleware('throttle:30,1,activities-delete');
+            $router->get('/ai-topup/settings', [$aiTopup, 'settings']);
+            $router->post('/ai-topup/settings', [$aiTopup, 'settings']);
+            $router->get('/ai-topup/records', [$aiTopup, 'records']);
+            $router->post('/ai-topup/reconcile', [$aiTopup, 'reconcile'])->middleware('throttle:30,1,ai-topup-admin-reconcile');
 
             // Config
             $router->group([

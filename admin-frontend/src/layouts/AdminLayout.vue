@@ -55,6 +55,7 @@ const nodeManagementItems: MenuItem[] = [
   { index: '/node-groups', title: '权限组管理', icon: Lock },
   { index: '/node-routes', title: '路由管理', icon: Share },
   { index: '/node-updates', title: '节点更新', icon: Box },
+  { index: '/node-entry-sync', title: '入口 IP 同步', icon: Connection },
 ]
 
 const managementItems: MenuItem[] = [
@@ -191,6 +192,13 @@ onBeforeUnmount(() => {
                 </span>
               </template>
             </ElMenuItem>
+          </ElSubMenu>
+
+          <ElSubMenu index="marketing">
+            <template #title><ElIcon><Present /></ElIcon><span>营销管理</span></template>
+            <ElMenuItem index="/marketing/activities"><ElIcon><Present /></ElIcon><template #title>活动发布</template></ElMenuItem>
+            <ElMenuItem index="/marketing/ai-topup"><ElIcon><CreditCard /></ElIcon><template #title>AI 充值</template></ElMenuItem>
+            <ElMenuItem index="/marketing/ai-credit"><ElIcon><CreditCard /></ElIcon><template #title>AI 中转福利</template></ElMenuItem>
           </ElSubMenu>
 
           <ElSubMenu index="system-management">

@@ -42,7 +42,8 @@ class Plugin extends AbstractPlugin implements PaymentInterface
     public function pay($order): array
     {
         $apiUrl = rtrim((string) $this->getConfig('api_url'), '/');
-        $returnUrl = (string) $this->getConfig('return_url');
+        $returnUrl = str_starts_with((string) ($order['trade_no'] ?? ''), 'AIT')
+            ? (string) ($order['return_url'] ?? '') : (string) $this->getConfig('return_url');
         $fiat = (string) $this->getConfig('fiat', 'CNY');
         if (!$this->validUrl($apiUrl) || !$this->validUrl($returnUrl)
             || !in_array($fiat, ['CNY', 'USD', 'EUR', 'GBP', 'JPY'], true)
@@ -101,7 +102,9 @@ class Plugin extends AbstractPlugin implements PaymentInterface
             return false;
         }
         $amount = self::amountInCents($params['amount'] ?? null);
-        $order = Order::where('trade_no', $params['order_id'])->first();
+        $order = str_starts_with($params['order_id'], 'AIT')
+            ? \App\Models\AiTopupOrder::where('trade_no', $params['order_id'])->first()
+            : Order::where('trade_no', $params['order_id'])->first();
         if (!$order || !$this->getConfig('id')
             || (int) $order->payment_id !== (int) $this->getConfig('id')
             || $order->payment?->payment !== 'BEpusdt'

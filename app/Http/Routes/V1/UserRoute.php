@@ -42,6 +42,17 @@ class UserRoute
             $router->get('/ai-credit/detail', [$aiCredit, 'detail'])->middleware('throttle:60,1');
             $router->post('/ai-credit/refresh', [$aiCredit, 'refresh'])->middleware('throttle:20,1');
             $router->post('/ai-credit/claim', [$aiCredit, 'claim'])->middleware('throttle:20,1');
+            $aiTopup = \App\Http\Controllers\V1\User\AiTopupController::class;
+            $router->get('/activities/fetch', [\App\Http\Controllers\V1\User\ActivityController::class, 'fetch']);
+            $router->get('/ai-topup/overview', [$aiTopup, 'overview']);
+            $router->get('/ai-topup/payment-methods', [$aiTopup, 'paymentMethods']);
+            $router->get('/ai-topup/records', [$aiTopup, 'records']);
+            $router->get('/ai-topup/detail', [$aiTopup, 'detail'])->middleware('throttle:60,1,ai-topup-detail');
+            $router->post('/ai-topup/quote', [$aiTopup, 'quote'])->middleware('throttle:120,1,ai-topup-quote');
+            $router->post('/ai-topup/create', [$aiTopup, 'create'])->middleware('throttle:20,1,ai-topup-create');
+            $router->post('/ai-topup/checkout', [$aiTopup, 'checkout'])->middleware('throttle:20,1,ai-topup-checkout');
+            $router->post('/ai-topup/cancel', [$aiTopup, 'cancel'])->middleware('throttle:20,1,ai-topup-cancel');
+            $router->post('/ai-topup/traffic/activate', [$aiTopup, 'activateTraffic'])->middleware('throttle:20,1,ai-topup-traffic-activate');
             // Order
             $router->post('/order/save', [OrderController::class, 'save']);
             $router->post('/order/checkout', [OrderController::class, 'checkout']);

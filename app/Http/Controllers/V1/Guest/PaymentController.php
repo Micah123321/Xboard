@@ -48,6 +48,9 @@ class PaymentController extends Controller
         if ($tradeNo === '') {
             return false;
         }
+        if (str_starts_with($tradeNo, 'AIT')) {
+            return app(\App\Services\AiTopup\AiTopupService::class)->paid($verify, $method);
+        }
         $userId = Order::where('trade_no', $tradeNo)->value('user_id');
         return DB::transaction(function () use ($verify, $method, $tradeNo, $callbackNo, $userId) {
             // Match fulfillment and cancellation's user-before-order lock order.

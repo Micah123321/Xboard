@@ -60,9 +60,9 @@ class Plugin extends AbstractPlugin implements PaymentInterface
             'item_name' => $order['trade_no'],
             'item_number' => $order['trade_no'],
             'want_shipping' => 0,
-            'currency' => $this->getConfig('coinpayments_currency'),
+            'currency' => str_starts_with((string) $order['trade_no'], 'AIT') ? 'CNY' : $this->getConfig('coinpayments_currency'),
             'amountf' => sprintf('%.2f', $order['total_amount'] / 100),
-            'success_url' => $successUrl,
+            'success_url' => str_starts_with((string) $order['trade_no'], 'AIT') ? $order['return_url'] : $successUrl,
             'cancel_url' => $order['return_url'],
             'ipn_url' => $order['notify_url']
         ];
@@ -77,26 +77,49 @@ class Plugin extends AbstractPlugin implements PaymentInterface
 
     public function notify($params): array|string
     {
+        $raw = request()->getContent();
+        parse_str($raw, $signedParams);
+        $isTopup = (is_string($params['item_number'] ?? null) && str_starts_with($params['item_number'], 'AIT'))
+            || (is_string($signedParams['item_number'] ?? null) && str_starts_with($signedParams['item_number'], 'AIT'));
+        if ($isTopup) {
+            // Bind every top-up field to the exact bytes authenticated by CoinPayments.
+            $params = $signedParams;
+            $request = $raw;
+        } else {
+            ksort($params);
+            reset($params);
+            $request = stripslashes(http_build_query($params));
+        }
         if (!isset($params['merchant']) || $params['merchant'] != trim($this->getConfig('coinpayments_merchant_id'))) {
             throw new ApiException('No or incorrect Merchant ID passed');
         }
 
-        $headers = getallheaders();
-
-        ksort($params);
-        reset($params);
-        $request = stripslashes(http_build_query($params));
-
-        $headerName = 'Hmac';
-        $signHeader = isset($headers[$headerName]) ? $headers[$headerName] : '';
-
-        $hmac = hash_hmac("sha512", $request, trim($this->getConfig('coinpayments_ipn_secret')));
-
+        $signHeader = request()->header('Hmac', '');
+        $hmac = hash_hmac('sha512', $request, trim($this->getConfig('coinpayments_ipn_secret')));
         if (!hash_equals($hmac, $signHeader)) {
             throw new ApiException('HMAC signature does not match', 400);
         }
 
-        $status = $params['status'];
+        $status = $params['status'] ?? null;
+        if ($isTopup) {
+            if (!is_string($params['item_number'] ?? null) || !str_starts_with($params['item_number'], 'AIT')) {
+                throw new ApiException('Invalid top-up reference', 400);
+            }
+            $result = ['trade_no' => $params['item_number'], 'callback_no' => $params['txn_id'] ?? '',
+                'paid' => false, 'custom_result' => 'IPN OK'];
+            if ((!is_string($status) && !is_int($status))
+                || !preg_match('/\A-?[0-9]{1,10}\z/D', (string) $status)) {
+                throw new ApiException('Invalid payment status', 400);
+            }
+            if (!($status >= 100 || $status == 2)) return $result;
+            $cents = \App\Services\AiTopup\AiTopupPolicy::callbackCents($params['amount1'] ?? null);
+            if (($params['currency1'] ?? null) !== 'CNY' || $cents === null || $cents <= 0) {
+                throw new ApiException('Invalid CNY payment evidence', 400);
+            }
+            $result['paid'] = true;
+            $result['payment_amount'] = $params['amount1'];
+            return $result;
+        }
         if ($status >= 100 || $status == 2) {
             return [
                 'trade_no' => $params['item_number'],

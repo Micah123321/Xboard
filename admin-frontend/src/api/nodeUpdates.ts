@@ -1,5 +1,5 @@
 import { adminClient } from './client'
-import type { ReleaseSource, Page, Settings, Policy, BulkPolicyInput, BulkPolicyResult, Release, ReleaseInput, Installation, Batch, BatchInput, Task, TaskState, UpdateEvent, Preview, Scope, Enrollment, Coverage, Discovery, DiscoveryFilters } from '@/types/nodeUpdates'
+import type { ReleaseSource, Page, Settings, Policy, BulkPolicyInput, BulkPolicyResult, Release, ReleaseInput, Installation, Batch, BatchInput, Task, TaskState, UpdateEvent, Preview, Scope, Enrollment, Coverage, Discovery, DiscoveryFilters, OverviewRow, OverviewFilters } from '@/types/nodeUpdates'
 
 export class UpdateError extends Error {
  code: string
@@ -19,9 +19,10 @@ async function request<T>(method: string, path: string, data?: unknown, key?: st
   const error = response.data?.error
   throw new UpdateError(error?.code || 'request_failed', error?.message || '节点更新请求失败', error?.retryable === true, response.status, error?.excluded || response.data?.excluded || [])
  }
- return (path === '/discoveries' ? response.data.data ?? response.data : response.data.data) as T
+ return ((path === '/discoveries' || path === '/overview') ? response.data.data ?? response.data : response.data.data) as T
 }
 export const updates = {
+ overview: (page: number, filters: OverviewFilters, signal?: AbortSignal) => request<Page<OverviewRow>>('GET', '/overview', undefined, undefined, { page, page_size: 20, ...filters }, signal),
  releaseSource: (signal?: AbortSignal) => request<ReleaseSource>('GET', '/release-source', undefined, undefined, undefined, signal),
  syncReleases: (key: string) => request<ReleaseSource>('POST', '/releases/sync', {}, key),
  updateLatest: (id: string, key: string) => request<Batch>('POST', '/installations/' + id + '/update-latest', {}, key),

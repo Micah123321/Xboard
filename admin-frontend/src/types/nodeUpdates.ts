@@ -3,6 +3,8 @@ export interface Page<T> { items: T[]; page: number; page_size: number; total: n
 export interface EnrollmentStatus { state: 'starting' | 'retrying' | 'registered' | 'disabled' | 'unsupported'; stage: 'bootstrap' | 'layout' | 'lock' | 'config' | 'authority' | 'enroll' | 'units' | 'poll'; code: string | null; updated_at: string }
 export interface Discovery { enrollment_status?: EnrollmentStatus | null; auto_enroll_supported?: boolean; node_id: number; node_name: string; machine_id: number | null; installation_id: string; version: string; os: string; arch: string; last_seen_at: string }
 export interface DiscoveryFilters { node_id?: number; machine_id?: number; page_size?: number }
+export interface OverviewRow { installation_id: string; installation: Installation | null; discoveries: Discovery[]; nodes: { id: number; name: string; machine_id: number | null }[]; scope_mismatch_node_ids: number[]; last_seen_at: string | null }
+export interface OverviewFilters { node_id?: number; machine_id?: number; capability_status?: string }
 export interface Settings { enabled: boolean; max_concurrency: number; revision: number }
 export interface Policy { enabled: boolean; target_release_id: string | null; revision: number; follow_latest?: boolean }
 export interface BulkPolicyInput { enabled: boolean; installations: { id: string; revision: number }[] }

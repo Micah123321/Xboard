@@ -37,6 +37,7 @@ class Kernel extends ConsoleKernel
         // check
         $schedule->command('check:order')->everyMinute()->onOneServer()->withoutOverlapping(5);
         $schedule->command('ai-credit:reconcile')->everyMinute()->onOneServer()->withoutOverlapping(20);
+        $schedule->command('ai-topup:reconcile')->everyMinute()->onOneServer()->withoutOverlapping(20);
         $schedule->command('check:commission')->everyMinute()->onOneServer()->withoutOverlapping(5);
         $schedule->command('check:ticket')->everyMinute()->onOneServer()->withoutOverlapping(5);
         $schedule->command('check:traffic-exceeded')->everyMinute()->onOneServer()->withoutOverlapping(10)->runInBackground();

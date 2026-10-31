@@ -6,110 +6,41 @@ import ts from 'typescript'
 const view = await readFile(new URL('./NodeUpdatesView.vue', import.meta.url), 'utf8')
 const script = view.split('<script setup lang="ts">')[1].split('</script>')[0].replace(/^import .*$/gm, '')
 const compiled = ts.transpileModule(script, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText
-class UpdateError extends Error { constructor(status, code = 'request_failed') { super('http'); this.status = status; this.code = code; this.excluded = [] } }
-const page = (items = []) => ({ items, page: 1, page_size: 20, total: items.length })
-const node = { node_id: 7, node_name: 'node', machine_id: null, installation_id: '12345678-1234-4234-8234-123456789abc', version: 'dev-abcdef0123456789', os: 'linux', arch: 'amd64', last_seen_at: '2026-01-01T00:00:00Z' }
-function setup() {
+export class UpdateError extends Error { constructor(status, code = 'request_failed') { super('http'); this.status = status; this.code = code; this.excluded = [] } }
+export const page = (items = []) => ({ items, page: 1, page_size: 20, total: items.length })
+export const node = { node_id: 7, node_name: 'node', machine_id: null, installation_id: '12345678-1234-4234-8234-123456789abc', version: 'dev-abcdef0123456789', os: 'linux', arch: 'amd64', last_seen_at: '2026-01-01T00:00:00Z' }
+export function setup() {
  const requests = []; const timers = new Map(); let nextTimer = 0; let unmount
  const document = { hidden: false, addEventListener() {}, removeEventListener() {} }
  const updates = {
-  discoveries: async (...args) => { requests.push(args); return page([node]) },
+  overview: async (...args) => { requests.push(args); return page([row()]) },
   releaseSource: async () => ({ latest: null, url: '', checked_at: null, error: null }),
    policy: async (_id, data) => data, updateLatest: async () => ({ id: 'batch' }),
    batches: async () => page(), batch: async () => ({ id: 'batch' }), tasks: async () => page(),
    settings: async () => ({ enabled: false }), releases: async () => page(), installations: async () => page([{ id: 'managed' }]),
  }
  const bindings = { updates, UpdateError, createIdempotencyKeys: () => ({ get: () => 'stable-key', clear() {} }), ref: value => ({ value }), reactive: value => value, computed: fn => ({ get value() { return fn() } }), watch() {}, onMounted() {}, onBeforeUnmount: fn => { unmount = fn }, document, setTimeout: (fn, delay) => { timers.set(++nextTimer, { fn, delay }); return nextTimer }, clearTimeout: id => timers.delete(id), positiveIds: text => [Number(text)], reasonLabel: code => code, ElMessage: { error() {}, success() {} }, ElMessageBox: { confirm: async () => true } }
- const state = new Function(...Object.keys(bindings), compiled + '\nreturn { refresh, visibility, pageChange, applyFilters, discoveries, discoveryError, installations, pages, filters, tab, installLatest, followLatest, releaseSourceError, openOnlineUpdate, onlineState, onlineInstallation, onlineNode, onlineError, onlineOpen, selected, selectedInstallations, pendingBulkPolicy, bulkMessage, toggleSelection, togglePageSelection, clearSelection, setSelectedAutoUpdate, canBulkEnable, pageAllSelected, pagePartlySelected, busy, error, ticketKind, ticketIds, ticketInstanceId, ticketOpen }')(...Object.values(bindings))
+ const state = new Function(...Object.keys(bindings), compiled + '\nreturn { refresh, visibility, pageChange, applyFilters, overview, overviewError, installations, pages, filters, tab, installLatest, followLatest, releaseSourceError, openOnlineUpdate, onlineState, onlineInstallation, onlineNode, onlineError, onlineOpen, onlineRow, selected, selectedInstallations, pendingBulkPolicy, bulkMessage, toggleSelection, togglePageSelection, clearSelection, setSelectedAutoUpdate, canBulkEnable, pageAllSelected, pagePartlySelected, busy, error, ticketKind, ticketIds, ticketInstanceId, ticketOpen }')(...Object.values(bindings))
  return { ...state, updates, requests, timers, document, unmount: () => unmount() }
 }
-test('discovery survives unavailable management and preserves SHA version', async () => {
- const s = setup(); s.updates.settings = async () => { throw new UpdateError(404) }
- await s.refresh(); assert.deepEqual(s.discoveries.value.items, [node]); assert.equal([...s.timers.values()][0].delay, 5000)
+export const row = (installation = null, discoveries = [node]) => ({ installation_id: installation?.id ?? node.installation_id, installation, discoveries, nodes: discoveries.map(d => ({ id: d.node_id, name: d.node_name, machine_id: d.machine_id })), scope_mismatch_node_ids: [], last_seen_at: node.last_seen_at })
+export const managed = (id = node.installation_id, patch = {}) => ({ id, scope: { kind: 'legacy', node_ids: [7] }, versions: { mi_node: 'v1.0.0', xbctl: 'v1.0.0' }, installed_sha256: {}, policy: { enabled: false, revision: 1 }, capability: { status: 'supported' }, runtime: { os: 'linux', arch: 'amd64', init: 'systemd', container: false }, update: { available: true, latest_version: 'v2.0.0' }, revoked_at: null, ...patch })
+test('overview keeps discovery-only rows when management settings fail', async () => {
+ const s = setup(); s.updates.settings = async () => { throw new UpdateError(404) }; await s.refresh(); assert.equal(s.overview.value.items[0].installation, null); assert.equal([...s.timers.values()][0].delay, 5000)
 })
-test('discovery failures retain data and do not block managed installations', async () => {
- const s = setup(); await s.refresh()
- for (const failure of [new UpdateError(404), new Error('network')]) {
-  s.updates.discoveries = async () => { throw failure }; await s.refresh()
-  assert.deepEqual(s.discoveries.value.items, [node]); assert.equal(s.installations.value.items[0].id, 'managed')
-  assert.match(s.discoveryError.value, failure.status === 404 ? /暂未部署/ : /刷新失败/)
- }
- s.updates.discoveries = async () => page(); await s.refresh(); assert.equal(s.discoveryError.value, ''); assert.equal(s.discoveries.value.total, 0)
+test('overview errors retain data and report unavailable endpoint', async () => {
+ const s = setup(); await s.refresh(); const old = s.overview.value; s.updates.overview = async () => { throw new UpdateError(404) }; await s.refresh(); assert.equal(s.overview.value, old); assert.match(s.overviewError.value, /暂未部署/)
 })
-test('independent discovery pagination and shared ID filters exclude capability', async () => {
- const s = setup(); s.pages.installations = 4; s.pageChange('discoveries', 3); await s.refresh()
- assert.equal(s.requests.at(-1)[0], 3); assert.equal(s.pages.installations, 4)
- for (const kind of ['node_id', 'machine_id']) {
-  Object.assign(s.filters, { kind, id: '7', capability_status: 'supported' }); s.applyFilters(); await s.refresh()
-  assert.deepEqual(s.requests.at(-1)[1], { [kind]: 7 }); assert.equal(s.pages.discoveries, 1); assert.equal(s.pages.installations, 1)
- }
- s.filters.id = ''; s.applyFilters(); await s.refresh(); assert.deepEqual(s.requests.at(-1)[1], {})
+test('one pagination sends node machine and capability filters', async () => {
+ const s = setup(); s.pageChange('overview', 3); await s.refresh(); assert.equal(s.requests.at(-1)[0], 3)
+ for (const kind of ['node_id', 'machine_id']) { Object.assign(s.filters, { kind, id: '7', capability_status: 'supported' }); s.applyFilters(); await s.refresh(); assert.deepEqual(s.requests.at(-1)[1], { [kind]: 7, capability_status: 'supported' }); assert.equal(s.pages.overview, 1) }
 })
-test('release detection failure keeps the managed node list available', async () => {
- const s = setup(); s.updates.releaseSource = async () => { throw new UpdateError(404) }
- await s.refresh(); assert.equal(s.installations.value.items[0].id, 'managed'); assert.match(s.releaseSourceError.value, /暂未就绪/)
+test('online update opens exact installation without node lookups and keeps true scope', async () => {
+ const s = setup(); s.updates.installations = () => { throw Error('unexpected lookup') }; const item = row(managed('exact', { scope: { kind: 'legacy', node_ids: [99] } })); item.scope_mismatch_node_ids = [7]; s.openOnlineUpdate(item); assert.equal(s.onlineInstallation.value.id, 'exact'); assert.deepEqual(s.onlineInstallation.value.scope.node_ids, [99]); assert.equal(s.onlineRow.value.scope_mismatch_node_ids[0], 7)
 })
-test('single install works with global auto off and following latest needs no fixed version', async () => {
- const s = setup(); let installed; let policy
- s.updates.updateLatest = async (id, key) => { installed = { id, key }; return { id: 'batch' } }
- await s.refresh(); await s.installLatest({ id: 'managed', update: { latest_version: 'v1.2.3' } })
- assert.deepEqual(installed, { id: 'managed', key: 'stable-key' })
- s.updates.policy = async (id, data) => { policy = { id, ...data }; return data }
- await s.followLatest({ id: 'managed', policy: { revision: 2 } }, true)
- assert.deepEqual(policy, { id: 'managed', enabled: true, follow_latest: true, target_release_id: null, revision: 2 })
+test('polling refreshes diagnostic recovery and revoked state by installation identity', async () => {
+ const s = setup(); s.openOnlineUpdate(row()); assert.equal(s.onlineState.value, 'bootstrap'); const failure = { state: 'retrying', stage: 'enroll', code: 'invalid_credentials' }; s.updates.overview = async () => page([row(null, [{ ...node, enrollment_status: failure }])]); await s.refresh(); assert.equal(s.onlineNode.value.enrollment_status.code, 'invalid_credentials'); s.updates.overview = async () => page([row(managed())]); await s.refresh(); assert.equal(s.onlineState.value, 'ready'); s.updates.overview = async () => page([row(managed(undefined, { revoked_at: 'revoked' }))]); await s.refresh(); let writes = 0; s.updates.updateLatest = () => writes++; s.updates.policy = () => writes++; await s.installLatest(s.onlineInstallation.value); await s.followLatest(s.onlineInstallation.value, true); assert.equal(writes, 0)
 })
-test('node update lookup follows pagination past revoked installations', async () => {
- const s = setup(); const queries = []
- s.updates.installations = async (pageNumber, filters) => {
-  queries.push({ pageNumber, filters })
-  return { items: pageNumber === 1 ? [{ id: 'revoked', revoked_at: '2026-01-01' }] : [{ id: 'active', revoked_at: null }], page: pageNumber, page_size: 20, total: 21 }
- }
- await s.openOnlineUpdate(node)
- assert.equal(s.onlineState.value, 'ready'); assert.equal(s.onlineInstallation.value.id, 'active')
- assert.deepEqual(queries, [{ pageNumber: 1, filters: { node_id: 7 } }, { pageNumber: 2, filters: { node_id: 7 } }])
-})
-test('new node waits for automatic enrollment without opening a ticket dialog', async () => {
- const s = setup(); s.updates.installations = async () => page()
- await s.openOnlineUpdate({ ...node, auto_enroll_supported: true })
- assert.equal(s.onlineState.value, 'bootstrap'); assert.equal(s.ticketOpen.value, false)
- s.updates.installations = async () => page([{ id: 'automatically-registered', revoked_at: null }])
- await s.refresh()
- assert.equal(s.onlineState.value, 'ready'); assert.equal(s.onlineInstallation.value.id, 'automatically-registered')
- assert.equal(s.ticketOpen.value, false)
-})
-test('refresh updates the opened node with reported enrollment failure and recovery', async () => {
- const s = setup(); s.updates.installations = async () => page()
- await s.openOnlineUpdate({ ...node, auto_enroll_supported: true })
- const failure = { state: 'retrying', stage: 'enroll', code: 'invalid_credentials', updated_at: '2026-10-12T12:00:00Z' }
- s.updates.discoveries = async () => page([{ ...node, enrollment_status: failure }])
- await s.refresh()
- assert.deepEqual(s.onlineNode.value.enrollment_status, failure)
- assert.equal(s.onlineState.value, 'bootstrap')
- s.updates.discoveries = async () => page([{ ...node, enrollment_status: { ...failure, state: 'registered', code: null } }])
- s.updates.installations = async () => page([{ id: 'registered', revoked_at: null }])
- await s.refresh()
- assert.equal(s.onlineState.value, 'ready')
- assert.equal(s.onlineNode.value.enrollment_status.state, 'registered')
-})
-test('lookup failure is not presented as an unregistered node', async () => {
- const s = setup(); s.updates.installations = async () => { throw new Error('network') }
- await s.openOnlineUpdate(node); assert.equal(s.onlineState.value, 'error'); assert.match(s.onlineError.value, /查询在线更新状态失败/)
-})
-test('opening a second node ignores delayed status from the first', async () => {
- const s = setup(); let resolveFirst; let firstSignal
- s.updates.installations = (_page, filters, signal) => filters.node_id === 7 ? (firstSignal = signal, new Promise(resolve => { resolveFirst = resolve })) : Promise.resolve(page([{ id: 'second', revoked_at: null }]))
- const first = s.openOnlineUpdate(node)
- await s.openOnlineUpdate({ ...node, node_id: 8 })
- assert.equal(firstSignal.aborted, true)
- resolveFirst(page([{ id: 'stale', revoked_at: null }])); await first
- assert.equal(s.onlineNode.value.node_id, 8); assert.equal(s.onlineInstallation.value.id, 'second')
-})
-test('hidden and unmounted views cancel discovery and ignore stale results', async () => {
- const s = setup(); await s.refresh(); let resolve; let signal
- s.updates.discoveries = (_page, _filters, nextSignal) => { signal = nextSignal; return new Promise(done => { resolve = done }) }
- const pending = s.refresh(); s.document.hidden = true; s.visibility()
- assert.equal(signal.aborted, true); assert.equal(s.timers.size, 0)
- resolve(page([{ ...node, version: 'stale' }])); await pending; assert.equal(s.discoveries.value.items[0].version, node.version)
- s.document.hidden = false; const final = s.refresh(); s.unmount(); assert.equal(signal.aborted, true)
- resolve(page()); await final; assert.equal(s.discoveries.value.total, 1); assert.equal(s.timers.size, 0)
+test('stale overview response is aborted and cannot replace new page', async () => {
+ const s = setup(); let finish; let signal; s.updates.overview = (_page, _filters, abort) => { signal = abort; return new Promise(resolve => { finish = resolve }) }; const first = s.refresh(); s.updates.overview = async () => page([row(managed('new'))]); await s.refresh(); finish(page([row(managed('old'))])); await first; assert.equal(signal.aborted, true); assert.equal(s.overview.value.items[0].installation_id, 'new'); s.unmount(); assert.equal(s.timers.size, 0)
 })

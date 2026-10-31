@@ -7,11 +7,12 @@ use Closure;
 
 class RequestLog
 {
-    private const SENSITIVE_KEYS = ['password', 'token', 'secret', 'key', 'api_key'];
+    private const SENSITIVE_KEYS = ['password', 'token', 'secret', 'key', 'api_key', 'bridge_token'];
 
     public function handle($request, Closure $next)
     {
         $nodeUpdate = $request->is('api/v2/*/server/update/*');
+        $entrySync = $request->is('api/v2/*/server/entry-sync/*');
         if ($request->method() !== 'POST' && !($nodeUpdate && $request->method() === 'PATCH')) {
             return $next($request);
         }
@@ -26,7 +27,7 @@ class RequestLog
 
             $action = $this->resolveAction($request->path());
             // Update writes have a transactional, validated audit in node_update_requests.
-            $data = $nodeUpdate
+            $data = ($nodeUpdate || $entrySync)
                 ? ['status' => $response->getStatusCode()]
                 : collect($request->all())->except(self::SENSITIVE_KEYS)->toArray();
 
@@ -34,7 +35,7 @@ class RequestLog
                 'admin_id' => $admin->id,
                 'action' => $action,
                 'method' => $request->method(),
-                'uri' => $nodeUpdate ? $request->path() : $request->getRequestUri(),
+                'uri' => ($nodeUpdate || $entrySync) ? $request->path() : $request->getRequestUri(),
                 'request_data' => json_encode($data, JSON_UNESCAPED_UNICODE),
                 'ip' => $request->getClientIp(),
                 'created_at' => time(),

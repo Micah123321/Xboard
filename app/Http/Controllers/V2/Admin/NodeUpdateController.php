@@ -23,6 +23,9 @@ class NodeUpdateController
             }
             $path=substr($r->path(),strpos($r->path(),'/server/update/')+15);
             $data=$r->method()==='GET' ? $r->query->all() : json_decode($r->getContent(), true, 512, JSON_THROW_ON_ERROR);
+            if ($r->method() === 'GET' && $path === 'overview') {
+                return new JsonResponse(['data' => (new \App\Services\NodeUpdate\NodeUpdateOverviewService($this->service))->listing($data)]);
+            }
             if ($r->method() === 'GET' && $path === 'discoveries') {
                 return new JsonResponse(['data' => (new \App\Services\NodeUpdate\NodeDiscoveryService())->listing($data)]);
             }
